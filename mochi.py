@@ -45,7 +45,7 @@ try:
     from gi.repository import GdkX11
 except Exception:
     pass
-from gi.repository import Gtk, Adw, GLib, Gdk, Pango, Xdp
+from gi.repository import Gtk, Adw, GLib, Gdk, Pango, Xdp, Gio, GObject
 
 from PIL import Image
 
@@ -289,6 +289,13 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.eat_phase = 0.0
         self.eat_progress = 0.0
 
+        # Autonomous Walking & Stride physics
+        self.walk_phase = 0.0
+        self.walk_x = 0.0
+        self.facing = 1.0
+        self.is_walking = True
+        self.walk_pause_timer = 0
+
         # Direct click gesture to pet Lexi
         click = Gtk.GestureClick()
         click.connect('pressed', lambda *_: self.pet())
@@ -325,6 +332,37 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.ear_wiggle += (self.target_ear_wiggle - self.ear_wiggle) * 0.18
 
         self.tail_phase = (self.tail_phase + 0.08) % (2 * math.pi)
+
+        # Autonomous Walking Cycle
+        if self.mood == "normal":
+            if self.is_walking:
+                self.walk_phase = (self.walk_phase + 0.16) % (2 * math.pi)
+                self.walk_x += self.facing * 0.45
+                if self.walk_x > 20.0:
+                    self.walk_x = 20.0
+                    self.is_walking = False
+                    self.walk_pause_timer = 55
+                    self.facing = -1.0
+                elif self.walk_x < -20.0:
+                    self.walk_x = -20.0
+                    self.is_walking = False
+                    self.walk_pause_timer = 55
+                    self.facing = 1.0
+                self.queue_draw()
+            else:
+                self.walk_pause_timer -= 1
+                if self.walk_pause_timer <= 0:
+                    self.is_walking = True
+                    self.queue_draw()
+        else:
+            # During hungry, eating, happy, working: smoothly return to center and stop walking
+            if abs(self.walk_x) > 0.5:
+                self.walk_x += (0.0 - self.walk_x) * 0.18
+                self.queue_draw()
+            else:
+                self.walk_x = 0.0
+            self.facing = 1.0
+            self.is_walking = False
 
         if self.mood == "eating":
             self.eat_phase += 0.20
@@ -388,26 +426,41 @@ class LexiMascotWidget(Gtk.DrawingArea):
         return GLib.SOURCE_REMOVE
 
     def on_draw(self, area, cr, w, h):
-        cx, cy = w / 2.0, h / 2.0
+        cx, cy = w / 2.0 + self.walk_x, h / 2.0
         s = min(w / 110.0, h / 130.0)
 
+        # Walking bounce & bobbing physics
+        bounce_y = 0.0
+        body_tilt = 0.0
+        tail_walk_sway = 0.0
+        ear_walk_bounce = 0.0
+        if self.is_walking and self.mood == "normal":
+            bounce_y = -abs(math.sin(self.walk_phase * 2.0)) * 2.0 * s
+            body_tilt = self.facing * math.sin(self.walk_phase) * 0.04
+            tail_walk_sway = math.sin(self.walk_phase - 0.4) * 0.35
+            ear_walk_bounce = math.sin(self.walk_phase * 2.0) * 0.08
+
         cr.save()
-        cr.translate(cx, cy + 2 * s)
+        cr.translate(cx, cy + 2 * s + bounce_y)
+        cr.rotate(body_tilt)
         cr.scale(self.squish_x, self.squish_y)
 
-        # 1. Ambient Drop Shadow on Floor
+        # 1. Ambient Drop Shadow on Floor (moves with walking stride)
         cr.save()
         cr.scale(1.0, 0.28)
-        pat_sh = cairo.RadialGradient(0, 46 * s, 2 * s, 0, 46 * s, 34 * s)
+        shadow_r = 34 * s * (1.0 + 0.1 * abs(math.sin(self.walk_phase * 2.0))) if (self.is_walking and self.mood == "normal") else 34 * s
+        pat_sh = cairo.RadialGradient(0, (46 * s - bounce_y), 2 * s, 0, (46 * s - bounce_y), shadow_r)
         pat_sh.add_color_stop_rgba(0, 0.08, 0.05, 0.22, 0.45)
         pat_sh.add_color_stop_rgba(1, 0, 0, 0, 0.0)
         cr.set_source(pat_sh)
-        cr.arc(0, 46 * s, 34 * s, 0, 2 * math.pi)
+        cr.arc(0, (46 * s - bounce_y), shadow_r, 0, 2 * math.pi)
         cr.fill()
         cr.restore()
 
-        # 2. Fluffy Fox/Kitten Tail (Curving up on right with breathing sway)
-        tail_sway = math.sin(self.tail_phase) * 0.12
+        # 2. Fluffy Fox/Kitten Tail (Curving up on right with walking sway)
+        tail_sway = tail_walk_sway if (self.is_walking and self.mood == "normal") else math.sin(self.tail_phase) * 0.12
+        if self.mood in ("eating", "happy"):
+            tail_sway = math.sin(self.tail_phase * 2.5) * 0.35
         cr.save()
         cr.translate(14 * s, 18 * s)
         cr.rotate(0.20 + tail_sway)
@@ -461,12 +514,20 @@ class LexiMascotWidget(Gtk.DrawingArea):
         cr.fill()
         cr.restore()
 
-        # 4. Cute Stubby Legs & Feet with pink toe beans
-        for sign in [-1, 1]:
+        # 4. Cute Stubby Legs & Feet with pink toe beans (taking alternating steps during walk)
+        step_l_x = math.sin(self.walk_phase) * 5.0 * s if (self.is_walking and self.mood == "normal") else 0.0
+        step_l_y = -max(0.0, math.cos(self.walk_phase)) * 4.0 * s if (self.is_walking and self.mood == "normal") else 0.0
+        step_r_x = -math.sin(self.walk_phase) * 5.0 * s if (self.is_walking and self.mood == "normal") else 0.0
+        step_r_y = -max(0.0, -math.cos(self.walk_phase)) * 4.0 * s if (self.is_walking and self.mood == "normal") else 0.0
+
+        feet_data = [
+            (-1, -10.5 * s + step_l_x, 30.0 * s + step_l_y, math.sin(self.walk_phase) * 0.16 if (self.is_walking and self.mood == "normal") else 0.0),
+            (1, 10.5 * s + step_r_x, 30.0 * s + step_r_y, -math.sin(self.walk_phase) * 0.16 if (self.is_walking and self.mood == "normal") else 0.0)
+        ]
+        for sign, lx, ly, foot_rot in feet_data:
             cr.save()
-            lx = sign * 10.5 * s
-            ly = 30.0 * s
             cr.translate(lx, ly)
+            cr.rotate(foot_rot)
             cr.scale(1.0, 0.85)
             cr.arc(0, 0, 5.2 * s, 0, 2 * math.pi)
             pat_foot = cairo.LinearGradient(0, -5 * s, 0, 5 * s)
@@ -478,15 +539,18 @@ class LexiMascotWidget(Gtk.DrawingArea):
             cr.set_source_rgba(0.65, 0.70, 0.85, 0.5)
             cr.stroke()
 
-            cr.save()
-            cr.scale(1.0, 0.65)
-            cr.arc(0, 1.6 * s, 2.4 * s, 0, 2 * math.pi)
-            cr.set_source_rgba(1.0, 0.55, 0.72, 0.85)
+            # Pink main paw pad
+            cr.arc(0, 0.5 * s, 2.2 * s, 0, 2 * math.pi)
+            cr.set_source_rgba(1.0, 0.50, 0.68, 0.90)
             cr.fill()
-            for dx in [-2.2 * s, 0.0, 2.2 * s]:
-                cr.arc(dx, -1.5 * s, 1.0 * s, 0, 2 * math.pi)
+
+            # 3 Cute Pink Toe Beans
+            for toe_angle, toe_r in [(-0.55, 3.4 * s), (0.0, 3.8 * s), (0.55, 3.4 * s)]:
+                tx = math.sin(toe_angle) * toe_r
+                ty = -math.cos(toe_angle) * toe_r + 0.3 * s
+                cr.arc(tx, ty, 0.95 * s, 0, 2 * math.pi)
+                cr.set_source_rgba(1.0, 0.52, 0.70, 0.92)
                 cr.fill()
-            cr.restore()
             cr.restore()
 
         # 5. Fluffy Kitten/Fox Ears (Wide base, triangular, perky outward tilt)
@@ -495,7 +559,7 @@ class LexiMascotWidget(Gtk.DrawingArea):
             ear_base_x = sign * 13.5 * s
             ear_base_y = -18.0 * s
             cr.translate(ear_base_x, ear_base_y)
-            cr.rotate(sign * 0.38 + (sign * self.ear_wiggle))
+            cr.rotate(sign * 0.38 + (sign * self.ear_wiggle) + (sign * ear_walk_bounce))
 
             # Outer ear
             cr.move_to(-sign * 6.5 * s, 6 * s)
@@ -1045,10 +1109,16 @@ class LexiMascotWidget(Gtk.DrawingArea):
                 cr.restore()
 
         else:
-            # Resting little paws cutely in front
-            for sign in [-1, 1]:
+            # Resting little paws / swinging while walking
+            arm_swing_l = -math.sin(self.walk_phase) * 3.5 * s if (self.is_walking and self.mood == "normal") else 0.0
+            arm_swing_r = math.sin(self.walk_phase) * 3.5 * s if (self.is_walking and self.mood == "normal") else 0.0
+            paws_data = [
+                (-1, -10.5 * s + arm_swing_l, 20.0 * s),
+                (1, 10.5 * s + arm_swing_r, 20.0 * s)
+            ]
+            for sign, px, py in paws_data:
                 cr.save()
-                cr.translate(sign * 10.5 * s, 20.0 * s)
+                cr.translate(px, py)
                 cr.scale(1.0, 0.92)
                 cr.arc(0, 0, 4.5 * s, 0, 2 * math.pi)
                 pat_paw = cairo.LinearGradient(0, -4 * s, 0, 4 * s)
@@ -1255,7 +1325,7 @@ class LexiWindow(Adw.ApplicationWindow):
             screen_w = geom.width
 
         pos_x = screen_x + (screen_w - target_w) // 2
-        pos_y = screen_y + 36  # Floating dynamic island below GNOME top bar
+        pos_y = screen_y + 30  # Sits seamlessly right below GNOME top bar
         self.window_pos = (pos_x, pos_y)
         self.saved_pos = (pos_x, pos_y)
 
@@ -1264,17 +1334,135 @@ class LexiWindow(Adw.ApplicationWindow):
             try:
                 xid = surface.get_xid()
                 subprocess.run(['xdotool', 'windowmove', str(xid), str(pos_x), str(pos_y)], check=False)
+                # Keep always above all windows (Coucou style persistent top dock)
+                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
+                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
             except Exception as e:
-                log(f"Window move exception: {e}")
+                log(f"Window move/above exception: {e}")
+
+    def on_window_mouse_enter(self, controller, x, y):
+        if hasattr(self, 'autohide_timer') and self.autohide_timer:
+            GLib.source_remove(self.autohide_timer)
+            self.autohide_timer = None
+        if hasattr(self, 'is_expanded') and not self.is_expanded:
+            self.expand_copilot()
+
+    def on_window_mouse_leave(self, controller):
+        if getattr(self, 'is_expanded', False):
+            if hasattr(self, 'autohide_timer') and self.autohide_timer:
+                GLib.source_remove(self.autohide_timer)
+            self.autohide_timer = GLib.timeout_add(3200, self.check_autohide)
+
+    def check_autohide(self):
+        self.autohide_timer = None
+        if getattr(self, 'is_query_running', False):
+            return GLib.SOURCE_REMOVE
+        if hasattr(self, 'entry'):
+            text = self.entry.get_text().strip()
+            if text or self.entry.has_focus():
+                return GLib.SOURCE_REMOVE
+        self.collapse_to_notch()
+        return GLib.SOURCE_REMOVE
+
+    def expand_copilot(self):
+        self.is_expanded = True
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                xid = surface.get_xid()
+                screen_w = 1920
+                display = Gdk.Display.get_default()
+                if display and display.get_monitors():
+                    screen_w = display.get_monitors().get_item(0).get_geometry().width
+                full_x = (screen_w - 940) // 2
+                subprocess.run(['xdotool', 'windowsize', str(xid), '940', '385'], check=False)
+                subprocess.run(['xdotool', 'windowmove', str(xid), str(full_x), '30'], check=False)
+                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
+                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
+            except Exception:
+                pass
+
+        self.revealer.set_reveal_child(True)
+        if hasattr(self, 'notch_icon'):
+            self.notch_icon.set_text("⌃")
+        if hasattr(self, 'notch_title'):
+            self.notch_title.set_text("✨ Lexi Cosmic Copilot")
+        if hasattr(self, 'entry'):
+            self.entry.grab_focus()
+
+    def collapse_to_notch(self):
+        self.is_expanded = False
+        self.revealer.set_reveal_child(False)
+        if hasattr(self, 'notch_icon'):
+            self.notch_icon.set_text("⌄")
+        if hasattr(self, 'notch_title'):
+            self.notch_title.set_text("🐾 Lexi  •  Hover to open")
+
+        def apply_notch_geom():
+            surface = self.get_surface()
+            if surface and hasattr(surface, 'get_xid'):
+                try:
+                    xid = surface.get_xid()
+                    screen_w = 1920
+                    display = Gdk.Display.get_default()
+                    if display and display.get_monitors():
+                        screen_w = display.get_monitors().get_item(0).get_geometry().width
+                    notch_x = (screen_w - 240) // 2
+                    subprocess.run(['xdotool', 'windowsize', str(xid), '240', '44'], check=False)
+                    subprocess.run(['xdotool', 'windowmove', str(xid), str(notch_x), '30'], check=False)
+                    subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
+                                    '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
+                except Exception:
+                    pass
+            return GLib.SOURCE_REMOVE
+
+        GLib.timeout_add(270, apply_notch_geom)
+
+    def toggle_expansion(self):
+        if getattr(self, 'is_expanded', False):
+            self.collapse_to_notch()
+        else:
+            self.expand_copilot()
 
     def build_ui(self):
+        self.is_expanded = True
+        self.autohide_timer = None
+
+        # Root Box containing top notch and revealer
+        self.root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.root_box.set_halign(Gtk.Align.CENTER)
+        self.set_content(self.root_box)
+
+        # 1. Coucou-Style Top Dynamic Island Notch (Always at top)
+        self.notch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.notch.add_css_class('lexi-top-notch')
+        self.notch.set_halign(Gtk.Align.CENTER)
+        self.notch.set_size_request(240, 36)
+
+        self.notch_mascot = LexiMascotWidget(width=34, height=34)
+        self.notch.append(self.notch_mascot)
+
+        self.notch_title = Gtk.Label(label="✨ Lexi Cosmic Copilot")
+        self.notch_title.add_css_class('lexi-notch-title')
+        self.notch.append(self.notch_title)
+
+        self.notch_icon = Gtk.Label(label="⌃")
+        self.notch_icon.add_css_class('lexi-notch-icon')
+        self.notch.append(self.notch_icon)
+
+        notch_click = Gtk.GestureClick()
+        notch_click.connect('pressed', lambda *_: self.toggle_expansion())
+        self.notch.add_controller(notch_click)
+        self.root_box.append(self.notch)
+
+        # 2. Revealer with Full Copilot Card
         self.revealer = Gtk.Revealer()
         self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.revealer.set_transition_duration(260)
         self.revealer.set_vexpand(True)
         self.revealer.set_hexpand(True)
-        self.revealer.set_reveal_child(False)
-        self.set_content(self.revealer)
+        self.revealer.set_reveal_child(True)
+        self.root_box.append(self.revealer)
 
         # Main Card Container: Horizontal 2-Column Split
         self.card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
@@ -1283,14 +1471,21 @@ class LexiWindow(Adw.ApplicationWindow):
         self.card.set_hexpand(True)
         self.revealer.set_child(self.card)
 
-        # Setup Drag and Drop File Feeding (Coucou-style eat files!)
+        # Setup Drag and Drop File Feeding (Preloaded, window-level)
         drop_target = Gtk.DropTarget(actions=Gdk.DragAction.COPY)
-        drop_target.set_gtypes([Gdk.FileList, str])
+        drop_target.set_gtypes([Gdk.FileList, Gio.File, str])
+        drop_target.set_preload(True)
         drop_target.connect('enter', self.on_drag_enter)
         drop_target.connect('motion', self.on_drag_motion)
         drop_target.connect('leave', self.on_drag_leave)
         drop_target.connect('drop', self.on_drag_drop)
-        self.card.add_controller(drop_target)
+        self.add_controller(drop_target)
+
+        # Mouse hover motion controller for Coucou top drawer behavior
+        motion = Gtk.EventControllerMotion()
+        motion.connect('enter', self.on_window_mouse_enter)
+        motion.connect('leave', self.on_window_mouse_leave)
+        self.add_controller(motion)
 
         # Click anywhere on card background focuses entry
         click_gesture = Gtk.GestureClick()
@@ -1357,17 +1552,17 @@ class LexiWindow(Adw.ApplicationWindow):
         self.min_dot.set_tooltip_text("Minimize (Ctrl+M)")
         self.min_dot.add_css_class('mac-dot')
         self.min_dot.add_css_class('mac-dot-min')
-        self.min_dot.connect('clicked', lambda _: self.animate_and_minimize())
+        self.min_dot.connect('clicked', lambda _: self.collapse_to_notch())
         ctrls_box.append(self.min_dot)
 
         self.close_dot = Gtk.Button()
         self.close_dot.set_focusable(False)
         self.close_dot.set_valign(Gtk.Align.CENTER)
         self.close_dot.set_size_request(13, 13)
-        self.close_dot.set_tooltip_text("Close (Esc)")
+        self.close_dot.set_tooltip_text("Collapse (Esc)")
         self.close_dot.add_css_class('mac-dot')
         self.close_dot.add_css_class('mac-dot-close')
-        self.close_dot.connect('clicked', lambda _: self.animate_and_close())
+        self.close_dot.connect('clicked', lambda _: self.collapse_to_notch())
         ctrls_box.append(self.close_dot)
 
         # Unified Wide Action Strip (Pages Tray + Quick Chips)
@@ -1649,12 +1844,20 @@ class LexiWindow(Adw.ApplicationWindow):
         return Gdk.MemoryTexture.new(w, h, Gdk.MemoryFormat.B8G8R8A8_PREMULTIPLIED, gbytes, surface.get_stride())
 
     def feed_file(self, filepath):
+        if not filepath:
+            return
+        filepath = os.path.expanduser(urllib.parse.unquote(str(filepath).replace('file://', '')))
         if not os.path.exists(filepath):
+            log(f"feed_file: file does not exist: {filepath}")
+            self.status_pill.set_text(f"⚠️ Cannot find {os.path.basename(filepath)}")
             return
 
         if len(self.captured_pages) >= self.max_pages:
             self.status_pill.set_text("⚠️ Lexi is full! (5/5)")
             return
+
+        if hasattr(self, 'is_expanded') and not self.is_expanded:
+            self.expand_copilot()
 
         filename = os.path.basename(filepath)
         ext = os.path.splitext(filepath)[1].lower()
@@ -1761,33 +1964,49 @@ class LexiWindow(Adw.ApplicationWindow):
         self.mascot.feed_file(filename, on_finished=on_eaten)
 
     def on_feed_file_clicked(self, _):
-        file_dialog = Gtk.FileDialog()
-        file_dialog.set_title("Feed a file to Lexi 🐟✨")
+        try:
+            file_dialog = Gtk.FileDialog()
+            file_dialog.set_title("Feed a file to Lexi 🐟✨")
 
-        all_filter = Gtk.FileFilter()
-        all_filter.set_name("All Supported (Images, Code, Documents, PDFs)")
-        for pattern in ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.svg", "*.bmp", "*.pdf",
-                        "*.py", "*.js", "*.ts", "*.json", "*.md", "*.txt", "*.html",
-                        "*.css", "*.rs", "*.go", "*.c", "*.cpp", "*.sh", "*.yml", "*.yaml"]:
-            all_filter.add_pattern(pattern)
+            all_filter = Gtk.FileFilter()
+            all_filter.set_name("All Supported (Images, Code, Documents, PDFs)")
+            for pattern in ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.svg", "*.bmp", "*.pdf",
+                            "*.py", "*.js", "*.ts", "*.json", "*.md", "*.txt", "*.html",
+                            "*.css", "*.rs", "*.go", "*.c", "*.cpp", "*.sh", "*.yml", "*.yaml"]:
+                all_filter.add_pattern(pattern)
 
-        filters = Gio.ListStore.new(Gtk.FileFilter)
-        filters.append(all_filter)
-        file_dialog.set_filters(filters)
+            filters = Gio.ListStore.new(Gtk.FileFilter)
+            filters.append(all_filter)
+            file_dialog.set_filters(filters)
 
-        def on_file_selected(dialog, result):
-            try:
-                gfile = dialog.open_finish(result)
-                if gfile:
-                    p = gfile.get_path()
-                    if p and os.path.exists(p):
-                        self.feed_file(p)
-            except Exception as e:
-                log(f"File dialog selection error: {e}")
+            def on_file_selected(dialog, result):
+                try:
+                    gfile = dialog.open_finish(result)
+                    if gfile:
+                        p = gfile.get_path()
+                        if p and os.path.exists(p):
+                            self.feed_file(p)
+                except Exception as e:
+                    log(f"File dialog selection error: {e}")
 
-        file_dialog.open(self, None, on_file_selected)
+            file_dialog.open(self, None, on_file_selected)
+            return
+        except Exception as e:
+            log(f"Gtk.FileDialog error: {e}, falling back to zenity...")
+
+        try:
+            res = subprocess.run(['zenity', '--file-selection', '--title=Feed a file to Lexi 🐟✨'],
+                                 capture_output=True, text=True, check=False)
+            if res.returncode == 0 and res.stdout.strip():
+                p = res.stdout.strip()
+                if os.path.exists(p):
+                    self.feed_file(p)
+        except Exception as err:
+            log(f"Zenity fallback error: {err}")
 
     def on_drag_enter(self, target, x, y):
+        if hasattr(self, 'is_expanded') and not self.is_expanded:
+            self.expand_copilot()
         self.mascot.set_mood("hungry")
         self.stage_box.add_css_class('lexi-stage-hover')
         self.status_pill.set_text("😋 Feed Lexi! Drop file here...")
@@ -1806,21 +2025,27 @@ class LexiWindow(Adw.ApplicationWindow):
     def on_drag_drop(self, target, value, x, y):
         self.stage_box.remove_css_class('lexi-stage-hover')
         paths = []
-        if hasattr(value, 'get_files'):
-            for gf in value.get_files():
-                p = gf.get_path()
+        log(f"Drag drop received value: {value} (type: {type(value)})")
+        if value is not None:
+            if hasattr(value, 'get_files'):
+                for gf in value.get_files():
+                    p = gf.get_path()
+                    if p and os.path.exists(p):
+                        paths.append(p)
+            elif isinstance(value, Gio.File):
+                p = value.get_path()
                 if p and os.path.exists(p):
                     paths.append(p)
-        elif isinstance(value, str):
-            for line in value.strip().splitlines():
-                line = line.strip()
-                if line.startswith('file://'):
-                    parsed = urllib.parse.urlparse(line)
-                    p = urllib.parse.unquote(parsed.path)
-                    if os.path.exists(p):
-                        paths.append(p)
-                elif os.path.exists(line):
-                    paths.append(line)
+            elif isinstance(value, str):
+                for line in value.strip().splitlines():
+                    line = line.strip()
+                    if line.startswith('file://'):
+                        parsed = urllib.parse.urlparse(line)
+                        p = urllib.parse.unquote(parsed.path)
+                        if os.path.exists(p):
+                            paths.append(p)
+                    elif os.path.exists(line):
+                        paths.append(line)
 
         if paths:
             for p in paths:
@@ -1958,11 +2183,11 @@ class LexiWindow(Adw.ApplicationWindow):
 
     def on_key_pressed(self, controller, keyval, keycode, state):
         if keyval == Gdk.KEY_Escape:
-            self.animate_and_close()
+            self.collapse_to_notch()
             return True
         if state & Gdk.ModifierType.CONTROL_MASK:
             if keyval in (Gdk.KEY_m, Gdk.KEY_M):
-                self.animate_and_minimize()
+                self.collapse_to_notch()
                 return True
             elif keyval in (Gdk.KEY_o, Gdk.KEY_O):
                 self.on_feed_file_clicked(None)
@@ -2273,21 +2498,35 @@ class LexiApp(Adw.Application):
 
         is_snip = ('--snip' in args) or ('-s' in args)
 
+        feed_file = None
+        for i, a in enumerate(args[1:], 1):
+            if a in ('--feed', '-f') and i < len(args) - 1:
+                feed_file = args[i + 1]
+                break
+            elif not a.startswith('-') and os.path.exists(a):
+                feed_file = a
+                break
+
+        if feed_file:
+            if self.active_window and hasattr(self.active_window, 'feed_file'):
+                self.active_window.feed_file(feed_file)
+                return 0
+
         if self.active_window and hasattr(self.active_window, 'captured_pages'):
             win = self.active_window
-            if len(win.captured_pages) < win.max_pages:
-                # Append page seamlessly
-                win.saved_pos = win.get_current_pos()
-                win.set_visible(False)
-                if hasattr(win, 'revealer'):
-                    win.revealer.set_reveal_child(False)
-                GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=True))
+            if is_snip:
+                if len(win.captured_pages) < win.max_pages:
+                    win.saved_pos = win.get_current_pos()
+                    win.set_visible(False)
+                    if hasattr(win, 'revealer'):
+                        win.revealer.set_reveal_child(False)
+                    GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=True, append_mode=True))
+                else:
+                    win.expand_copilot()
             else:
-                # At max pages, bring window back up
                 win.set_visible(True)
                 win.present()
-                win.trigger_drop_animation()
-                win.entry.grab_focus()
+                win.toggle_expansion()
         else:
             # First launch: keep hold until window reveals
             self.hold()
