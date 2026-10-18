@@ -68,7 +68,7 @@ DEFAULT_CONFIG = {
         "google/gemini-2.5-flash-lite",
         "nvidia/nemotron-3.5-super-vl:free"
     ],
-    "system_prompt": "You are Mochi, a sweet, concise, and brilliant screen companion on Arch Linux. The user captured one or more pages/screenshots of their work and asked a question. Analyze all provided pages carefully. Provide a clear, accurate, and direct answer. Use clean markdown formatting with bullet points and code blocks where helpful.",
+    "system_prompt": "You are Lexi, a sharp, delightful, and concise screen companion on Arch Linux. The user captured one or more pages/screenshots of their work and asked a question. Analyze all provided pages carefully. Provide a clear, accurate, and direct answer. Use clean markdown formatting with bullet points and code blocks where helpful.",
     "max_image_dimension": 800,
     "image_quality": 65,
     "max_tokens": 1000,
@@ -111,7 +111,8 @@ def create_markdown_tag_table():
         ('bullet_symbol', {'foreground': '#ff758c', 'weight': Pango.Weight.BOLD}),
         ('bullet_text', {'left-margin': 14}),
         ('user_header', {'foreground': '#ff758c', 'weight': Pango.Weight.BOLD, 'scale': 1.05}),
-        ('mochi_header', {'foreground': '#2ec27e', 'weight': Pango.Weight.BOLD, 'scale': 1.05}),
+        ('lexi_header', {'foreground': '#c084fc', 'weight': Pango.Weight.BOLD, 'scale': 1.05}),
+        ('mochi_header', {'foreground': '#c084fc', 'weight': Pango.Weight.BOLD, 'scale': 1.05}),
         ('divider', {'foreground': '#45475a'}),
         ('quote', {'style': Pango.Style.ITALIC, 'foreground': '#a6adc8', 'left-margin': 18})
     ]
@@ -256,10 +257,11 @@ def render_markdown_to_buffer(buffer, text):
 
 class LexiMascotWidget(Gtk.DrawingArea):
     """
-    Animated Cosmic Screen Spirit with interactive eye-tracking physics,
-    natural blinking, squishy pet reactions, and dynamic mood expressions.
+    Handcrafted Celestial Screen Spirit (Lexi) with expressive anime chibi features,
+    interactive gaze tracking physics, natural blinking, squishy pet reactions,
+    and dynamic mood expressions.
     """
-    def __init__(self, size=48):
+    def __init__(self, size=52):
         super().__init__()
         self.size = size
         self.set_content_width(size)
@@ -274,11 +276,18 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.target_look_y = 0.0
 
         # Animation states
-        self.mood = "normal"  # "normal", "happy", "thinking", "dizzy", "sleepy"
+        self.mood = "normal"  # "normal", "happy", "thinking", "sleepy"
         self.is_blinking = False
         self.squish_x = 1.0
         self.squish_y = 1.0
+        self.ear_wiggle = 0.0
+        self.target_ear_wiggle = 0.0
         self.think_angle = 0.0
+
+        # Direct click gesture to pet Lexi
+        click = Gtk.GestureClick()
+        click.connect('pressed', lambda *_: self.pet())
+        self.add_controller(click)
 
         # Periodic timers for blinking and gaze physics
         self.blink_timer = GLib.timeout_add(3800, self.trigger_blink)
@@ -288,7 +297,7 @@ class LexiMascotWidget(Gtk.DrawingArea):
         if self.mood == "normal" and not self.is_blinking:
             self.is_blinking = True
             self.queue_draw()
-            GLib.timeout_add(150, self.finish_blink)
+            GLib.timeout_add(160, self.finish_blink)
         return GLib.SOURCE_CONTINUE
 
     def finish_blink(self):
@@ -303,24 +312,27 @@ class LexiMascotWidget(Gtk.DrawingArea):
     def on_anim_frame(self):
         diff_x = self.target_look_x - self.look_x
         diff_y = self.target_look_y - self.look_y
-        self.look_x += diff_x * 0.22
-        self.look_y += diff_y * 0.22
+        self.look_x += diff_x * 0.24
+        self.look_y += diff_y * 0.24
 
         self.squish_x += (1.0 - self.squish_x) * 0.16
         self.squish_y += (1.0 - self.squish_y) * 0.16
+        self.ear_wiggle += (self.target_ear_wiggle - self.ear_wiggle) * 0.18
 
         if self.mood == "thinking":
             self.think_angle = (self.think_angle + 0.12) % (2 * math.pi)
 
-        needs_redraw = (abs(diff_x) > 0.01 or abs(diff_y) > 0.01 or
-                        abs(self.squish_x - 1.0) > 0.01 or self.mood == "thinking")
+        needs_redraw = (abs(diff_x) > 0.005 or abs(diff_y) > 0.005 or
+                        abs(self.squish_x - 1.0) > 0.005 or abs(self.ear_wiggle) > 0.005 or
+                        self.mood == "thinking")
         if needs_redraw:
             self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
     def pet(self):
-        self.squish_x = 1.28
-        self.squish_y = 0.78
+        self.squish_x = 1.16
+        self.squish_y = 0.86
+        self.target_ear_wiggle = 0.16
         self.mood = "happy"
         self.queue_draw()
         GLib.timeout_add(2200, self.reset_mood)
@@ -328,118 +340,350 @@ class LexiMascotWidget(Gtk.DrawingArea):
     def set_mood(self, mood):
         self.mood = mood
         if mood == "happy":
-            self.squish_x = 1.15
+            self.squish_x = 1.14
             self.squish_y = 0.88
+            self.target_ear_wiggle = 0.12
+        else:
+            self.target_ear_wiggle = 0.0
         self.queue_draw()
 
     def reset_mood(self):
         self.mood = "normal"
+        self.target_ear_wiggle = 0.0
         self.queue_draw()
         return GLib.SOURCE_REMOVE
 
     def on_draw(self, area, cr, w, h):
-        cx, cy = w / 2.0, h / 2.0
-        r = min(w, h) * 0.38
+        cx, cy = w / 2.0, h / 2.0 + 1.0
+        s = min(w, h) / 58.0
 
-        # --- Body ---
         cr.save()
         cr.translate(cx, cy)
         cr.scale(self.squish_x, self.squish_y)
 
-        # Cosmic Gradient Body
-        pat = cairo.LinearGradient(-r, -r, r, r)
-        pat.add_color_stop_rgba(0.0, 1.0, 0.0, 0.5, 0.95)
-        pat.add_color_stop_rgba(0.5, 0.47, 0.16, 0.79, 0.95)
-        pat.add_color_stop_rgba(1.0, 0.3, 0.79, 0.94, 0.95)
-        cr.set_source(pat)
-        cr.arc(0, 0, r, 0, 2 * math.pi)
+        # 1. Soft Ambient Shadow underneath
+        cr.save()
+        cr.scale(1.0, 0.28)
+        pat_sh = cairo.RadialGradient(0, 52 * s, 2 * s, 0, 52 * s, 22 * s)
+        pat_sh.add_color_stop_rgba(0, 0.08, 0.05, 0.2, 0.45)
+        pat_sh.add_color_stop_rgba(1, 0, 0, 0, 0.0)
+        cr.set_source(pat_sh)
+        cr.arc(0, 52 * s, 22 * s, 0, 2 * math.pi)
         cr.fill()
+        cr.restore()
 
-        # Cheeks (soft glowing blush)
-        for cheek_x in [-r * 0.55, r * 0.55]:
+        # 2. Celestial Spirit Ears
+        for sign in [-1, 1]:
             cr.save()
-            cr.translate(cheek_x, r * 0.28)
-            cr.scale(3.6, 2.0)
-            cr.arc(0, 0, 1, 0, 2 * math.pi)
-            cr.set_source_rgba(1.0, 0.5, 0.65, 0.5)
+            ear_base_x = sign * 12.0 * s
+            ear_base_y = -15.0 * s
+            cr.translate(ear_base_x, ear_base_y)
+            cr.rotate(sign * 0.25 + (sign * self.ear_wiggle))
+
+            # Outer ear silhouette
+            cr.move_to(0, 4 * s)
+            cr.curve_to(sign * 4 * s, -8 * s, sign * 8 * s, -13 * s, sign * 10 * s, -7 * s)
+            cr.curve_to(sign * 6 * s, 0 * s, sign * 3 * s, 4 * s, 0, 4 * s)
+
+            pat_ear = cairo.LinearGradient(0, -13 * s, 0, 4 * s)
+            pat_ear.add_color_stop_rgb(0, 0.95, 0.97, 1.0)
+            pat_ear.add_color_stop_rgb(1, 0.88, 0.91, 0.98)
+            cr.set_source(pat_ear)
+            cr.fill_preserve()
+
+            cr.set_line_width(0.9 * s)
+            cr.set_source_rgba(0.68, 0.72, 0.86, 0.6)
+            cr.stroke()
+
+            # Inner ear warm rosy gradient
+            cr.move_to(sign * 1.5 * s, 2 * s)
+            cr.curve_to(sign * 4 * s, -5 * s, sign * 6.5 * s, -8 * s, sign * 7.5 * s, -5 * s)
+            cr.curve_to(sign * 5 * s, 0, sign * 3 * s, 2 * s, sign * 1.5 * s, 2 * s)
+            pat_inner = cairo.LinearGradient(0, -8 * s, 0, 2 * s)
+            pat_inner.add_color_stop_rgba(0, 1.0, 0.45, 0.68, 0.85)
+            pat_inner.add_color_stop_rgba(1, 0.95, 0.65, 0.78, 0.4)
+            cr.set_source(pat_inner)
             cr.fill()
             cr.restore()
 
-        # Mouth
-        cr.save()
-        cr.set_line_width(1.6)
-        cr.set_line_cap(cairo.LINE_CAP_ROUND)
-        cr.set_source_rgba(0.12, 0.02, 0.2, 0.7)
-        cr.arc(0, r * 0.22, 2.8, 0.15 * math.pi, 0.85 * math.pi)
+        # 3. Head / Face Contour (Chubby cheeks pear-squircle)
+        cr.move_to(0, -18 * s)
+        cr.curve_to(14.5 * s, -18 * s, 21.5 * s, -6 * s, 21.5 * s, 4.5 * s)
+        cr.curve_to(21.5 * s, 15.5 * s, 13 * s, 20 * s, 0, 20 * s)
+        cr.curve_to(-13 * s, 20 * s, -21.5 * s, 15.5 * s, -21.5 * s, 4.5 * s)
+        cr.curve_to(-21.5 * s, -6 * s, -14.5 * s, -18 * s, 0, -18 * s)
+        cr.close_path()
+
+        pat_head = cairo.RadialGradient(-4 * s, -7 * s, 3 * s, 0, 2 * s, 24 * s)
+        pat_head.add_color_stop_rgb(0.0, 1.0, 1.0, 1.0)
+        pat_head.add_color_stop_rgb(0.68, 0.96, 0.97, 1.0)
+        pat_head.add_color_stop_rgb(1.0, 0.87, 0.90, 0.98)
+        cr.set_source(pat_head)
+        cr.fill_preserve()
+
+        cr.set_line_width(1.2 * s)
+        cr.set_source_rgba(0.65, 0.70, 0.85, 0.55)
         cr.stroke()
+
+        # 4. Top Glass Sheen
+        cr.save()
+        cr.scale(0.85, 0.45)
+        pat_gloss = cairo.LinearGradient(0, -36 * s, 0, -12 * s)
+        pat_gloss.add_color_stop_rgba(0, 1.0, 1.0, 1.0, 0.65)
+        pat_gloss.add_color_stop_rgba(1, 1.0, 1.0, 1.0, 0.0)
+        cr.set_source(pat_gloss)
+        cr.arc(0, -22 * s, 14 * s, 0, 2 * math.pi)
+        cr.fill()
         cr.restore()
 
-        # --- Eyes ---
-        eye_spacing = r * 0.42
-        eye_y = -r * 0.12
-        eye_rx = 3.6
-        eye_ry = 4.8
+        # 5. Chubby Cheeks (Warm natural blush with starlight sparkles)
+        for sign in [-1, 1]:
+            cr.save()
+            cheek_x = sign * 12.5 * s
+            cheek_y = 6.0 * s
+            pat_blush = cairo.RadialGradient(cheek_x, cheek_y, 0, cheek_x, cheek_y, 5.5 * s)
+            pat_blush.add_color_stop_rgba(0.0, 1.0, 0.42, 0.55, 0.55)
+            pat_blush.add_color_stop_rgba(0.6, 1.0, 0.55, 0.65, 0.25)
+            pat_blush.add_color_stop_rgba(1.0, 1.0, 0.6, 0.7, 0.0)
+            cr.set_source(pat_blush)
+            cr.arc(cheek_x, cheek_y, 5.5 * s, 0, 2 * math.pi)
+            cr.fill()
 
-        for eye_x in [-eye_spacing, eye_spacing]:
-            if self.is_blinking or self.mood == "sleepy":
-                # Closed blinking eye arc
+            # Two tiny white sparkle blush dots
+            cr.arc(cheek_x - sign * 1.5 * s, cheek_y - 0.5 * s, 0.7 * s, 0, 2 * math.pi)
+            cr.arc(cheek_x + sign * 1.5 * s, cheek_y + 0.5 * s, 0.5 * s, 0, 2 * math.pi)
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.75)
+            cr.fill()
+            cr.restore()
+
+        # 6. Tiny Cute Button Nose
+        cr.save()
+        cr.arc(0, 3.2 * s, 0.85 * s, 0, 2 * math.pi)
+        cr.set_source_rgba(0.35, 0.35, 0.55, 0.65)
+        cr.fill()
+        cr.restore()
+
+        # 7. Cute Mouth
+        cr.save()
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        cr.set_line_join(cairo.LINE_JOIN_ROUND)
+        if self.mood == "happy":
+            cr.move_to(-3.5 * s, 6.2 * s)
+            cr.curve_to(-3.5 * s, 11.0 * s, 3.5 * s, 11.0 * s, 3.5 * s, 6.2 * s)
+            cr.close_path()
+            cr.set_source_rgb(0.25, 0.08, 0.22)
+            cr.fill_preserve()
+            cr.set_line_width(1.1 * s)
+            cr.set_source_rgb(0.18, 0.05, 0.18)
+            cr.stroke()
+
+            cr.save()
+            cr.move_to(-3.5 * s, 6.2 * s)
+            cr.curve_to(-3.5 * s, 11.0 * s, 3.5 * s, 11.0 * s, 3.5 * s, 6.2 * s)
+            cr.clip()
+            cr.arc(0, 10.2 * s, 2.8 * s, 0, 2 * math.pi)
+            cr.set_source_rgb(1.0, 0.45, 0.62)
+            cr.fill()
+            cr.restore()
+        else:
+            cr.set_line_width(1.3 * s)
+            cr.set_source_rgba(0.2, 0.15, 0.32, 0.85)
+            cr.move_to(-3.2 * s, 6.8 * s)
+            cr.curve_to(-2.2 * s, 8.6 * s, -0.5 * s, 8.6 * s, 0, 7.4 * s)
+            cr.curve_to(0.5 * s, 8.6 * s, 2.2 * s, 8.6 * s, 3.2 * s, 6.8 * s)
+            cr.stroke()
+        cr.restore()
+
+        # 8. Forehead Starlight Diamond Emblem
+        cr.save()
+        cr.translate(0, -9.5 * s)
+        cr.scale(0.85 * s, 1.15 * s)
+        pat_gem = cairo.LinearGradient(0, -3.5, 0, 3.5)
+        pat_gem.add_color_stop_rgb(0, 0.95, 0.35, 0.75)
+        pat_gem.add_color_stop_rgb(1, 0.45, 0.3, 0.95)
+        cr.move_to(0, -3.5)
+        cr.curve_to(0.8, -1.0, 1.0, -0.8, 3.2, 0)
+        cr.curve_to(1.0, 0.8, 0.8, 1.0, 0, 3.5)
+        cr.curve_to(-0.8, 1.0, -1.0, 0.8, -3.2, 0)
+        cr.curve_to(-1.0, -0.8, -0.8, -1.0, 0, -3.5)
+        cr.close_path()
+        cr.set_source(pat_gem)
+        cr.fill()
+        cr.arc(0, 0, 0.7, 0, 2 * math.pi)
+        cr.set_source_rgba(1, 1, 1, 0.9)
+        cr.fill()
+        cr.restore()
+
+        # 9. Expressive Eyes
+        eye_spacing = 8.0 * s
+        eye_y = -1.2 * s
+
+        for sign in [-1, 1]:
+            ex = sign * eye_spacing
+            ey = eye_y
+
+            # Natural Eyebrow
+            cr.save()
+            cr.set_line_width(1.2 * s)
+            cr.set_line_cap(cairo.LINE_CAP_ROUND)
+            cr.set_source_rgba(0.3, 0.25, 0.45, 0.75)
+            brow_lift = -1.2 * s if self.mood == "happy" else 0
+            brow_tilt = sign * 0.4 * s if self.mood == "thinking" else 0
+            cr.move_to(ex - 3.2 * s, ey - 6.2 * s + brow_lift - brow_tilt)
+            cr.curve_to(ex - 1.0 * s, ey - 7.5 * s + brow_lift, ex + 1.0 * s, ey - 7.5 * s + brow_lift, ex + 3.2 * s, ey - 6.2 * s + brow_lift + brow_tilt)
+            cr.stroke()
+            cr.restore()
+
+            if self.is_blinking:
                 cr.save()
-                cr.set_line_width(2.0)
+                cr.set_line_width(1.8 * s)
                 cr.set_line_cap(cairo.LINE_CAP_ROUND)
-                cr.set_source_rgba(0.12, 0.02, 0.22, 0.85)
-                cr.arc(eye_x, eye_y + 1, 4.0, 0.2 * math.pi, 0.8 * math.pi)
+                cr.set_source_rgba(0.18, 0.12, 0.32, 0.9)
+                cr.move_to(ex - 4.2 * s, ey + 0.5 * s)
+                cr.curve_to(ex - 2 * s, ey + 3.2 * s, ex + 2 * s, ey + 3.2 * s, ex + 4.2 * s, ey + 0.5 * s)
+                cr.stroke()
+                cr.move_to(ex + sign * 3.8 * s, ey + 0.8 * s)
+                cr.line_to(ex + sign * 5.0 * s, ey + 0.1 * s)
                 cr.stroke()
                 cr.restore()
+
             elif self.mood == "happy":
-                # Happy smiling crescent eye arc ^ ^
                 cr.save()
-                cr.set_line_width(2.2)
+                cr.set_line_width(2.2 * s)
                 cr.set_line_cap(cairo.LINE_CAP_ROUND)
-                cr.set_source_rgba(0.12, 0.02, 0.22, 0.9)
-                cr.arc(eye_x, eye_y + 2, 4.2, 1.15 * math.pi, 1.85 * math.pi)
+                cr.set_source_rgba(0.18, 0.12, 0.32, 0.95)
+                cr.move_to(ex - 4.2 * s, ey + 2.0 * s)
+                cr.curve_to(ex - 2 * s, ey - 2.5 * s, ex + 2 * s, ey - 2.5 * s, ex + 4.2 * s, ey + 2.0 * s)
+                cr.stroke()
+                cr.set_line_width(1.4 * s)
+                cr.move_to(ex + sign * 3.8 * s, ey + 1.5 * s)
+                cr.line_to(ex + sign * 5.2 * s, ey - 0.2 * s)
                 cr.stroke()
                 cr.restore()
+
             elif self.mood == "thinking":
-                # Twinkling star eye
                 cr.save()
-                cr.translate(eye_x, eye_y)
+                cr.translate(ex, ey)
+                cr.scale(3.8 * s, 5.0 * s)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.set_source_rgb(0.98, 0.98, 1.0)
+                cr.fill()
+                cr.restore()
+
+                cr.save()
+                cr.translate(ex, ey)
+                cr.scale(2.9 * s, 4.0 * s)
+                pat_iris = cairo.LinearGradient(0, -1, 0, 1)
+                pat_iris.add_color_stop_rgb(0.0, 0.12, 0.05, 0.28)
+                pat_iris.add_color_stop_rgb(1.0, 0.65, 0.2, 0.75)
+                cr.set_source(pat_iris)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.fill()
+                cr.restore()
+
+                cr.save()
+                cr.translate(ex, ey)
                 cr.rotate(self.think_angle)
-                cr.set_line_width(1.8)
+                cr.set_line_width(1.3 * s)
                 cr.set_line_cap(cairo.LINE_CAP_ROUND)
                 cr.set_source_rgb(1.0, 1.0, 1.0)
-                cr.move_to(-4, 0)
-                cr.line_to(4, 0)
-                cr.move_to(0, -4)
-                cr.line_to(0, 4)
+                cr.move_to(-2.2 * s, 0)
+                cr.line_to(2.2 * s, 0)
+                cr.move_to(0, -2.2 * s)
+                cr.line_to(0, 2.2 * s)
+                cr.stroke()
+                cr.arc(0, 0, 0.6 * s, 0, 2 * math.pi)
+                cr.fill()
+                cr.restore()
+
+                cr.save()
+                cr.set_line_width(1.6 * s)
+                cr.set_line_cap(cairo.LINE_CAP_ROUND)
+                cr.set_source_rgba(0.18, 0.12, 0.32, 0.95)
+                cr.move_to(ex - 4.0 * s, ey - 2.0 * s)
+                cr.curve_to(ex - 1.5 * s, ey - 5.0 * s, ex + 1.5 * s, ey - 5.0 * s, ex + 4.0 * s, ey - 2.0 * s)
                 cr.stroke()
                 cr.restore()
+
             else:
-                # Normal Eye with Pupil Tracking Gaze
+                # 1. Clean Sclera base
                 cr.save()
-                cr.translate(eye_x, eye_y)
-                cr.scale(eye_rx, eye_ry)
+                cr.translate(ex, ey)
+                cr.scale(3.8 * s, 5.2 * s)
                 cr.arc(0, 0, 1.0, 0, 2 * math.pi)
                 cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill_preserve()
+                cr.set_line_width(0.3)
+                cr.set_source_rgba(0.7, 0.75, 0.85, 0.4)
+                cr.stroke()
+                cr.restore()
+
+                # 2. Clip iris & pupils inside eye sclera
+                cr.save()
+                cr.save()
+                cr.translate(ex, ey)
+                cr.scale(3.8 * s, 5.2 * s)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.restore()
+                cr.clip()
+
+                # Jewel Iris
+                px = ex + self.look_x * 2.0 * s
+                py = ey + self.look_y * 1.8 * s
+                cr.save()
+                cr.translate(px, py)
+                cr.scale(2.8 * s, 4.0 * s)
+                pat_iris = cairo.LinearGradient(0, -1, 0, 1)
+                pat_iris.add_color_stop_rgb(0.0, 0.10, 0.06, 0.26)
+                pat_iris.add_color_stop_rgb(0.55, 0.35, 0.15, 0.58)
+                pat_iris.add_color_stop_rgb(1.0, 0.92, 0.28, 0.62)
+                cr.set_source(pat_iris)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
                 cr.fill()
                 cr.restore()
 
-                # Pupil
-                px = eye_x + self.look_x * 2.1
-                py = eye_y + self.look_y * 2.1
+                # Crisp Pupil
                 cr.save()
-                cr.arc(px, py, 2.5, 0, 2 * math.pi)
-                cr.set_source_rgb(0.08, 0.02, 0.18)
+                cr.translate(px, py - 0.2 * s)
+                cr.scale(1.5 * s, 2.2 * s)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.set_source_rgb(0.06, 0.02, 0.12)
                 cr.fill()
+                cr.restore()
 
-                # Big Twinkle Catchlight
-                cr.arc(px - 0.9, py - 0.9, 1.0, 0, 2 * math.pi)
+                # Specular Highlights
+                cr.save()
+                cr.arc(px - 1.0 * s, py - 1.3 * s, 1.1 * s, 0, 2 * math.pi)
                 cr.set_source_rgb(1.0, 1.0, 1.0)
                 cr.fill()
+                cr.restore()
 
-                # Tiny secondary twinkle
-                cr.arc(px + 0.8, py + 0.8, 0.5, 0, 2 * math.pi)
-                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.save()
+                cr.arc(px + 1.0 * s, py + 1.2 * s, 0.65 * s, 0, 2 * math.pi)
+                cr.set_source_rgba(1.0, 1.0, 1.0, 0.9)
                 cr.fill()
+                cr.restore()
+
+                cr.save()
+                cr.arc(px - 0.3 * s, py + 1.6 * s, 0.45 * s, 0, 2 * math.pi)
+                cr.set_source_rgba(1.0, 0.8, 1.0, 0.9)
+                cr.fill()
+                cr.restore()
+
+                cr.restore() # End eye clipping
+
+                # 3. Upper Eyelid & Eyelash Line
+                cr.save()
+                cr.set_line_width(1.7 * s)
+                cr.set_line_cap(cairo.LINE_CAP_ROUND)
+                cr.set_source_rgba(0.16, 0.10, 0.28, 0.95)
+                cr.move_to(ex - 4.2 * s, ey - 2.2 * s)
+                cr.curve_to(ex - 1.8 * s, ey - 5.5 * s, ex + 1.8 * s, ey - 5.5 * s, ex + 4.2 * s, ey - 2.2 * s)
+                cr.stroke()
+                cr.set_line_width(1.2 * s)
+                cr.move_to(ex + sign * 3.8 * s, ey - 2.6 * s)
+                cr.line_to(ex + sign * 5.2 * s, ey - 4.2 * s)
+                cr.stroke()
                 cr.restore()
 
         cr.restore()
@@ -461,7 +705,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.last_answer = ""
         self.turn_start_mark = None
 
-        self.set_default_size(720, 520)
+        self.set_default_size(720, 560)
         self.set_resizable(True)
         self.set_decorated(False)
         self.add_css_class('lexi-window')
@@ -475,8 +719,9 @@ class LexiWindow(Adw.ApplicationWindow):
         key_ctrl.connect('key-pressed', self.on_key_pressed)
         self.add_controller(key_ctrl)
 
-        # Mouse pointer motion tracking for dynamic eye physics
+        # Mouse pointer motion tracking for dynamic eye physics (capture across all child widgets)
         motion_ctrl = Gtk.EventControllerMotion()
+        motion_ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         motion_ctrl.connect('motion', self.on_pointer_motion)
         self.add_controller(motion_ctrl)
 
@@ -484,7 +729,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.connect('close-request', self.on_close_request)
 
         # Screen-wide pointer polling (when outside window)
-        GLib.timeout_add(120, self.poll_screen_mouse)
+        GLib.timeout_add(40, self.poll_screen_mouse)
 
     def on_close_request(self, _):
         if hasattr(self, 'app') and self.app:
@@ -504,8 +749,8 @@ class LexiWindow(Adw.ApplicationWindow):
 
     def on_pointer_motion(self, ctrl, x, y):
         if hasattr(self, 'mascot') and self.mascot:
-            dx = (x - 42.0) / 180.0
-            dy = (y - 36.0) / 140.0
+            dx = (x - 44.0) / 340.0
+            dy = (y - 42.0) / 260.0
             self.mascot.set_gaze(dx, dy)
 
     def poll_screen_mouse(self):
@@ -516,12 +761,11 @@ class LexiWindow(Adw.ApplicationWindow):
             m = re.search(r'x:(\d+)\s+y:(\d+)', out)
             if m:
                 mx, my = int(m.group(1)), int(m.group(2))
-                cur_pos = self.get_current_pos()
-                if cur_pos:
-                    wx, wy = cur_pos
-                    dx = (mx - (wx + 42.0)) / 450.0
-                    dy = (my - (wy + 36.0)) / 320.0
-                    self.mascot.set_gaze(dx, dy)
+                pos = self.get_current_pos() or getattr(self, 'window_pos', None) or (580, 38)
+                wx, wy = pos
+                dx = (mx - (wx + 44.0)) / 480.0
+                dy = (my - (wy + 42.0)) / 360.0
+                self.mascot.set_gaze(dx, dy)
         except Exception:
             pass
         return GLib.SOURCE_CONTINUE
@@ -541,29 +785,54 @@ class LexiWindow(Adw.ApplicationWindow):
     on_pet_mochi = on_pet_lexi
 
     def trigger_drop_animation(self):
-        if hasattr(self, 'card'):
-            self.card.remove_css_class('lexi-card-exit')
-            self.card.remove_css_class('lexi-card-drop')
-            GLib.timeout_add(15, lambda: (
-                self.card.add_css_class('lexi-card-drop'),
-                GLib.SOURCE_REMOVE
-            )[1])
+        if not hasattr(self, 'card'):
+            return
+        self.card.set_margin_top(-72)
+        self.card.set_opacity(0.0)
+
+        def on_frame(val):
+            self.card.set_margin_top(int(val))
+            prog = max(0.0, min(1.0, (val + 72.0) / 60.0))
+            self.card.set_opacity(prog)
+
+        target = Adw.CallbackAnimationTarget.new(on_frame)
+        self._drop_anim = Adw.TimedAnimation.new(self.card, -72.0, 4.0, 360, target)
+        self._drop_anim.set_easing(Adw.Easing.EASE_OUT_BACK)
+        self._drop_anim.play()
 
     def animate_and_close(self):
-        if hasattr(self, 'card'):
-            self.card.remove_css_class('lexi-card-drop')
-            self.card.add_css_class('lexi-card-exit')
-            GLib.timeout_add(250, lambda: (self.close(), GLib.SOURCE_REMOVE)[1])
-        else:
+        if not hasattr(self, 'card'):
             self.close()
+            return
+
+        start_margin = self.card.get_margin_top()
+        def on_frame(val):
+            self.card.set_margin_top(int(val))
+            prog = max(0.0, min(1.0, (val + 90.0) / (start_margin + 90.0)))
+            self.card.set_opacity(prog)
+
+        target = Adw.CallbackAnimationTarget.new(on_frame)
+        self._exit_anim = Adw.TimedAnimation.new(self.card, float(start_margin), -90.0, 220, target)
+        self._exit_anim.set_easing(Adw.Easing.EASE_IN_CUBIC)
+        self._exit_anim.connect('done', lambda _: self.close())
+        self._exit_anim.play()
 
     def animate_and_minimize(self):
-        if hasattr(self, 'card'):
-            self.card.remove_css_class('lexi-card-drop')
-            self.card.add_css_class('lexi-card-exit')
-            GLib.timeout_add(250, lambda: (self.minimize(), GLib.SOURCE_REMOVE)[1])
-        else:
+        if not hasattr(self, 'card'):
             self.minimize()
+            return
+
+        start_margin = self.card.get_margin_top()
+        def on_frame(val):
+            self.card.set_margin_top(int(val))
+            prog = max(0.0, min(1.0, (val + 90.0) / (start_margin + 90.0)))
+            self.card.set_opacity(prog)
+
+        target = Adw.CallbackAnimationTarget.new(on_frame)
+        self._exit_anim = Adw.TimedAnimation.new(self.card, float(start_margin), -90.0, 220, target)
+        self._exit_anim.set_easing(Adw.Easing.EASE_IN_CUBIC)
+        self._exit_anim.connect('done', lambda _: (self.minimize(), self.card.set_margin_top(4), self.card.set_opacity(1.0)))
+        self._exit_anim.play()
 
     def get_current_pos(self):
         surface = self.get_surface()
@@ -594,7 +863,9 @@ class LexiWindow(Adw.ApplicationWindow):
             screen_w = geom.width
 
         pos_x = screen_x + (screen_w - target_w) // 2
-        pos_y = screen_y + 38  # Position directly below GNOME top bar as a floating dynamic island
+        pos_y = screen_y + 38  # Floating dynamic island below GNOME top bar
+        self.window_pos = (pos_x, pos_y)
+        self.saved_pos = (pos_x, pos_y)
 
         surface = self.get_surface()
         if surface and hasattr(surface, 'get_xid'):
@@ -619,11 +890,9 @@ class LexiWindow(Adw.ApplicationWindow):
         click_gesture.connect('pressed', lambda *_: self.entry.grab_focus())
         self.card.add_controller(click_gesture)
 
-        # --- Header wrapped in WindowHandle for effortless dragging ---
-        self.handle = Gtk.WindowHandle()
+        # --- Header with Mascot, Draggable Title, and Controls ---
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        self.handle.set_child(header)
-        self.card.append(self.handle)
+        self.card.append(header)
 
         # Mascot Avatar (Interactive DrawingArea with dynamic eye-tracking)
         self.avatar_btn = Gtk.Button()
@@ -631,22 +900,23 @@ class LexiWindow(Adw.ApplicationWindow):
         self.avatar_btn.add_css_class('lexi-mascot-btn')
         self.avatar_btn.set_tooltip_text("Click to pet Lexi! ✨ (eyes follow your mouse)")
 
-        self.mascot = LexiMascotWidget(size=48)
+        self.mascot = LexiMascotWidget(size=52)
         self.avatar_btn.set_child(self.mascot)
         self.avatar_btn.connect('clicked', self.on_pet_lexi)
-
         header.append(self.avatar_btn)
 
-        # Title & Subtitle
+        # Title & Subtitle inside WindowHandle for effortless dragging
+        self.handle = Gtk.WindowHandle()
+        self.handle.set_hexpand(True)
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        title_box.set_hexpand(True)
         title = Gtk.Label(label="Lexi", xalign=0)
         title.add_css_class('lexi-title')
-        subtitle = Gtk.Label(label="Cosmic Screen Companion • Top Island", xalign=0)
+        subtitle = Gtk.Label(label="Cosmic Screen Copilot", xalign=0)
         subtitle.add_css_class('lexi-subtitle')
         title_box.append(title)
         title_box.append(subtitle)
-        header.append(title_box)
+        self.handle.set_child(title_box)
+        header.append(self.handle)
 
         # Status badge
         self.status_pill = Gtk.Label(label="✂️ Snipping..." if self.is_snip else "🌌 Seeing screen...")
@@ -660,7 +930,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.clear_btn = Gtk.Button(label="🧹 Clear")
         self.clear_btn.set_focusable(False)
         self.clear_btn.set_tooltip_text("Clear chat conversation history")
-        self.clear_btn.add_css_class('mochi-header-btn')
+        self.clear_btn.add_css_class('lexi-header-btn')
         self.clear_btn.connect('clicked', self.on_clear_chat)
         ctrls_box.append(self.clear_btn)
 
@@ -668,7 +938,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.minimize_btn.set_focusable(False)
         self.minimize_btn.set_tooltip_text("Minimize window (Ctrl+M)")
         self.minimize_btn.add_css_class('flat')
-        self.minimize_btn.add_css_class('mochi-win-btn')
+        self.minimize_btn.add_css_class('lexi-win-btn')
         self.minimize_btn.connect('clicked', lambda _: self.animate_and_minimize())
         ctrls_box.append(self.minimize_btn)
 
@@ -676,17 +946,17 @@ class LexiWindow(Adw.ApplicationWindow):
         self.close_btn.set_focusable(False)
         self.close_btn.set_tooltip_text("Close Lexi (Esc)")
         self.close_btn.add_css_class('flat')
-        self.close_btn.add_css_class('mochi-win-btn')
+        self.close_btn.add_css_class('lexi-win-btn')
         self.close_btn.connect('clicked', lambda _: self.animate_and_close())
         ctrls_box.append(self.close_btn)
 
         # --- Pages Strip / Tray (Supports up to 5 pages) ---
         self.pages_tray = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.pages_tray.add_css_class('mochi-pages-tray')
+        self.pages_tray.add_css_class('lexi-pages-tray')
         card.append(self.pages_tray)
 
         tray_lbl = Gtk.Label(label="Pages:")
-        tray_lbl.add_css_class('mochi-tray-label')
+        tray_lbl.add_css_class('lexi-tray-label')
         self.pages_tray.append(tray_lbl)
 
         # Container for attached page cards with smooth horizontal scrolling
@@ -701,23 +971,23 @@ class LexiWindow(Adw.ApplicationWindow):
         # Add Page Buttons
         self.add_snip_btn = Gtk.Button(label="✂️ + Snip")
         self.add_snip_btn.set_focusable(False)
-        self.add_snip_btn.set_tooltip_text("Snip an additional area (Mochi hides completely)")
-        self.add_snip_btn.add_css_class('mochi-tray-btn')
-        self.add_snip_btn.add_css_class('mochi-tray-btn-accent')
+        self.add_snip_btn.set_tooltip_text("Snip an additional area (Lexi hides completely)")
+        self.add_snip_btn.add_css_class('lexi-tray-btn')
+        self.add_snip_btn.add_css_class('lexi-tray-btn-accent')
         self.add_snip_btn.connect('clicked', self.on_add_snip)
         self.pages_tray.append(self.add_snip_btn)
 
         self.add_full_btn = Gtk.Button(label="🖥️ + Screen")
         self.add_full_btn.set_focusable(False)
-        self.add_full_btn.set_tooltip_text("Add entire screen as next page (1.2s delay to switch window)")
-        self.add_full_btn.add_css_class('mochi-tray-btn')
+        self.add_full_btn.set_tooltip_text("Add entire screen as next page")
+        self.add_full_btn.add_css_class('lexi-tray-btn')
         self.add_full_btn.connect('clicked', self.on_add_full)
         self.pages_tray.append(self.add_full_btn)
 
         self.recapture_btn = Gtk.Button(label="🔄 New")
         self.recapture_btn.set_focusable(False)
         self.recapture_btn.set_tooltip_text("Clear all pages and capture fresh screen")
-        self.recapture_btn.add_css_class('mochi-tray-btn')
+        self.recapture_btn.add_css_class('lexi-tray-btn')
         self.recapture_btn.connect('clicked', self.on_recapture)
         self.pages_tray.append(self.recapture_btn)
 
@@ -736,40 +1006,40 @@ class LexiWindow(Adw.ApplicationWindow):
         for label_text, prompt_text in quick_prompts:
             btn = Gtk.Button(label=label_text)
             btn.set_focusable(False)
-            btn.add_css_class('mochi-pill-btn')
+            btn.add_css_class('lexi-pill-btn')
             btn.connect('clicked', lambda _, p=prompt_text: self.on_quick_prompt(p))
             chips_box.append(btn)
 
         # --- Input Bar ---
         input_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        input_container.add_css_class('mochi-entry-box')
+        input_container.add_css_class('lexi-entry-box')
         card.append(input_container)
 
         self.entry = Gtk.Entry()
         self.entry.set_placeholder_text("Ask anything about what's on your screen... (press Enter)")
         self.entry.set_hexpand(True)
         self.entry.set_focusable(True)
-        self.entry.add_css_class('mochi-entry')
+        self.entry.add_css_class('lexi-entry')
         self.entry.connect('activate', self.on_submit)
         input_container.append(self.entry)
 
         self.send_btn = Gtk.Button.new_from_icon_name('arrow-up-symbolic')
         self.send_btn.set_focusable(False)
-        self.send_btn.add_css_class('mochi-send-btn')
+        self.send_btn.add_css_class('lexi-send-btn')
         self.send_btn.connect('clicked', self.on_submit)
         input_container.append(self.send_btn)
 
         # --- Answer / Multi-Turn Response Area ---
         self.response_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.response_container.add_css_class('mochi-response-box')
+        self.response_container.add_css_class('lexi-response-box')
         self.response_container.set_vexpand(True)
         card.append(self.response_container)
 
         # Thinking spinner bar (hidden by default)
         self.thinking_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.spinner = Gtk.Spinner()
-        self.thinking_label = Gtk.Label(label="🍡 Mochi is thinking...")
-        self.thinking_label.add_css_class('mochi-thinking')
+        self.thinking_label = Gtk.Label(label="✨ Lexi is thinking...")
+        self.thinking_label.add_css_class('lexi-thinking')
         self.thinking_box.append(self.spinner)
         self.thinking_box.append(self.thinking_label)
         self.thinking_box.set_visible(False)
@@ -787,7 +1057,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.text_view.set_editable(False)
         self.text_view.set_cursor_visible(False)
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.text_view.add_css_class('mochi-answer-text')
+        self.text_view.add_css_class('lexi-answer-text')
         scrolled.set_child(self.text_view)
 
         init_hint = "✂️ Select an area to snip..." if self.is_snip else "👋 Looking at your screen right now..."
@@ -800,7 +1070,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.copy_btn = Gtk.Button(label="📋 Copy Answer")
         self.copy_btn.set_focusable(False)
         self.copy_btn.add_css_class('flat')
-        self.copy_btn.add_css_class('mochi-action-btn')
+        self.copy_btn.add_css_class('lexi-action-btn')
         self.copy_btn.connect('clicked', self.on_copy)
         bottom_bar.append(self.copy_btn)
 
@@ -809,7 +1079,7 @@ class LexiWindow(Adw.ApplicationWindow):
         bottom_bar.append(bottom_spacer)
 
         dismiss_hint = Gtk.Label(label="Esc to close • Ctrl+M to minimize • Super+Shift+C to snip")
-        dismiss_hint.add_css_class('mochi-subtitle')
+        dismiss_hint.add_css_class('lexi-subtitle')
         bottom_bar.append(dismiss_hint)
 
     def update_pages_tray_ui(self):
@@ -819,21 +1089,21 @@ class LexiWindow(Adw.ApplicationWindow):
 
         for idx, page in enumerate(self.captured_pages, 1):
             card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            card.add_css_class('mochi-page-card')
+            card.add_css_class('lexi-page-card')
 
             img = Gtk.Image.new_from_paintable(page["texture"])
-            img.add_css_class('mochi-page-img')
+            img.add_css_class('lexi-page-img')
             card.append(img)
 
             title_txt = f"Page {idx} (snip)" if page.get("is_snip") else f"Page {idx}"
             lbl = Gtk.Label(label=title_txt)
-            lbl.add_css_class('mochi-page-title')
+            lbl.add_css_class('lexi-page-title')
             card.append(lbl)
 
             del_btn = Gtk.Button.new_from_icon_name('window-close-symbolic')
             del_btn.set_focusable(False)
             del_btn.add_css_class('flat')
-            del_btn.add_css_class('mochi-page-del-btn')
+            del_btn.add_css_class('lexi-page-del-btn')
             del_btn.set_tooltip_text(f"Remove Page {idx}")
             del_btn.connect('clicked', lambda _, p_idx=idx-1: self.remove_page(p_idx))
             card.append(del_btn)
@@ -1047,7 +1317,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
         self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "👤 You: ", "user_header")
         self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), f"{text}\n\n", "bold")
-        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "✨ Lexi:\n", "mochi_header")
+        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "✨ Lexi:\n", "lexi_header")
 
         if self.turn_start_mark:
             self.text_buffer.delete_mark(self.turn_start_mark)
@@ -1143,8 +1413,8 @@ class LexiWindow(Adw.ApplicationWindow):
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "https://mochi.desktop",
-                "X-Title": "Mochi Copilot"
+                "HTTP-Referer": "https://lexi.desktop",
+                "X-Title": "Lexi Screen Copilot"
             }
 
             req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
