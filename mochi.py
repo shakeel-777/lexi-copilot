@@ -252,9 +252,9 @@ def render_markdown_to_buffer(buffer, text):
             buffer.insert(buffer.get_end_iter(), '\n')
 
 
-class MochiWindow(Adw.ApplicationWindow):
+class LexiWindow(Adw.ApplicationWindow):
     def __init__(self, app, config, is_snip=False):
-        super().__init__(application=app, title="Mochi Screen Copilot")
+        super().__init__(application=app, title="Lexi Cosmic Screen Copilot")
         self.app = app
         self.config = config
         self.is_snip = is_snip
@@ -271,6 +271,7 @@ class MochiWindow(Adw.ApplicationWindow):
         self.set_default_size(720, 520)
         self.set_resizable(True)
         self.set_decorated(False)
+        self.add_css_class('lexi-window')
         self.add_css_class('mochi-window')
 
         # Build UI layout
@@ -292,50 +293,60 @@ class MochiWindow(Adw.ApplicationWindow):
             self.app.active_window = None
         return False
 
-    MOCHI_PET_REACTIONS = [
-        ("🍡", "🍡 *squish!* ( ⸝⸝•ᴗ•⸝⸝ ) Ready to help!"),
-        ("💖", "🌸 *nuzzle* You're doing amazing today!"),
-        ("✨", "🍡 ( ˶ˆ꒳ˆ˵ ) *happy mochi bounce*"),
-        ("🐾", "🍡 *boop!* What are we working on?"),
-        ("🍰", "🍡 (◕‿◕✿) Sweet and focused!"),
-        ("🍵", "🍡 (*˘︶˘*).｡.:*♡ *cozy purr*"),
-        ("🌟", "🍡 ( •̀ ᴗ •́ )و Let's solve this screen!"),
+    LEXI_PET_REACTIONS = [
+        ("✨", "✨ *stardust!* ( ⸝⸝•ᴗ•⸝⸝ ) Navigating your screen!"),
+        ("🪐", "🪐 *orbital spin!* You're the brightest star in the cosmos!"),
+        ("🌟", "🌟 ( ˶ˆ꒳ˆ˵ ) Cosmic focus activated! What are we exploring?"),
+        ("🚀", "🚀 *blastoff!* Let's conquer this together!"),
+        ("🛸", "🛸 ( •̀ ᴗ •́ )و Beaming down solutions from orbit!"),
+        ("🌙", "🌙 (*˘︶˘*).｡.:*♡ Floating peacefully in starlight..."),
+        ("💫", "💫 ( ⊙‿⊙ ) Gravity stabilized! All systems ready!"),
     ]
+    MOCHI_PET_REACTIONS = LEXI_PET_REACTIONS
 
-    def on_pet_mochi(self, _):
-        emoji, message = random.choice(self.MOCHI_PET_REACTIONS)
+    def on_pet_lexi(self, _):
+        emoji, message = random.choice(self.LEXI_PET_REACTIONS)
         self.avatar_label.set_text(emoji)
-        self.avatar_label.add_css_class('mochi-avatar-bounce')
+        self.avatar_label.add_css_class('lexi-avatar-bounce')
         self.status_pill.set_text(message)
 
         def reset_mood():
-            self.avatar_label.remove_css_class('mochi-avatar-bounce')
+            self.avatar_label.remove_css_class('lexi-avatar-bounce')
             if not self.is_streaming:
-                self.avatar_label.set_text("🍡")
+                self.avatar_label.set_text("✨")
                 count = len(self.captured_pages)
-                self.status_pill.set_text(f"● {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
+                self.status_pill.set_text(f"✨ {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
             return GLib.SOURCE_REMOVE
 
         GLib.timeout_add(2500, reset_mood)
+    on_pet_mochi = on_pet_lexi
 
     def on_avatar_enter(self, controller, x, y):
         if not self.is_streaming:
-            self.avatar_label.set_text("✨")
+            self.avatar_label.set_text("🌟")
 
     def on_avatar_leave(self, controller):
         if not self.is_streaming:
-            self.avatar_label.set_text("🍡")
+            self.avatar_label.set_text("✨")
 
     def start_idle_animation(self):
         def on_idle_tick():
             if not self.is_streaming and self.get_visible():
-                self.avatar_label.set_text("✨")
+                self.avatar_label.set_text("🌟")
                 GLib.timeout_add(600, lambda: (
-                    self.avatar_label.set_text("🍡") if not self.is_streaming else None,
+                    self.avatar_label.set_text("✨") if not self.is_streaming else None,
                     GLib.SOURCE_REMOVE
                 )[1])
             return GLib.SOURCE_CONTINUE
         GLib.timeout_add_seconds(8, on_idle_tick)
+
+    def trigger_drop_animation(self):
+        if hasattr(self, 'card'):
+            self.card.remove_css_class('lexi-card-drop')
+            GLib.timeout_add(15, lambda: (
+                self.card.add_css_class('lexi-card-drop'),
+                GLib.SOURCE_REMOVE
+            )[1])
 
     def get_current_pos(self):
         surface = self.get_surface()
@@ -380,31 +391,33 @@ class MochiWindow(Adw.ApplicationWindow):
         root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.set_content(root_box)
 
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        card.add_css_class('mochi-card')
-        root_box.append(card)
+        self.card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        self.card.add_css_class('lexi-card')
+        self.card.add_css_class('lexi-card-drop')
+        root_box.append(self.card)
+        card = self.card
 
         # Click anywhere on card background focuses entry
         click_gesture = Gtk.GestureClick()
         click_gesture.connect('pressed', lambda *_: self.entry.grab_focus())
-        card.add_controller(click_gesture)
+        self.card.add_controller(click_gesture)
 
         # --- Header wrapped in WindowHandle for effortless dragging ---
         self.handle = Gtk.WindowHandle()
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.handle.set_child(header)
-        card.append(self.handle)
+        self.card.append(self.handle)
 
         # Mascot Avatar (Interactive Button with Hover Wink & Squish Petting)
         self.avatar_btn = Gtk.Button()
         self.avatar_btn.set_focusable(False)
-        self.avatar_btn.add_css_class('mochi-avatar-btn')
-        self.avatar_btn.set_tooltip_text("Click to pet Mochi! 🍡 (squish)")
+        self.avatar_btn.add_css_class('lexi-avatar-btn')
+        self.avatar_btn.set_tooltip_text("Click to pet Lexi! ✨ (cosmic sparkle)")
 
-        self.avatar_label = Gtk.Label(label="🍡")
-        self.avatar_label.add_css_class('mochi-avatar')
+        self.avatar_label = Gtk.Label(label="✨")
+        self.avatar_label.add_css_class('lexi-avatar')
         self.avatar_btn.set_child(self.avatar_label)
-        self.avatar_btn.connect('clicked', self.on_pet_mochi)
+        self.avatar_btn.connect('clicked', self.on_pet_lexi)
 
         avatar_hover = Gtk.EventControllerMotion()
         avatar_hover.connect('enter', self.on_avatar_enter)
@@ -416,17 +429,17 @@ class MochiWindow(Adw.ApplicationWindow):
         # Title & Subtitle
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title_box.set_hexpand(True)
-        title = Gtk.Label(label="Mochi", xalign=0)
-        title.add_css_class('mochi-title')
-        subtitle = Gtk.Label(label="Screen Companion • Top Island", xalign=0)
-        subtitle.add_css_class('mochi-subtitle')
+        title = Gtk.Label(label="Lexi", xalign=0)
+        title.add_css_class('lexi-title')
+        subtitle = Gtk.Label(label="Cosmic Screen Companion • Top Island", xalign=0)
+        subtitle.add_css_class('lexi-subtitle')
         title_box.append(title)
         title_box.append(subtitle)
         header.append(title_box)
 
         # Status badge
-        self.status_pill = Gtk.Label(label="✂️ Snipping..." if self.is_snip else "⏳ Seeing screen...")
-        self.status_pill.add_css_class('mochi-status-pill')
+        self.status_pill = Gtk.Label(label="✂️ Snipping..." if self.is_snip else "🌌 Seeing screen...")
+        self.status_pill.add_css_class('lexi-status-pill')
         header.append(self.status_pill)
 
         # Window Controls Box (Clear, Minimize, Close)
@@ -681,6 +694,7 @@ class MochiWindow(Adw.ApplicationWindow):
             else:
                 self.position_at_top()
 
+            self.trigger_drop_animation()
             self.set_focus(self.entry)
             GLib.idle_add(lambda: (self.entry.grab_focus(), GLib.SOURCE_REMOVE)[1])
 
@@ -800,8 +814,8 @@ class MochiWindow(Adw.ApplicationWindow):
         self.is_streaming = True
         self.send_btn.set_sensitive(False)
         self.avatar_label.set_text("✨")
-        self.avatar_label.add_css_class('mochi-avatar-bounce')
-        self.thinking_label.set_text("🍡 Analyzing page(s)... ● ○ ○")
+        self.avatar_label.add_css_class('lexi-avatar-bounce')
+        self.thinking_label.set_text("✨ Lexi navigating page(s)... ✦ ✧ ✧")
         self.thinking_box.set_visible(True)
         self.spinner.start()
         self.query_start_time = time.time()
@@ -822,7 +836,7 @@ class MochiWindow(Adw.ApplicationWindow):
 
         self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "👤 You: ", "user_header")
         self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), f"{text}\n\n", "bold")
-        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "🍡 Mochi:\n", "mochi_header")
+        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "✨ Lexi:\n", "mochi_header")
 
         if self.turn_start_mark:
             self.text_buffer.delete_mark(self.turn_start_mark)
@@ -842,16 +856,16 @@ class MochiWindow(Adw.ApplicationWindow):
         elapsed = time.time() - self.query_start_time
         pages_count = len(self.captured_pages)
 
-        # Cute cycling expressions and animated sparkling dots
-        frames = ["✨", "🍡", "💭", "🌸"]
-        dot_cycles = ["● ○ ○", "○ ● ○", "○ ○ ●", "● ● ●"]
+        # Cosmic cycling expressions and animated stardust sparkle dots
+        frames = ["✨", "🪐", "🌟", "💫", "🛸"]
+        dot_cycles = ["✦ ✧ ✧", "✧ ✦ ✧", "✧ ✧ ✦", "✦ ✦ ✦"]
 
         step = int(elapsed * 2.2)
         face = frames[step % len(frames)]
         dots = dot_cycles[step % len(dot_cycles)]
 
         self.avatar_label.set_text(face)
-        self.thinking_label.set_text(f"🍡 Reading {pages_count} page(s)... {dots} ({int(elapsed)}s)")
+        self.thinking_label.set_text(f"✨ Lexi exploring {pages_count} page(s)... {dots} ({int(elapsed)}s)")
         return GLib.SOURCE_CONTINUE
 
     def get_payload_messages(self, current_user_question):
@@ -994,15 +1008,15 @@ class MochiWindow(Adw.ApplicationWindow):
 
         # Celebratory mascot reaction when answer completes
         if full_text and not full_text.startswith("\n⚠️ Error"):
-            self.avatar_label.set_text("🌸")
-            self.avatar_label.add_css_class('mochi-avatar-bounce')
-            self.status_pill.set_text("🌸 Answer ready! ✨")
+            self.avatar_label.set_text("🌟")
+            self.avatar_label.add_css_class('lexi-avatar-bounce')
+            self.status_pill.set_text("🌟 Cosmic answer ready! ✨")
             def reset_celebration():
-                self.avatar_label.remove_css_class('mochi-avatar-bounce')
+                self.avatar_label.remove_css_class('lexi-avatar-bounce')
                 if not self.is_streaming:
-                    self.avatar_label.set_text("🍡")
+                    self.avatar_label.set_text("✨")
                     count = len(self.captured_pages)
-                    self.status_pill.set_text(f"● {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
+                    self.status_pill.set_text(f"✨ {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
                 return GLib.SOURCE_REMOVE
             GLib.timeout_add(2500, reset_celebration)
 
@@ -1017,22 +1031,22 @@ class MochiWindow(Adw.ApplicationWindow):
             display = Gdk.Display.get_default()
             clipboard = display.get_clipboard()
             clipboard.set(text_to_copy)
-            self.copy_btn.set_label("Copied! 🌸✨")
-            self.avatar_label.set_text("💖")
-            self.avatar_label.add_css_class('mochi-avatar-bounce')
+            self.copy_btn.set_label("Copied! ✨🚀")
+            self.avatar_label.set_text("🪐")
+            self.avatar_label.add_css_class('lexi-avatar-bounce')
             def reset_copy():
                 self.copy_btn.set_label("📋 Copy Answer")
-                self.avatar_label.remove_css_class('mochi-avatar-bounce')
+                self.avatar_label.remove_css_class('lexi-avatar-bounce')
                 if not self.is_streaming:
-                    self.avatar_label.set_text("🍡")
+                    self.avatar_label.set_text("✨")
                 return GLib.SOURCE_REMOVE
             GLib.timeout_add_seconds(2, reset_copy)
 
 
-class MochiApp(Adw.Application):
+class LexiApp(Adw.Application):
     def __init__(self, config):
         super().__init__(
-            application_id='org.antigravity.MochiCompanion',
+            application_id='org.antigravity.LexiCompanion',
             flags=gi.repository.Gio.ApplicationFlags.HANDLES_COMMAND_LINE
         )
         self.config = config
@@ -1062,11 +1076,12 @@ class MochiApp(Adw.Application):
             win.present()
             if not win.saved_pos:
                 win.position_at_top()
+            win.trigger_drop_animation()
             win.entry.grab_focus()
         else:
             self.hold()
             self.has_startup_hold = True
-            win = MochiWindow(self, self.config, is_snip=False)
+            win = LexiWindow(self, self.config, is_snip=False)
             self.active_window = win
             win.set_visible(False)
             GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=False, append_mode=False))
@@ -1074,7 +1089,7 @@ class MochiApp(Adw.Application):
     def do_command_line(self, command_line):
         args = command_line.get_arguments()
         if '--help' in args or '-h' in args:
-            print("Mochi Copilot - Cute Screen Companion\nUsage:\n  mochi-copilot [options]\n\nOptions:\n  -s, --snip    Interactive region snip\n  -h, --help    Show this help message")
+            print("Lexi Copilot - Cosmic Screen Companion\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip    Interactive region snip\n  -h, --help    Show this help message")
             return 0
 
         is_snip = ('--snip' in args) or ('-s' in args)
@@ -1090,12 +1105,13 @@ class MochiApp(Adw.Application):
                 # At max pages, bring window back up
                 win.set_visible(True)
                 win.present()
+                win.trigger_drop_animation()
                 win.entry.grab_focus()
         else:
             # First launch: keep hold until window reveals
             self.hold()
             self.has_startup_hold = True
-            win = MochiWindow(self, self.config, is_snip=is_snip)
+            win = LexiWindow(self, self.config, is_snip=is_snip)
             self.active_window = win
             win.set_visible(False)
             GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=False))
@@ -1103,10 +1119,15 @@ class MochiApp(Adw.Application):
         return 0
 
 
+# Backwards compatibility aliases
+MochiWindow = LexiWindow
+MochiApp = LexiApp
+
+
 def main():
-    log("=== Mochi invoked ===")
+    log("=== Lexi invoked ===")
     config = load_config()
-    app = MochiApp(config)
+    app = LexiApp(config)
     return app.run(sys.argv)
 
 if __name__ == '__main__':

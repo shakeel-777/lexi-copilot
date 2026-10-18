@@ -1,23 +1,41 @@
-/* Mochi Screen Copilot - Cute & Modern Theme */
+/* Lexi Screen Copilot - Cosmic Stardust & Glass Theme */
 
-@keyframes mochi-breathe {
+@keyframes lexi-drop-in {
     0% {
-        box-shadow: 0 0 10px alpha(#ff758c, 0.35);
+        opacity: 0;
+        transform: translateY(-56px) scale(0.94);
     }
-    50% {
-        box-shadow: 0 0 24px alpha(#c77dff, 0.65), 0 0 10px alpha(#ff758c, 0.45);
+    60% {
+        opacity: 1;
+        transform: translateY(8px) scale(1.02);
+    }
+    82% {
+        transform: translateY(-3px) scale(0.995);
     }
     100% {
-        box-shadow: 0 0 10px alpha(#ff758c, 0.35);
+        opacity: 1;
+        transform: translateY(0px) scale(1.0);
     }
 }
 
-@keyframes mochi-squish {
-    0% { transform: scale(1.0); }
-    30% { transform: scale(1.25, 0.82); }
-    60% { transform: scale(0.9, 1.18); }
-    80% { transform: scale(1.06, 0.96); }
-    100% { transform: scale(1.0); }
+@keyframes lexi-cosmic-breathe {
+    0% {
+        box-shadow: 0 0 12px alpha(#7928ca, 0.45), 0 0 4px alpha(#ff0080, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 28px alpha(#ff0080, 0.7), 0 0 16px alpha(#4cc9f0, 0.55);
+    }
+    100% {
+        box-shadow: 0 0 12px alpha(#7928ca, 0.45), 0 0 4px alpha(#ff0080, 0.3);
+    }
+}
+
+@keyframes lexi-star-spin {
+    0% { transform: scale(1.0) rotate(0deg); }
+    25% { transform: scale(1.2, 0.85) rotate(-8deg); }
+    50% { transform: scale(0.9, 1.15) rotate(12deg); }
+    75% { transform: scale(1.08, 0.95) rotate(-4deg); }
+    100% { transform: scale(1.0) rotate(0deg); }
 }
 
 @keyframes pill-pulse {
@@ -26,7 +44,7 @@
     100% { opacity: 0.85; transform: scale(1.0); }
 }
 
-window.mochi-window {
+window.lexi-window, window.mochi-window {
     background-color: transparent;
 }
 
@@ -35,79 +53,91 @@ windowhandle {
     cursor: default;
 }
 
-.mochi-card {
+/* Card Container with Drop-in Animation on Entrance */
+.lexi-card, .mochi-card {
     background: alpha(@window_bg_color, 0.94);
-    border-radius: 22px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px alpha(@window_fg_color, 0.08);
-    border: 1.5px solid alpha(#ff758c, 0.35);
-    padding: 16px 18px;
-    margin: 6px 10px 10px 10px;
+    border-radius: 24px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px alpha(@window_fg_color, 0.1), 0 0 20px alpha(#7928ca, 0.25);
+    border: 1.5px solid alpha(#a855f7, 0.45);
+    padding: 16px 20px;
+    margin: 4px 10px 10px 10px;
     transition: border-color 300ms ease, box-shadow 300ms ease;
+    animation-name: lexi-drop-in;
+    animation-duration: 480ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.mochi-card:hover {
-    border-color: alpha(#ff758c, 0.55);
+.lexi-card:hover, .mochi-card:hover {
+    border-color: alpha(#ff0080, 0.65);
+    box-shadow: 0 28px 65px rgba(0, 0, 0, 0.6), 0 0 24px alpha(#a855f7, 0.35);
+}
+
+/* Re-triggerable Drop Animation Class */
+.lexi-card-drop {
+    animation-name: lexi-drop-in;
+    animation-duration: 480ms;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Header Avatar Mascot */
-.mochi-avatar-btn {
+.lexi-avatar-btn, .mochi-avatar-btn {
     background: transparent;
     border: none;
     padding: 0;
     border-radius: 20px;
     cursor: pointer;
-    transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.mochi-avatar-btn:hover {
-    transform: scale(1.15) rotate(-3deg);
+.lexi-avatar-btn:hover, .mochi-avatar-btn:hover {
+    transform: scale(1.15) rotate(-4deg);
 }
 
-.mochi-avatar-btn:active {
-    transform: scale(0.9) rotate(3deg);
+.lexi-avatar-btn:active, .mochi-avatar-btn:active {
+    transform: scale(0.9) rotate(4deg);
 }
 
-.mochi-avatar {
-    background: linear-gradient(135deg, #ff758c 0%, #ff7eb3 50%, #c77dff 100%);
+.lexi-avatar, .mochi-avatar {
+    background: linear-gradient(135deg, #7928ca 0%, #ff0080 50%, #4cc9f0 100%);
     color: white;
     font-size: 22px;
     border-radius: 20px;
     min-width: 44px;
     min-height: 44px;
     font-weight: 800;
-    animation-name: mochi-breathe;
-    animation-duration: 3s;
+    animation-name: lexi-cosmic-breathe;
+    animation-duration: 3.5s;
     animation-iteration-count: infinite;
     animation-timing-function: ease-in-out;
     transition: all 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.mochi-avatar-bounce {
-    animation-name: mochi-squish;
-    animation-duration: 450ms;
+.lexi-avatar-bounce, .mochi-avatar-bounce {
+    animation-name: lexi-star-spin;
+    animation-duration: 460ms;
     animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.mochi-title {
+.lexi-title, .mochi-title {
     font-size: 17px;
     font-weight: 700;
     color: @window_fg_color;
     transition: color 200ms ease;
 }
 
-.mochi-subtitle {
+.lexi-subtitle, .mochi-subtitle {
     font-size: 12px;
-    opacity: 0.65;
+    opacity: 0.68;
 }
 
-.mochi-status-pill {
-    background: alpha(#2ec27e, 0.15);
-    color: #2ec27e;
+.lexi-status-pill, .mochi-status-pill {
+    background: alpha(#4cc9f0, 0.15);
+    color: #4cc9f0;
     border-radius: 9999px;
-    padding: 3px 10px;
+    padding: 3px 12px;
     font-size: 11px;
     font-weight: 600;
-    border: 1px solid alpha(#2ec27e, 0.25);
+    border: 1px solid alpha(#4cc9f0, 0.3);
     transition: all 220ms ease;
 }
 
@@ -115,46 +145,116 @@ windowhandle {
     border-radius: 12px;
     border: 1px solid alpha(@window_fg_color, 0.15);
 }
+
+/* Suggestion / Quick Action Pills */
+.lexi-pill-btn, .mochi-pill-btn {
+    border-radius: 9999px;
+    font-size: 12px;
+    padding: 6px 14px;
+    background: alpha(@window_fg_color, 0.06);
+    border: 1px solid alpha(@window_fg_color, 0.12);
+    color: @window_fg_color;
+    transition: all 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    font-weight: 600;
+}
+
+.lexi-pill-btn:hover, .mochi-pill-btn:hover {
+    background: alpha(#7928ca, 0.22);
+    border-color: #a855f7;
+    color: #c77dff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px alpha(#7928ca, 0.3);
+}
+
+/* Input Area */
+.lexi-entry-box, .mochi-entry-box {
+    background: alpha(@window_fg_color, 0.05);
+    border-radius: 16px;
+    border: 1.5px solid alpha(@window_fg_color, 0.12);
+    padding: 4px 6px;
+    transition: border-color 220ms ease, box-shadow 220ms ease;
+}
+
+.lexi-entry-box:focus-within, .mochi-entry-box:focus-within {
+    border-color: #ff0080;
+    box-shadow: 0 0 0 3px alpha(#ff0080, 0.25);
+}
+
+.lexi-entry, .mochi-entry {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    font-size: 14px;
+    padding: 8px 10px;
+    color: @window_fg_color;
+}
+
+.lexi-entry:focus, .mochi-entry:focus {
+    box-shadow: none;
+    border: none;
+}
+
+.lexi-send-btn, .mochi-send-btn {
+    background: linear-gradient(135deg, #7928ca 0%, #ff0080 100%);
+    color: white;
+    border-radius: 12px;
+    min-width: 38px;
+    min-height: 38px;
+    border: none;
+    font-weight: 700;
+    transition: transform 150ms ease, filter 150ms ease;
+}
+
+.lexi-send-btn:hover, .mochi-send-btn:hover {
+    filter: brightness(1.15);
+    transform: scale(1.06);
+}
+
+.lexi-send-btn:active, .mochi-send-btn:active {
+    transform: scale(0.92);
+}
+
 /* Response Area */
-.mochi-response-box {
+.lexi-response-box, .mochi-response-box {
     background: alpha(@window_fg_color, 0.03);
     border-radius: 16px;
     border: 1px solid alpha(@window_fg_color, 0.08);
     padding: 14px 16px;
 }
 
-.mochi-answer-text {
+.lexi-answer-text, .mochi-answer-text {
     font-size: 13.5px;
-    line-height: 1.55;
+    line-height: 1.6;
     background: transparent;
 }
 
-.mochi-thinking {
+.lexi-thinking, .mochi-thinking {
     font-size: 13px;
     font-weight: 600;
-    color: #ff758c;
+    color: #ff0080;
     animation-name: pill-pulse;
     animation-duration: 1.8s;
     animation-iteration-count: infinite;
 }
 
-.mochi-action-btn {
+.lexi-action-btn, .mochi-action-btn {
     border-radius: 10px;
     font-size: 12px;
     padding: 4px 10px;
     transition: all 180ms ease;
 }
 
-.mochi-action-btn:hover {
-    background: alpha(#ff758c, 0.2);
-    color: #ff758c;
+.lexi-action-btn:hover, .mochi-action-btn:hover {
+    background: alpha(#ff0080, 0.2);
+    color: #ff0080;
+    transform: translateY(-1px);
 }
 
 /* Header Action Buttons (Snip, Full, Clear) */
-.mochi-header-btn {
+.lexi-header-btn, .mochi-header-btn {
     border-radius: 9999px;
     font-size: 11px;
-    padding: 3px 10px;
+    padding: 4px 12px;
     background: alpha(@window_fg_color, 0.07);
     border: 1px solid alpha(@window_fg_color, 0.12);
     color: @window_fg_color;
@@ -162,15 +262,15 @@ windowhandle {
     transition: all 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.mochi-header-btn:hover {
-    background: alpha(#ff758c, 0.2);
-    border-color: #ff758c;
-    color: #ff758c;
+.lexi-header-btn:hover, .mochi-header-btn:hover {
+    background: alpha(#7928ca, 0.22);
+    border-color: #a855f7;
+    color: #c77dff;
     transform: translateY(-1px);
 }
 
 /* Window Control Buttons (Minimize, Close) */
-.mochi-win-btn {
+.lexi-win-btn, .mochi-win-btn {
     border-radius: 9999px;
     min-width: 28px;
     min-height: 28px;
@@ -179,66 +279,66 @@ windowhandle {
     transition: all 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.mochi-win-btn:hover {
+.lexi-win-btn:hover, .mochi-win-btn:hover {
     opacity: 1.0;
     background: alpha(@window_fg_color, 0.12);
     transform: scale(1.15);
 }
 
-.mochi-win-btn:active {
+.lexi-win-btn:active, .mochi-win-btn:active {
     transform: scale(0.9);
 }
 
-textview.mochi-answer-text {
+textview.lexi-answer-text, textview.mochi-answer-text {
     background: transparent;
 }
 
-textview.mochi-answer-text text {
+textview.lexi-answer-text text, textview.mochi-answer-text text {
     background: transparent;
 }
 
 /* Multi-Page Tray (Up to 5 pages) */
-.mochi-pages-tray {
+.lexi-pages-tray, .mochi-pages-tray {
     background: alpha(@window_fg_color, 0.04);
     border-radius: 14px;
-    padding: 6px 10px;
+    padding: 6px 12px;
     border: 1px solid alpha(@window_fg_color, 0.08);
 }
 
-.mochi-tray-label {
+.lexi-tray-label, .mochi-tray-label {
     font-size: 11px;
     font-weight: 700;
-    opacity: 0.65;
+    opacity: 0.7;
     margin-right: 4px;
 }
 
-.mochi-page-card {
+.lexi-page-card, .mochi-page-card {
     background: alpha(@window_fg_color, 0.07);
     border-radius: 10px;
-    padding: 3px 6px;
+    padding: 4px 8px;
     border: 1.5px solid alpha(@window_fg_color, 0.12);
     transition: all 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.mochi-page-card:hover {
-    border-color: #ff758c;
-    background: alpha(#ff758c, 0.12);
+.lexi-page-card:hover, .mochi-page-card:hover {
+    border-color: #ff0080;
+    background: alpha(#ff0080, 0.12);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px alpha(#ff758c, 0.25);
+    box-shadow: 0 4px 12px alpha(#ff0080, 0.25);
 }
 
-.mochi-page-img {
+.lexi-page-img, .mochi-page-img {
     border-radius: 6px;
     border: 1px solid alpha(@window_fg_color, 0.1);
 }
 
-.mochi-page-title {
+.lexi-page-title, .mochi-page-title {
     font-size: 11px;
     font-weight: 600;
     color: @window_fg_color;
 }
 
-.mochi-page-del-btn {
+.lexi-page-del-btn, .mochi-page-del-btn {
     min-width: 20px;
     min-height: 20px;
     padding: 0;
@@ -249,16 +349,16 @@ textview.mochi-answer-text text {
     transition: all 150ms ease;
 }
 
-.mochi-page-del-btn:hover {
+.lexi-page-del-btn:hover, .mochi-page-del-btn:hover {
     opacity: 1.0;
-    color: #ff758c;
+    color: #ff0080;
     transform: scale(1.2);
 }
 
-.mochi-tray-btn {
+.lexi-tray-btn, .mochi-tray-btn {
     border-radius: 9999px;
     font-size: 11px;
-    padding: 3px 10px;
+    padding: 4px 12px;
     background: alpha(@window_fg_color, 0.06);
     border: 1px solid alpha(@window_fg_color, 0.12);
     color: @window_fg_color;
@@ -266,26 +366,25 @@ textview.mochi-answer-text text {
     transition: all 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.mochi-tray-btn:hover {
-    background: alpha(#c77dff, 0.2);
-    border-color: #c77dff;
+.lexi-tray-btn:hover, .mochi-tray-btn:hover {
+    background: alpha(#7928ca, 0.22);
+    border-color: #a855f7;
     color: #c77dff;
     transform: translateY(-1px);
 }
 
-.mochi-tray-btn:active {
+.lexi-tray-btn:active, .mochi-tray-btn:active {
     transform: translateY(1px);
 }
 
-.mochi-tray-btn-accent {
-    background: alpha(#ff758c, 0.12);
-    border-color: alpha(#ff758c, 0.25);
-    color: #ff758c;
+.lexi-tray-btn-accent, .mochi-tray-btn-accent {
+    background: alpha(#ff0080, 0.14);
+    border-color: alpha(#ff0080, 0.3);
+    color: #ff0080;
 }
 
-.mochi-tray-btn-accent:hover {
-    background: alpha(#ff758c, 0.25);
-    border-color: #ff758c;
-    box-shadow: 0 2px 8px alpha(#ff758c, 0.25);
+.lexi-tray-btn-accent:hover, .mochi-tray-btn-accent:hover {
+    background: alpha(#ff0080, 0.28);
+    border-color: #ff0080;
+    box-shadow: 0 2px 10px alpha(#ff0080, 0.35);
 }
-
