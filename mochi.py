@@ -261,7 +261,7 @@ class LexiMascotWidget(Gtk.DrawingArea):
     with expressive anime eyes, perky ears, working hands/paws, sitting feet with
     pink toe beans, swaying fluffy tail, dynamic mouse gaze tracking, and active working animations.
     """
-    def __init__(self, width=115, height=130):
+    def __init__(self, width=130, height=145):
         super().__init__()
         self.mascot_w = width
         self.mascot_h = height
@@ -277,7 +277,7 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.target_look_y = 0.0
 
         # Animation states
-        self.mood = "normal"  # "normal", "working", "happy", "thinking"
+        self.mood = "normal"  # "normal", "hungry", "eating", "happy", "working", "thinking"
         self.is_blinking = False
         self.squish_x = 1.0
         self.squish_y = 1.0
@@ -286,6 +286,8 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.think_angle = 0.0
         self.paw_anim = 0.0
         self.tail_phase = 0.0
+        self.eat_phase = 0.0
+        self.eat_progress = 0.0
 
         # Direct click gesture to pet Lexi
         click = Gtk.GestureClick()
@@ -315,8 +317,8 @@ class LexiMascotWidget(Gtk.DrawingArea):
     def on_anim_frame(self):
         diff_x = self.target_look_x - self.look_x
         diff_y = self.target_look_y - self.look_y
-        self.look_x += diff_x * 0.24
-        self.look_y += diff_y * 0.24
+        self.look_x += diff_x * 0.22
+        self.look_y += diff_y * 0.22
 
         self.squish_x += (1.0 - self.squish_x) * 0.16
         self.squish_y += (1.0 - self.squish_y) * 0.16
@@ -324,14 +326,17 @@ class LexiMascotWidget(Gtk.DrawingArea):
 
         self.tail_phase = (self.tail_phase + 0.08) % (2 * math.pi)
 
-        if self.mood in ("working", "thinking"):
+        if self.mood == "eating":
+            self.eat_phase += 0.20
+            self.eat_progress = min(1.0, self.eat_progress + 0.016)
+            self.queue_draw()
+        elif self.mood in ("working", "thinking"):
             self.paw_anim = (self.paw_anim + 0.16) % 1.0
             self.think_angle = (self.think_angle + 0.12) % (2 * math.pi)
-
-        needs_redraw = (abs(diff_x) > 0.005 or abs(diff_y) > 0.005 or
-                        abs(self.squish_x - 1.0) > 0.005 or abs(self.ear_wiggle) > 0.005 or
-                        self.mood in ("working", "thinking"))
-        if needs_redraw:
+            self.queue_draw()
+        elif (abs(diff_x) > 0.005 or abs(diff_y) > 0.005 or
+              abs(self.squish_x - 1.0) > 0.005 or abs(self.ear_wiggle) > 0.005 or
+              self.is_blinking or self.mood == "hungry"):
             self.queue_draw()
         return GLib.SOURCE_CONTINUE
 
@@ -343,12 +348,35 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.queue_draw()
         GLib.timeout_add(2200, self.reset_mood)
 
+    def feed_file(self, filename, on_finished=None):
+        self.mood = "eating"
+        self.eat_phase = 0.0
+        self.eat_progress = 0.0
+        self.target_ear_wiggle = 0.12
+        self.queue_draw()
+
+        def done_chewing():
+            self.mood = "happy"
+            self.squish_x = 1.14
+            self.squish_y = 0.88
+            self.queue_draw()
+            if on_finished:
+                on_finished()
+            GLib.timeout_add(2400, self.reset_mood)
+            return GLib.SOURCE_REMOVE
+
+        GLib.timeout_add(1800, done_chewing)
+
     def set_mood(self, mood):
         self.mood = mood
         if mood == "happy":
             self.squish_x = 1.14
             self.squish_y = 0.88
             self.target_ear_wiggle = 0.14
+        elif mood == "hungry":
+            self.squish_x = 0.96
+            self.squish_y = 1.05
+            self.target_ear_wiggle = 0.10
         else:
             self.target_ear_wiggle = 0.0
         self.queue_draw()
@@ -574,7 +602,59 @@ class LexiMascotWidget(Gtk.DrawingArea):
         cr.save()
         cr.set_line_cap(cairo.LINE_CAP_ROUND)
         cr.set_line_join(cairo.LINE_JOIN_ROUND)
-        if self.mood == "happy":
+        if self.mood == "hungry":
+            # Excited wide round open "O" anticipating food
+            cr.save()
+            cr.translate(0, 5.0 * s)
+            cr.scale(1.0, 1.2)
+            cr.arc(0, 0, 3.6 * s, 0, 2 * math.pi)
+            cr.set_source_rgb(0.22, 0.08, 0.20)
+            cr.fill_preserve()
+            cr.set_line_width(1.1 * s)
+            cr.set_source_rgb(0.16, 0.05, 0.16)
+            cr.stroke()
+
+            # Cute pink tongue
+            cr.save()
+            cr.arc(0, 0, 3.6 * s, 0, 2 * math.pi)
+            cr.clip()
+            cr.arc(0, 2.2 * s, 2.6 * s, 0, 2 * math.pi)
+            cr.set_source_rgb(1.0, 0.48, 0.65)
+            cr.fill()
+            cr.restore()
+            cr.restore()
+
+        elif self.mood == "eating":
+            # Chewing cycle
+            chew_open = (math.sin(self.eat_phase * 12.0) > 0.0)
+            if chew_open:
+                cr.save()
+                cr.translate(0, 4.6 * s)
+                cr.scale(1.1, 0.8)
+                cr.arc(0, 0, 3.2 * s, 0, 2 * math.pi)
+                cr.set_source_rgb(0.22, 0.08, 0.20)
+                cr.fill_preserve()
+                cr.set_line_width(1.0 * s)
+                cr.set_source_rgb(0.16, 0.05, 0.16)
+                cr.stroke()
+
+                cr.save()
+                cr.arc(0, 0, 3.2 * s, 0, 2 * math.pi)
+                cr.clip()
+                cr.arc(0, 1.8 * s, 2.2 * s, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 0.48, 0.65)
+                cr.fill()
+                cr.restore()
+                cr.restore()
+            else:
+                cr.set_line_width(1.5 * s)
+                cr.set_source_rgba(0.22, 0.16, 0.32, 0.95)
+                cr.move_to(-4.0 * s, 4.0 * s)
+                cr.curve_to(-2.0 * s, 6.2 * s, 0, 4.2 * s, 0, 4.2 * s)
+                cr.curve_to(0, 4.2 * s, 2.0 * s, 6.2 * s, 4.0 * s, 4.0 * s)
+                cr.stroke()
+
+        elif self.mood == "happy":
             cr.move_to(-4.0 * s, 3.2 * s)
             cr.curve_to(-4.0 * s, 9.0 * s, 4.0 * s, 9.0 * s, 4.0 * s, 3.2 * s)
             cr.close_path()
@@ -614,7 +694,7 @@ class LexiMascotWidget(Gtk.DrawingArea):
             cr.set_line_width(1.3 * s)
             cr.set_line_cap(cairo.LINE_CAP_ROUND)
             cr.set_source_rgba(0.28, 0.22, 0.42, 0.78)
-            brow_lift = -1.4 * s if self.mood == "happy" else 0
+            brow_lift = -1.6 * s if self.mood in ("happy", "hungry") else 0
             brow_tilt = sign * 0.5 * s if self.mood in ("working", "thinking") else 0
             cr.move_to(ex - 3.8 * s, ey - 7.5 * s + brow_lift - brow_tilt)
             cr.curve_to(ex - 1.2 * s, ey - 9.0 * s + brow_lift, ex + 1.2 * s, ey - 9.0 * s + brow_lift, ex + 3.8 * s, ey - 7.5 * s + brow_lift + brow_tilt)
@@ -634,7 +714,7 @@ class LexiMascotWidget(Gtk.DrawingArea):
                 cr.stroke()
                 cr.restore()
 
-            elif self.mood == "happy":
+            elif self.mood in ("happy", "eating"):
                 cr.save()
                 cr.set_line_width(2.4 * s)
                 cr.set_line_cap(cairo.LINE_CAP_ROUND)
@@ -646,6 +726,48 @@ class LexiMascotWidget(Gtk.DrawingArea):
                 cr.move_to(ex + sign * 4.2 * s, ey + 1.2 * s)
                 cr.line_to(ex + sign * 6.0 * s, ey - 0.8 * s)
                 cr.stroke()
+                cr.restore()
+
+            elif self.mood == "hungry":
+                # Large sparkling eyes looking up in anticipation
+                cr.save()
+                cr.translate(ex, ey)
+                cr.scale(4.5 * s, 6.2 * s)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill_preserve()
+                cr.set_line_width(0.3)
+                cr.set_source_rgba(0.7, 0.75, 0.85, 0.4)
+                cr.stroke()
+                cr.restore()
+
+                cr.save()
+                cr.save()
+                cr.translate(ex, ey)
+                cr.scale(4.5 * s, 6.2 * s)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.restore()
+                cr.clip()
+
+                px = ex
+                py = ey - 1.5 * s
+                cr.save()
+                cr.translate(px, py)
+                cr.scale(3.8 * s, 5.0 * s)
+                pat_iris = cairo.LinearGradient(0, -1, 0, 1)
+                pat_iris.add_color_stop_rgb(0.0, 0.12, 0.05, 0.28)
+                pat_iris.add_color_stop_rgb(0.5, 0.55, 0.18, 0.72)
+                pat_iris.add_color_stop_rgb(1.0, 0.95, 0.35, 0.75)
+                cr.set_source(pat_iris)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.fill()
+                cr.restore()
+
+                cr.arc(px - 1.2 * s, py - 1.8 * s, 1.8 * s, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill()
+                cr.arc(px + 1.4 * s, py + 1.2 * s, 1.0 * s, 0, 2 * math.pi)
+                cr.fill()
                 cr.restore()
 
             elif self.mood in ("working", "thinking"):
@@ -772,9 +894,97 @@ class LexiMascotWidget(Gtk.DrawingArea):
 
         cr.restore() # End Head save
 
-        # 11. Cute Working Hands & Paws
-        paw_phase = math.sin(self.paw_anim * 2 * math.pi) if self.mood in ("working", "thinking") else 0.0
-        if self.mood in ("working", "thinking"):
+        # 11. Hands & Paws + Food Item
+        if self.mood == "eating":
+            cr.save()
+            snack_w = 13.0 * s * (1.0 - self.eat_progress * 0.65)
+            snack_h = 16.0 * s * (1.0 - self.eat_progress * 0.65)
+            snack_y = 7.0 * s + math.sin(self.eat_phase * 12.0) * 1.5 * s
+
+            cr.save()
+            cr.translate(0, snack_y)
+            cr.rotate(-0.08)
+
+            # File document wafer
+            cr.save()
+            cr.rectangle(-snack_w / 2.0, -snack_h / 2.0, snack_w, snack_h)
+            pat_snack = cairo.LinearGradient(0, -snack_h / 2.0, 0, snack_h / 2.0)
+            pat_snack.add_color_stop_rgb(0, 0.92, 0.85, 1.0)
+            pat_snack.add_color_stop_rgb(1, 0.65, 0.45, 0.95)
+            cr.set_source(pat_snack)
+            cr.fill_preserve()
+            cr.set_line_width(1.0 * s)
+            cr.set_source_rgb(0.98, 0.85, 0.40)
+            cr.stroke()
+
+            # Document lines on wafer
+            cr.set_line_width(1.0 * s)
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.7)
+            for line_y in [-3 * s, 0, 3 * s]:
+                if line_y < snack_h / 2.0 - 2 * s:
+                    cr.move_to(-snack_w * 0.32, line_y)
+                    cr.line_to(snack_w * 0.32, line_y)
+                    cr.stroke()
+            cr.restore()
+            cr.restore()
+
+            # Both paws grasping the snack
+            for sign in [-1, 1]:
+                cr.save()
+                cr.translate(sign * 6.2 * s, snack_y + 3.0 * s)
+                cr.scale(1.0, 0.92)
+                cr.arc(0, 0, 4.4 * s, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill_preserve()
+                cr.set_line_width(0.9 * s)
+                cr.set_source_rgba(0.65, 0.70, 0.85, 0.5)
+                cr.stroke()
+
+                # Pink paw pad
+                cr.arc(0, 0.4 * s, 2.0 * s, 0, 2 * math.pi)
+                cr.set_source_rgba(1.0, 0.55, 0.72, 0.85)
+                cr.fill()
+                cr.restore()
+
+            # Floating crunchy crumbs / sparkles!
+            crumb_seed = [
+                (-9.0 * s, 4.0 * s, 1.2 * s),
+                (8.5 * s, 3.5 * s, 1.0 * s),
+                (-7.0 * s, 12.0 * s, 0.8 * s),
+                (9.5 * s, 11.0 * s, 1.4 * s),
+                (0.0 * s, -1.0 * s, 1.1 * s)
+            ]
+            for cx_i, cy_i, cr_i in crumb_seed:
+                cr.save()
+                cr.translate(cx_i + math.sin(self.eat_phase * 8.0 + cx_i) * 1.5 * s, 
+                             cy_i + math.cos(self.eat_phase * 8.0 + cy_i) * 1.5 * s)
+                cr.set_source_rgba(1.0, 0.88, 0.40, 0.90)
+                cr.arc(0, 0, cr_i, 0, 2 * math.pi)
+                cr.fill()
+                cr.restore()
+
+            cr.restore()
+
+        elif self.mood == "hungry":
+            # Paws reaching cutely forward in anticipation
+            for sign in [-1, 1]:
+                cr.save()
+                cr.translate(sign * 8.5 * s, 14.0 * s)
+                cr.scale(1.0, 0.9)
+                cr.arc(0, 0, 4.4 * s, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill_preserve()
+                cr.set_line_width(0.9 * s)
+                cr.set_source_rgba(0.65, 0.70, 0.85, 0.5)
+                cr.stroke()
+
+                cr.arc(0, 0.5 * s, 2.0 * s, 0, 2 * math.pi)
+                cr.set_source_rgba(1.0, 0.55, 0.72, 0.85)
+                cr.fill()
+                cr.restore()
+
+        elif self.mood in ("working", "thinking"):
+            paw_phase = math.sin(self.paw_anim * 2 * math.pi)
             cr.save()
             # Left paw holding/typing
             cr.translate(-7 * s + paw_phase * 2 * s, 18 * s - paw_phase * 3 * s)
@@ -882,7 +1092,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.last_answer = ""
         self.turn_start_mark = None
 
-        self.set_default_size(920, 360)
+        self.set_default_size(940, 385)
         self.set_resizable(True)
         self.set_decorated(False)
         self.add_css_class('lexi-window')
@@ -1032,7 +1242,7 @@ class LexiWindow(Adw.ApplicationWindow):
     def position_at_top(self):
         display = Gdk.Display.get_default()
         monitors = display.get_monitors() if display else None
-        target_w = self.get_width() or 920
+        target_w = self.get_width() or 940
 
         screen_x = 0
         screen_y = 0
@@ -1073,24 +1283,33 @@ class LexiWindow(Adw.ApplicationWindow):
         self.card.set_hexpand(True)
         self.revealer.set_child(self.card)
 
+        # Setup Drag and Drop File Feeding (Coucou-style eat files!)
+        drop_target = Gtk.DropTarget(actions=Gdk.DragAction.COPY)
+        drop_target.set_gtypes([Gdk.FileList, str])
+        drop_target.connect('enter', self.on_drag_enter)
+        drop_target.connect('motion', self.on_drag_motion)
+        drop_target.connect('leave', self.on_drag_leave)
+        drop_target.connect('drop', self.on_drag_drop)
+        self.card.add_controller(drop_target)
+
         # Click anywhere on card background focuses entry
         click_gesture = Gtk.GestureClick()
         click_gesture.connect('pressed', lambda *_: self.entry.grab_focus())
         self.card.add_controller(click_gesture)
 
         # --- Left Companion Stage (Full-body Animated Lexi & Emotion Badge) ---
-        self.stage_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.stage_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.stage_box.set_valign(Gtk.Align.CENTER)
-        self.stage_box.set_size_request(115, -1)
+        self.stage_box.set_size_request(130, -1)
         self.stage_box.add_css_class('lexi-companion-stage')
         self.card.append(self.stage_box)
 
         self.avatar_btn = Gtk.Button()
         self.avatar_btn.set_focusable(False)
         self.avatar_btn.add_css_class('lexi-mascot-btn')
-        self.avatar_btn.set_tooltip_text("Click to pet Lexi! ✨ (eyes follow your mouse)")
+        self.avatar_btn.set_tooltip_text("Click to pet Lexi! ✨ (or drag & drop files here to feed her)")
 
-        self.mascot = LexiMascotWidget(width=115, height=130)
+        self.mascot = LexiMascotWidget(width=130, height=145)
         self.avatar_btn.set_child(self.mascot)
         self.avatar_btn.connect('clicked', self.on_pet_lexi)
         self.stage_box.append(self.avatar_btn)
@@ -1099,13 +1318,13 @@ class LexiWindow(Adw.ApplicationWindow):
         self.status_pill.add_css_class('lexi-status-pill')
         self.stage_box.append(self.status_pill)
 
-        # --- Right Content Column (Wide Coucou-style Island) ---
+        # --- Right Content Column (Wide macOS-style Island) ---
         self.content_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.content_col.set_hexpand(True)
         self.card.append(self.content_col)
 
-        # Header with draggable title and window controls
-        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        # Header with draggable title and macOS window controls
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         self.content_col.append(header)
 
         self.handle = Gtk.WindowHandle()
@@ -1121,30 +1340,35 @@ class LexiWindow(Adw.ApplicationWindow):
         header.append(self.handle)
 
         ctrls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        ctrls_box.add_css_class('mac-traffic-lights')
         header.append(ctrls_box)
 
         self.clear_btn = Gtk.Button(label="🧹 Clear")
         self.clear_btn.set_focusable(False)
-        self.clear_btn.set_tooltip_text("Clear chat conversation history")
+        self.clear_btn.set_tooltip_text("Clear chat history (Ctrl+L)")
         self.clear_btn.add_css_class('lexi-header-btn')
         self.clear_btn.connect('clicked', self.on_clear_chat)
         ctrls_box.append(self.clear_btn)
 
-        self.minimize_btn = Gtk.Button.new_from_icon_name('window-minimize-symbolic')
-        self.minimize_btn.set_focusable(False)
-        self.minimize_btn.set_tooltip_text("Minimize window (Ctrl+M)")
-        self.minimize_btn.add_css_class('flat')
-        self.minimize_btn.add_css_class('lexi-win-btn')
-        self.minimize_btn.connect('clicked', lambda _: self.animate_and_minimize())
-        ctrls_box.append(self.minimize_btn)
+        self.min_dot = Gtk.Button()
+        self.min_dot.set_focusable(False)
+        self.min_dot.set_valign(Gtk.Align.CENTER)
+        self.min_dot.set_size_request(13, 13)
+        self.min_dot.set_tooltip_text("Minimize (Ctrl+M)")
+        self.min_dot.add_css_class('mac-dot')
+        self.min_dot.add_css_class('mac-dot-min')
+        self.min_dot.connect('clicked', lambda _: self.animate_and_minimize())
+        ctrls_box.append(self.min_dot)
 
-        self.close_btn = Gtk.Button.new_from_icon_name('window-close-symbolic')
-        self.close_btn.set_focusable(False)
-        self.close_btn.set_tooltip_text("Close Lexi (Esc)")
-        self.close_btn.add_css_class('flat')
-        self.close_btn.add_css_class('lexi-win-btn')
-        self.close_btn.connect('clicked', lambda _: self.animate_and_close())
-        ctrls_box.append(self.close_btn)
+        self.close_dot = Gtk.Button()
+        self.close_dot.set_focusable(False)
+        self.close_dot.set_valign(Gtk.Align.CENTER)
+        self.close_dot.set_size_request(13, 13)
+        self.close_dot.set_tooltip_text("Close (Esc)")
+        self.close_dot.add_css_class('mac-dot')
+        self.close_dot.add_css_class('mac-dot-close')
+        self.close_dot.connect('clicked', lambda _: self.animate_and_close())
+        ctrls_box.append(self.close_dot)
 
         # Unified Wide Action Strip (Pages Tray + Quick Chips)
         action_strip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -1183,6 +1407,13 @@ class LexiWindow(Adw.ApplicationWindow):
         self.add_full_btn.connect('clicked', self.on_add_full)
         self.pages_tray.append(self.add_full_btn)
 
+        self.add_feed_btn = Gtk.Button(label="📁 + Feed File")
+        self.add_feed_btn.set_focusable(False)
+        self.add_feed_btn.set_tooltip_text("Feed an image, code file, or PDF to Lexi (Ctrl+O)")
+        self.add_feed_btn.add_css_class('lexi-tray-btn')
+        self.add_feed_btn.connect('clicked', self.on_feed_file_clicked)
+        self.pages_tray.append(self.add_feed_btn)
+
         self.recapture_btn = Gtk.Button(label="🔄 New")
         self.recapture_btn.set_focusable(False)
         self.recapture_btn.set_tooltip_text("Clear all pages and capture fresh screen")
@@ -1203,9 +1434,10 @@ class LexiWindow(Adw.ApplicationWindow):
         action_strip.append(chips_scroll)
 
         quick_prompts = [
-            ("✨ Explain", "Explain what is on the attached page(s) clearly and concisely."),
+            ("✨ Explain", "Explain what is on the attached page(s) and fed files clearly and concisely."),
             ("🔄 Compare", "Compare the information across all attached pages, highlighting differences or relationships."),
-            ("🐛 Fix / Debug", "Identify any errors, bugs, or problems across these pages and provide the fix."),
+            ("🐛 Fix / Debug", "Identify any errors, bugs, or problems across these pages and code files and provide the fix."),
+            ("⚡ Summarize", "Provide a high-signal executive summary of the attached content."),
             ("📝 Read Text", "Extract all key text, commands, or code from the attached pages."),
         ]
 
@@ -1216,13 +1448,13 @@ class LexiWindow(Adw.ApplicationWindow):
             btn.connect('clicked', lambda _, p=prompt_text: self.on_quick_prompt(p))
             chips_box.append(btn)
 
-        # Input Bar
+        # Input Bar (Spotlight / Raycast macOS style)
         input_container = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         input_container.add_css_class('lexi-entry-box')
         self.content_col.append(input_container)
 
         self.entry = Gtk.Entry()
-        self.entry.set_placeholder_text("Ask anything about what's on your screen... (press Enter)")
+        self.entry.set_placeholder_text("Ask anything about your screen or fed files... (press Return ⏎)")
         self.entry.set_hexpand(True)
         self.entry.set_focusable(True)
         self.entry.add_css_class('lexi-entry')
@@ -1301,7 +1533,14 @@ class LexiWindow(Adw.ApplicationWindow):
             img.add_css_class('lexi-page-img')
             card.append(img)
 
-            title_txt = f"Page {idx} (snip)" if page.get("is_snip") else f"Page {idx}"
+            if page.get("is_file"):
+                raw_name = page.get("name", f"File {idx}")
+                title_txt = raw_name if len(raw_name) <= 12 else raw_name[:5] + ".." + raw_name[-5:]
+            elif page.get("is_snip"):
+                title_txt = f"Page {idx} (snip)"
+            else:
+                title_txt = f"Page {idx}"
+
             lbl = Gtk.Label(label=title_txt)
             lbl.add_css_class('lexi-page-title')
             card.append(lbl)
@@ -1310,7 +1549,7 @@ class LexiWindow(Adw.ApplicationWindow):
             del_btn.set_focusable(False)
             del_btn.add_css_class('flat')
             del_btn.add_css_class('lexi-page-del-btn')
-            del_btn.set_tooltip_text(f"Remove Page {idx}")
+            del_btn.set_tooltip_text(f"Remove {page.get('name', f'Page {idx}')}")
             del_btn.connect('clicked', lambda _, p_idx=idx-1: self.remove_page(p_idx))
             card.append(del_btn)
 
@@ -1320,13 +1559,19 @@ class LexiWindow(Adw.ApplicationWindow):
         can_add = count < self.max_pages
         self.add_snip_btn.set_sensitive(can_add)
         self.add_full_btn.set_sensitive(can_add)
+        if hasattr(self, 'add_feed_btn'):
+            self.add_feed_btn.set_sensitive(can_add)
 
         if can_add:
             self.add_snip_btn.set_label(f"✂️ + Snip ({count}/5)")
             self.add_full_btn.set_label("🖥️ + Screen")
+            if hasattr(self, 'add_feed_btn'):
+                self.add_feed_btn.set_label("📁 + Feed File")
         else:
             self.add_snip_btn.set_label("✂️ Max (5/5)")
             self.add_full_btn.set_label("🖥️ Max (5/5)")
+            if hasattr(self, 'add_feed_btn'):
+                self.add_feed_btn.set_label("📁 Full")
 
         if count == 0:
             self.status_pill.set_text("⚠️ No pages")
@@ -1344,9 +1589,244 @@ class LexiWindow(Adw.ApplicationWindow):
             self.update_pages_tray_ui()
             count = len(self.captured_pages)
             if count == 0:
-                self.text_buffer.set_text("⚠️ No pages attached. Click '✂️ + Snip' or '🖥️ + Screen' above to add a page.")
+                self.text_buffer.set_text("⚠️ No pages attached. Click '✂️ + Snip', '🖥️ + Screen', or '📁 + Feed File' above to attach.")
             else:
                 self.text_buffer.set_text(f"📄 Page removed. {count} page(s) currently attached.")
+
+    def make_doc_icon_texture(self, filename, badge_text="FILE"):
+        w, h = 48, 48
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, w, h)
+        cr = cairo.Context(surface)
+        cr.save()
+        cr.translate(w / 2.0, h / 2.0)
+        doc_w, doc_h = 32, 38
+        cr.rectangle(-doc_w / 2.0, -doc_h / 2.0, doc_w, doc_h)
+
+        b_upper = badge_text.upper()
+        pat = cairo.LinearGradient(0, -doc_h / 2.0, 0, doc_h / 2.0)
+        if b_upper in ("PY", "JS", "TS", "RS", "C", "CPP", "GO", "SH"):
+            pat.add_color_stop_rgb(0, 0.58, 0.38, 0.98)
+            pat.add_color_stop_rgb(1, 0.36, 0.20, 0.78)
+        elif b_upper == "PDF":
+            pat.add_color_stop_rgb(0, 0.95, 0.35, 0.45)
+            pat.add_color_stop_rgb(1, 0.75, 0.15, 0.25)
+        else:
+            pat.add_color_stop_rgb(0, 0.35, 0.65, 0.95)
+            pat.add_color_stop_rgb(1, 0.18, 0.42, 0.82)
+
+        cr.set_source(pat)
+        cr.fill_preserve()
+        cr.set_line_width(1.0)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.35)
+        cr.stroke()
+
+        # Dog-ear fold top-right
+        cr.move_to(doc_w / 2.0 - 9, -doc_h / 2.0)
+        cr.line_to(doc_w / 2.0, -doc_h / 2.0 + 9)
+        cr.line_to(doc_w / 2.0 - 9, -doc_h / 2.0 + 9)
+        cr.close_path()
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.45)
+        cr.fill()
+
+        # Badge text
+        cr.set_source_rgb(1.0, 1.0, 1.0)
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        cr.set_font_size(9)
+        ext = cr.text_extents(badge_text[:4])
+        cr.move_to(-ext.width / 2.0, 4)
+        cr.show_text(badge_text[:4])
+
+        # Code lines
+        cr.set_line_width(1.2)
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.65)
+        cr.move_to(-doc_w / 2.0 + 5, 11)
+        cr.line_to(doc_w / 2.0 - 5, 11)
+        cr.stroke()
+        cr.restore()
+        surface.flush()
+
+        gbytes = GLib.Bytes.new(surface.get_data().tobytes())
+        return Gdk.MemoryTexture.new(w, h, Gdk.MemoryFormat.B8G8R8A8_PREMULTIPLIED, gbytes, surface.get_stride())
+
+    def feed_file(self, filepath):
+        if not os.path.exists(filepath):
+            return
+
+        if len(self.captured_pages) >= self.max_pages:
+            self.status_pill.set_text("⚠️ Lexi is full! (5/5)")
+            return
+
+        filename = os.path.basename(filepath)
+        ext = os.path.splitext(filepath)[1].lower()
+
+        # Chewing nom-nom eating state!
+        self.status_pill.set_text(f"😋 Nom nom... Eating {filename}!")
+        self.stage_box.add_css_class('lexi-stage-eating')
+
+        def on_eaten():
+            self.stage_box.remove_css_class('lexi-stage-eating')
+            page_data = None
+            if ext in ('.png', '.jpg', '.jpeg', '.webp', '.svg', '.bmp', '.gif'):
+                try:
+                    texture = Gdk.Texture.new_from_filename(filepath)
+                    # Convert to base64 for LLM
+                    with open(filepath, 'rb') as f:
+                        b64 = base64.b64encode(f.read()).decode('utf-8')
+                    page_data = {
+                        "path": filepath,
+                        "b64": b64,
+                        "texture": texture,
+                        "is_snip": False,
+                        "is_file": True,
+                        "name": filename,
+                        "file_type": "image"
+                    }
+                except Exception as e:
+                    log(f"Failed to load image file {filepath}: {e}")
+
+            elif ext == '.pdf':
+                thumb_base = f"/tmp/lexi_pdf_{int(time.time() * 1000)}"
+                thumb_img = f"{thumb_base}-1.png"
+                texture = None
+                try:
+                    subprocess.run(
+                        ['pdftoppm', '-png', '-r', '90', '-f', '1', '-l', '1', filepath, thumb_base],
+                        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+                    if os.path.exists(thumb_img):
+                        texture = Gdk.Texture.new_from_filename(thumb_img)
+                except Exception:
+                    pass
+
+                if not texture:
+                    texture = self.make_doc_icon_texture(filename, "PDF")
+
+                text_content = ""
+                try:
+                    res = subprocess.run(['pdftotext', '-f', '1', '-l', '6', filepath, '-'],
+                                         capture_output=True, text=True)
+                    text_content = res.stdout[:35000]
+                except Exception:
+                    pass
+
+                b64 = ""
+                if os.path.exists(thumb_img):
+                    try:
+                        with open(thumb_img, 'rb') as f:
+                            b64 = base64.b64encode(f.read()).decode('utf-8')
+                    except Exception:
+                        pass
+
+                page_data = {
+                    "path": filepath,
+                    "b64": b64,
+                    "texture": texture,
+                    "is_snip": False,
+                    "is_file": True,
+                    "name": filename,
+                    "file_type": "pdf",
+                    "text_content": text_content
+                }
+
+            else:
+                # Text, code, config files
+                text_content = ""
+                try:
+                    with open(filepath, 'r', errors='ignore') as f:
+                        text_content = f.read(35000)
+                except Exception as e:
+                    log(f"Failed to read file {filepath}: {e}")
+
+                badge = ext[1:].upper() if ext else "TXT"
+                texture = self.make_doc_icon_texture(filename, badge[:4])
+                page_data = {
+                    "path": filepath,
+                    "b64": "",
+                    "texture": texture,
+                    "is_snip": False,
+                    "is_file": True,
+                    "name": filename,
+                    "file_type": "text",
+                    "text_content": text_content
+                }
+
+            if page_data:
+                self.captured_pages.append(page_data)
+                self.update_pages_tray_ui()
+                count = len(self.captured_pages)
+                self.status_pill.set_text(f"✨ Ate {filename}! ({count}/5)")
+                self.entry.set_placeholder_text(f"Ask anything about {filename}...")
+                self.entry.grab_focus()
+
+        self.mascot.feed_file(filename, on_finished=on_eaten)
+
+    def on_feed_file_clicked(self, _):
+        file_dialog = Gtk.FileDialog()
+        file_dialog.set_title("Feed a file to Lexi 🐟✨")
+
+        all_filter = Gtk.FileFilter()
+        all_filter.set_name("All Supported (Images, Code, Documents, PDFs)")
+        for pattern in ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.svg", "*.bmp", "*.pdf",
+                        "*.py", "*.js", "*.ts", "*.json", "*.md", "*.txt", "*.html",
+                        "*.css", "*.rs", "*.go", "*.c", "*.cpp", "*.sh", "*.yml", "*.yaml"]:
+            all_filter.add_pattern(pattern)
+
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(all_filter)
+        file_dialog.set_filters(filters)
+
+        def on_file_selected(dialog, result):
+            try:
+                gfile = dialog.open_finish(result)
+                if gfile:
+                    p = gfile.get_path()
+                    if p and os.path.exists(p):
+                        self.feed_file(p)
+            except Exception as e:
+                log(f"File dialog selection error: {e}")
+
+        file_dialog.open(self, None, on_file_selected)
+
+    def on_drag_enter(self, target, x, y):
+        self.mascot.set_mood("hungry")
+        self.stage_box.add_css_class('lexi-stage-hover')
+        self.status_pill.set_text("😋 Feed Lexi! Drop file here...")
+        return Gdk.DragAction.COPY
+
+    def on_drag_motion(self, target, x, y):
+        return Gdk.DragAction.COPY
+
+    def on_drag_leave(self, target):
+        self.stage_box.remove_css_class('lexi-stage-hover')
+        if self.mascot.mood == "hungry":
+            self.mascot.reset_mood()
+        count = len(self.captured_pages)
+        self.status_pill.set_text(f"● {count}/5 Pages" if count > 0 else "✨ Ready")
+
+    def on_drag_drop(self, target, value, x, y):
+        self.stage_box.remove_css_class('lexi-stage-hover')
+        paths = []
+        if hasattr(value, 'get_files'):
+            for gf in value.get_files():
+                p = gf.get_path()
+                if p and os.path.exists(p):
+                    paths.append(p)
+        elif isinstance(value, str):
+            for line in value.strip().splitlines():
+                line = line.strip()
+                if line.startswith('file://'):
+                    parsed = urllib.parse.urlparse(line)
+                    p = urllib.parse.unquote(parsed.path)
+                    if os.path.exists(p):
+                        paths.append(p)
+                elif os.path.exists(line):
+                    paths.append(line)
+
+        if paths:
+            for p in paths:
+                self.feed_file(p)
+            return True
+        return False
 
     def capture_screen_and_reveal(self, interactive=False, append_mode=False):
         portal = Xdp.Portal()
@@ -1480,9 +1960,16 @@ class LexiWindow(Adw.ApplicationWindow):
         if keyval == Gdk.KEY_Escape:
             self.animate_and_close()
             return True
-        if (state & Gdk.ModifierType.CONTROL_MASK) and (keyval in (Gdk.KEY_m, Gdk.KEY_M)):
-            self.animate_and_minimize()
-            return True
+        if state & Gdk.ModifierType.CONTROL_MASK:
+            if keyval in (Gdk.KEY_m, Gdk.KEY_M):
+                self.animate_and_minimize()
+                return True
+            elif keyval in (Gdk.KEY_o, Gdk.KEY_O):
+                self.on_feed_file_clicked(None)
+                return True
+            elif keyval in (Gdk.KEY_l, Gdk.KEY_L):
+                self.on_clear_chat(None)
+                return True
         return False
 
     def on_quick_prompt(self, prompt_text):
@@ -1567,24 +2054,36 @@ class LexiWindow(Adw.ApplicationWindow):
             conv = conv[:2] + conv[-14:]
         msgs.extend(conv)
 
-        # Turn 0 includes all attached pages; subsequent turns are lightweight text
+        # Turn 0 includes all attached pages and fed documents
         if not self.conversation:
-            content = [{"type": "text", "text": current_user_question}]
-            num_pages = len(self.captured_pages)
-            for idx, page in enumerate(self.captured_pages, 1):
-                if num_pages > 1:
-                    content.append({
-                        "type": "text",
-                        "text": f"--- [Page {idx} of {num_pages}] ---"
-                    })
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{page['b64']}"}
-                })
-            user_turn = {
-                "role": "user",
-                "content": content
-            }
+            if self.captured_pages:
+                content = [{"type": "text", "text": current_user_question}]
+                num_pages = len(self.captured_pages)
+                for idx, page in enumerate(self.captured_pages, 1):
+                    if page.get("text_content"):
+                        content.append({
+                            "type": "text",
+                            "text": f"--- [Attached Document {idx}: {page.get('name', 'file')}] ---\n{page['text_content']}\n--- [End of Document] ---"
+                        })
+                    if page.get("b64"):
+                        if num_pages > 1 and not page.get("text_content"):
+                            content.append({
+                                "type": "text",
+                                "text": f"--- [Page {idx} of {num_pages}] ---"
+                            })
+                        content.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{page['b64']}"}
+                        })
+                user_turn = {
+                    "role": "user",
+                    "content": content
+                }
+            else:
+                user_turn = {
+                    "role": "user",
+                    "content": current_user_question
+                }
         else:
             user_turn = {
                 "role": "user",
@@ -1602,10 +2101,6 @@ class LexiWindow(Adw.ApplicationWindow):
             models_list = self.config.get('models')
             model = self.config.get('model', 'google/gemini-2.5-flash-lite')
             timeout = self.config.get('request_timeout', 35)
-
-            if not self.captured_pages:
-                GLib.idle_add(self.append_stream_token, "⚠️ No pages attached. Please click '✂️ + Snip' or '🖥️ + Screen' above to attach a page!")
-                return
 
             messages, user_turn = self.get_payload_messages(user_question)
 

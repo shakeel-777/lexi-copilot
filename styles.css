@@ -14,20 +14,20 @@ windowhandle, revealer {
     background: transparent;
 }
 
-/* Card Container (Animated via Adw.TimedAnimation on launch/exit) */
+/* Card Container (macOS Frosted Acrylic Glassmorphism) */
 .lexi-card, .mochi-card {
-    background: alpha(@window_bg_color, 0.94);
+    background: linear-gradient(145deg, rgba(22, 19, 36, 0.95), rgba(15, 12, 26, 0.98));
     border-radius: 24px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px alpha(@window_fg_color, 0.1), 0 0 20px alpha(#7928ca, 0.2);
-    border: 1.5px solid alpha(#a855f7, 0.4);
+    box-shadow: 0 25px 65px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 0 30px rgba(121, 40, 202, 0.15);
+    border: 1px solid rgba(168, 85, 247, 0.35);
     padding: 16px 20px;
     margin: 4px 10px 10px 10px;
     transition: border-color 240ms ease, box-shadow 240ms ease;
 }
 
 .lexi-card:hover, .mochi-card:hover {
-    border-color: alpha(#c084fc, 0.6);
-    box-shadow: 0 24px 55px rgba(0, 0, 0, 0.6), 0 0 24px alpha(#a855f7, 0.3);
+    border-color: rgba(192, 132, 252, 0.6);
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 36px rgba(168, 85, 247, 0.25);
 }
 
 /* Header Mascot Interactive Widget */
@@ -48,18 +48,33 @@ windowhandle, revealer {
     transform: scale(0.92);
 }
 
-/* Left Mascot & Companion Stage */
+/* Left Mascot & Companion Stage (macOS Glass Pedestal) */
 .lexi-companion-stage {
-    background: alpha(@window_bg_color, 0.4);
-    border: 1px solid alpha(#a855f7, 0.22);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 20px;
     padding: 10px 8px 12px 8px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 4px 16px rgba(0, 0, 0, 0.2);
+    transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Companion Eating & Hover Glow States */
+.lexi-companion-stage.lexi-stage-hover {
+    background: rgba(168, 85, 247, 0.16);
+    border-color: #c084fc;
+    box-shadow: 0 0 28px rgba(168, 85, 247, 0.45), inset 0 0 18px rgba(168, 85, 247, 0.25);
+    transform: scale(1.02);
+}
+
+.lexi-companion-stage.lexi-stage-eating {
+    background: rgba(236, 72, 153, 0.18);
+    border-color: #f472b6;
+    box-shadow: 0 0 32px rgba(236, 72, 153, 0.5), inset 0 0 20px rgba(236, 72, 153, 0.3);
 }
 
 .lexi-mascot-area {
-    min-width: 115px;
-    min-height: 130px;
+    min-width: 130px;
+    min-height: 140px;
 }
 
 .lexi-title, .mochi-title {
@@ -117,18 +132,20 @@ windowhandle, revealer {
     box-shadow: 0 4px 12px alpha(#7928ca, 0.25);
 }
 
-/* Input Area */
+/* Input Area (macOS Spotlight Glass Bar) */
 .lexi-entry-box, .mochi-entry-box {
-    background: alpha(@window_fg_color, 0.05);
+    background: rgba(255, 255, 255, 0.05);
     border-radius: 16px;
-    border: 1.5px solid alpha(@window_fg_color, 0.12);
+    border: 1.2px solid rgba(255, 255, 255, 0.12);
     padding: 4px 6px;
-    transition: border-color 200ms ease, box-shadow 200ms ease;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+    transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
 }
 
 .lexi-entry-box:focus-within, .mochi-entry-box:focus-within {
+    background: rgba(255, 255, 255, 0.08);
     border-color: #a855f7;
-    box-shadow: 0 0 0 3px alpha(#a855f7, 0.22);
+    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .lexi-entry, .mochi-entry {
@@ -146,22 +163,25 @@ windowhandle, revealer {
 }
 
 .lexi-send-btn, .mochi-send-btn {
-    background: linear-gradient(135deg, #9333ea 0%, #ec4899 100%);
+    background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
     color: white;
     border-radius: 12px;
     min-width: 38px;
     min-height: 38px;
     border: none;
     font-weight: 700;
-    transition: filter 150ms ease;
+    box-shadow: 0 2px 8px rgba(168, 85, 247, 0.35);
+    transition: filter 150ms ease, transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .lexi-send-btn:hover, .mochi-send-btn:hover {
     filter: brightness(1.15);
+    transform: scale(1.05);
 }
 
 .lexi-send-btn:active, .mochi-send-btn:active {
     filter: brightness(0.9);
+    transform: scale(0.95);
 }
 
 /* Response Area */
@@ -223,6 +243,41 @@ textview.lexi-answer-text text, textview.mochi-answer-text text {
     background: alpha(#7928ca, 0.22);
     border-color: #a855f7;
     color: #e9d5ff;
+}
+
+/* macOS Traffic Light Control Buttons (Close, Minimize) */
+.mac-traffic-lights {
+    margin-right: 2px;
+}
+
+button.mac-dot, .mac-dot {
+    min-width: 13px;
+    min-height: 13px;
+    border-radius: 9999px;
+    padding: 0;
+    margin: 0 3px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 1px 2px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(0, 0, 0, 0.35);
+    transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 140ms ease;
+}
+
+.mac-dot:hover {
+    transform: scale(1.18);
+    filter: brightness(1.22);
+}
+
+.mac-dot:active {
+    transform: scale(0.92);
+}
+
+.mac-dot-close {
+    background: linear-gradient(180deg, #ff6b62 0%, #ff5f56 100%);
+    border-color: #d13d35;
+}
+
+.mac-dot-min {
+    background: linear-gradient(180deg, #ffc938 0%, #ffbd2e 100%);
+    border-color: #c98e16;
 }
 
 /* Window Control Buttons (Minimize, Close) */
@@ -303,27 +358,35 @@ textview.lexi-answer-text text, textview.mochi-answer-text text {
     border-radius: 9999px;
     font-size: 11px;
     padding: 4px 12px;
-    background: alpha(@window_fg_color, 0.06);
-    border: 1px solid alpha(@window_fg_color, 0.12);
-    color: @window_fg_color;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f3f4f6;
     font-weight: 600;
-    transition: all 150ms ease;
+    transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .lexi-tray-btn:hover, .mochi-tray-btn:hover {
-    background: alpha(#7928ca, 0.22);
+    background: rgba(168, 85, 247, 0.25);
     border-color: #a855f7;
-    color: #e9d5ff;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.28);
+    transform: translateY(-1px);
+}
+
+.lexi-tray-btn:active, .mochi-tray-btn:active {
+    transform: translateY(0);
 }
 
 .lexi-tray-btn-accent, .mochi-tray-btn-accent {
-    background: alpha(#ec4899, 0.15);
-    border-color: alpha(#ec4899, 0.35);
+    background: rgba(236, 72, 153, 0.16);
+    border-color: rgba(236, 72, 153, 0.38);
     color: #f472b6;
 }
 
 .lexi-tray-btn-accent:hover, .mochi-tray-btn-accent:hover {
-    background: alpha(#ec4899, 0.28);
+    background: rgba(236, 72, 153, 0.32);
     border-color: #ec4899;
     color: #fbcfe8;
+    box-shadow: 0 4px 14px rgba(236, 72, 153, 0.3);
 }
+
