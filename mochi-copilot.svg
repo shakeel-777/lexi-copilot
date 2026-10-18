@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff758c"/>
+      <stop offset="50%" stop-color="#ff7eb3"/>
+      <stop offset="100%" stop-color="#7928ca"/>
+    </linearGradient>
+    <linearGradient id="mochiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ffeef2"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect x="8" y="8" width="112" height="112" rx="32" fill="url(#bgGrad)" filter="url(#shadow)"/>
+
+  <!-- Subtle glow ring -->
+  <circle cx="64" cy="64" r="42" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+
+  <!-- Main Mochi Body (Cute plump mochi dango) -->
+  <ellipse cx="64" cy="70" rx="34" ry="28" fill="url(#mochiGrad)"/>
+
+  <!-- Cheeks blush -->
+  <ellipse cx="44" cy="74" rx="5" ry="3" fill="#ff758c" opacity="0.6"/>
+  <ellipse cx="84" cy="74" rx="5" ry="3" fill="#ff758c" opacity="0.6"/>
+
+  <!-- Eyes -->
+  <ellipse cx="50" cy="68" rx="3.5" ry="5" fill="#2d3748"/>
+  <ellipse cx="78" cy="68" rx="3.5" ry="5" fill="#2d3748"/>
+  <!-- Eye highlights -->
+  <circle cx="51.5" cy="66.5" r="1.5" fill="#ffffff"/>
+  <circle cx="79.5" cy="66.5" r="1.5" fill="#ffffff"/>
+
+  <!-- Cute smile -->
+  <path d="M 60 75 Q 64 79 68 75" fill="none" stroke="#2d3748" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- AI Sparkle Star on top right -->
+  <path d="M 92 34 Q 92 42 100 42 Q 92 42 92 50 Q 92 42 84 42 Q 92 42 92 34 Z" fill="#ffffff" opacity="0.95"/>
+  <circle cx="92" cy="42" r="2" fill="#ffd166"/>
+
+  <!-- Mini Sparkle on top left -->
+  <path d="M 32 38 Q 32 43 37 43 Q 32 43 32 48 Q 32 43 27 43 Q 32 43 32 38 Z" fill="#ffffff" opacity="0.8"/>
+</svg>

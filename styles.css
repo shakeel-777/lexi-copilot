@@ -1,0 +1,261 @@
+/* Mochi Screen Copilot - Cute & Modern Theme */
+
+window.mochi-window {
+    background-color: transparent;
+}
+
+.mochi-card {
+    background: alpha(@window_bg_color, 0.94);
+    border-radius: 24px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    border: 1px solid alpha(@accent_color, 0.25);
+    padding: 20px;
+    margin: 12px;
+}
+
+/* Header Avatar Badge */
+.mochi-avatar {
+    background: linear-gradient(135deg, #ff758c 0%, #ff7eb3 50%, #c77dff 100%);
+    color: white;
+    font-size: 24px;
+    border-radius: 20px;
+    min-width: 44px;
+    min-height: 44px;
+    font-weight: 800;
+}
+
+.mochi-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: @window_fg_color;
+}
+
+.mochi-subtitle {
+    font-size: 12px;
+    opacity: 0.65;
+}
+
+.mochi-status-pill {
+    background: alpha(#2ec27e, 0.15);
+    color: #2ec27e;
+    border-radius: 9999px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.mochi-thumbnail-box {
+    border-radius: 12px;
+    border: 1px solid alpha(@window_fg_color, 0.15);
+}
+
+/* Suggestion / Quick Action Pills */
+.mochi-pill-btn {
+    border-radius: 9999px;
+    font-size: 12px;
+    padding: 6px 14px;
+    background: alpha(@window_fg_color, 0.06);
+    border: 1px solid alpha(@window_fg_color, 0.1);
+    color: @window_fg_color;
+    transition: all 180ms ease;
+    font-weight: 500;
+}
+
+.mochi-pill-btn:hover {
+    background: alpha(#c77dff, 0.2);
+    border-color: #c77dff;
+    color: #c77dff;
+}
+
+/* Input Area */
+.mochi-entry-box {
+    background: alpha(@window_fg_color, 0.05);
+    border-radius: 16px;
+    border: 1.5px solid alpha(@window_fg_color, 0.12);
+    padding: 4px 6px;
+    transition: border-color 200ms ease;
+}
+
+.mochi-entry-box:focus-within {
+    border-color: #ff758c;
+    box-shadow: 0 0 0 3px alpha(#ff758c, 0.2);
+}
+
+.mochi-entry {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    font-size: 14px;
+    padding: 8px 10px;
+    color: @window_fg_color;
+}
+
+.mochi-entry:focus {
+    box-shadow: none;
+    border: none;
+}
+
+.mochi-send-btn {
+    background: linear-gradient(135deg, #ff758c 0%, #c77dff 100%);
+    color: white;
+    border-radius: 12px;
+    min-width: 38px;
+    min-height: 38px;
+    border: none;
+    font-weight: 700;
+}
+
+.mochi-send-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* Response Area */
+.mochi-response-box {
+    background: alpha(@window_fg_color, 0.03);
+    border-radius: 16px;
+    border: 1px solid alpha(@window_fg_color, 0.08);
+    padding: 14px 16px;
+}
+
+.mochi-answer-text {
+    font-size: 13.5px;
+    line-height: 1.55;
+    background: transparent;
+}
+
+.mochi-thinking {
+    font-size: 13px;
+    font-weight: 500;
+    color: #ff758c;
+}
+
+.mochi-action-btn {
+    border-radius: 10px;
+    font-size: 12px;
+    padding: 4px 10px;
+}
+
+/* Header Action Buttons (Snip, Full, Clear) */
+.mochi-header-btn {
+    border-radius: 9999px;
+    font-size: 11px;
+    padding: 3px 10px;
+    background: alpha(@window_fg_color, 0.07);
+    border: 1px solid alpha(@window_fg_color, 0.12);
+    color: @window_fg_color;
+    font-weight: 600;
+    transition: all 180ms ease;
+}
+
+.mochi-header-btn:hover {
+    background: alpha(#ff758c, 0.2);
+    border-color: #ff758c;
+    color: #ff758c;
+}
+
+/* Window Control Buttons (Minimize, Close) */
+.mochi-win-btn {
+    border-radius: 9999px;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 3px;
+    opacity: 0.65;
+    transition: all 150ms ease;
+}
+
+.mochi-win-btn:hover {
+    opacity: 1.0;
+    background: alpha(@window_fg_color, 0.12);
+}
+
+
+textview.mochi-answer-text {
+    background: transparent;
+}
+
+textview.mochi-answer-text text {
+    background: transparent;
+}
+
+/* Multi-Page Tray (Up to 3 pages) */
+.mochi-pages-tray {
+    background: alpha(@window_fg_color, 0.04);
+    border-radius: 14px;
+    padding: 6px 10px;
+    border: 1px solid alpha(@window_fg_color, 0.08);
+}
+
+.mochi-tray-label {
+    font-size: 11px;
+    font-weight: 700;
+    opacity: 0.65;
+    margin-right: 4px;
+}
+
+.mochi-page-card {
+    background: alpha(@window_fg_color, 0.07);
+    border-radius: 10px;
+    padding: 3px 6px;
+    border: 1.5px solid alpha(@window_fg_color, 0.12);
+    transition: all 150ms ease;
+}
+
+.mochi-page-card:hover {
+    border-color: #ff758c;
+    background: alpha(#ff758c, 0.08);
+}
+
+.mochi-page-img {
+    border-radius: 6px;
+    border: 1px solid alpha(@window_fg_color, 0.1);
+}
+
+.mochi-page-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: @window_fg_color;
+}
+
+.mochi-page-del-btn {
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    border-radius: 9999px;
+    opacity: 0.55;
+    background: transparent;
+    border: none;
+}
+
+.mochi-page-del-btn:hover {
+    opacity: 1.0;
+    color: #ff758c;
+}
+
+.mochi-tray-btn {
+    border-radius: 9999px;
+    font-size: 11px;
+    padding: 3px 10px;
+    background: alpha(@window_fg_color, 0.06);
+    border: 1px solid alpha(@window_fg_color, 0.12);
+    color: @window_fg_color;
+    font-weight: 600;
+    transition: all 150ms ease;
+}
+
+.mochi-tray-btn:hover {
+    background: alpha(#c77dff, 0.2);
+    border-color: #c77dff;
+    color: #c77dff;
+}
+
+.mochi-tray-btn-accent {
+    background: alpha(#ff758c, 0.12);
+    border-color: alpha(#ff758c, 0.25);
+    color: #ff758c;
+}
+
+.mochi-tray-btn-accent:hover {
+    background: alpha(#ff758c, 0.25);
+    border-color: #ff758c;
+}
+

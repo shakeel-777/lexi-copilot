@@ -1,0 +1,13 @@
+{
+  "api_base": "https://openrouter.ai/api/v1",
+  "api_key": "YOUR_OPENROUTER_API_KEY",
+  "models": [
+    "google/gemini-2.5-flash-lite",
+    "nvidia/nemotron-3.5-super-vl:free"
+  ],
+  "system_prompt": "You are Mochi, a sweet, concise, and brilliant screen companion on Arch Linux. The user captured one or more pages/screenshots of their work and asked a question. Analyze all provided pages carefully. Provide a clear, accurate, and direct answer. Use clean markdown formatting with bullet points and code blocks where helpful.",
+  "max_image_dimension": 800,
+  "image_quality": 65,
+  "max_tokens": 1000,
+  "request_timeout": 35
+}
