@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
 Mochi - Cute & Beautiful Desktop Screen Companion for Arch Linux (GNOME/Wayland).
-Captures up to 3 screen pages or interactive snips and answers questions with a multimodal vision LLM.
+Captures up to 5 screen pages or interactive snips and answers questions with a multimodal vision LLM.
 Features:
-1. Multi-Page Support: Attach up to 3 pages / snips to compare or analyze together.
-2. Production-Grade Window Controls: Minimize button, Esc to close, non-blocking captures.
-3. Rich Markdown & Syntax-highlighted code blocks
-4. Region Snip Mode (Super+Shift+C or --snip) & Full Screen (Super+C)
-5. Multi-Turn Chat History with context memory & instant clean copy
+1. Multi-Page Support: Attach up to 5 pages / snips to compare or analyze together.
+2. Top-Island Floating Window (like Coucou): Anchored cleanly at the top of your screen.
+3. Production-Grade Window Controls: Draggable island header, Minimize button, Esc to close.
+4. Rich Markdown & Syntax-highlighted code blocks
+5. Region Snip Mode (Super+Shift+C or --snip) & Full Screen (Super+C)
+6. Multi-Turn Chat History with context memory & instant clean copy
 """
 
 import sys
@@ -18,6 +19,7 @@ import base64
 import io
 import re
 import threading
+import subprocess
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -27,10 +29,19 @@ warnings.filterwarnings('ignore', category=DeprecationWarning)
 # Ensure direct bypass for proxies
 DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
+# Prefer X11 backend when available to allow top-island window positioning (like Coucou)
+if 'GDK_BACKEND' not in os.environ and os.environ.get('DISPLAY'):
+    os.environ['GDK_BACKEND'] = 'x11,wayland'
+
 import gi
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
 gi.require_version('Xdp', '1.0')
+try:
+    gi.require_version('GdkX11', '4.0')
+    from gi.repository import GdkX11
+except Exception:
+    pass
 from gi.repository import Gtk, Adw, GLib, Gdk, Pango, Xdp
 
 from PIL import Image
@@ -247,7 +258,8 @@ class MochiWindow(Adw.ApplicationWindow):
         self.config = config
         self.is_snip = is_snip
         self.captured_pages = []  # List of {"b64": str, "texture": Gdk.Texture, "is_snip": bool}
-        self.max_pages = 3
+        self.max_pages = 5
+        self.saved_pos = None
         self.is_streaming = False
         self.timer_source_id = None
         self.query_start_time = 0
@@ -255,8 +267,9 @@ class MochiWindow(Adw.ApplicationWindow):
         self.last_answer = ""
         self.turn_start_mark = None
 
-        self.set_default_size(700, 600)
+        self.set_default_size(720, 520)
         self.set_resizable(True)
+        self.set_decorated(False)
         self.add_css_class('mochi-window')
 
         # Build UI layout
@@ -275,6 +288,45 @@ class MochiWindow(Adw.ApplicationWindow):
             self.app.active_window = None
         return False
 
+    def get_current_pos(self):
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                xid = surface.get_xid()
+                out = subprocess.check_output(['xdotool', 'getwindowgeometry', str(xid)], stderr=subprocess.DEVNULL).decode()
+                m = re.search(r'Position:\s*(\d+),(\d+)', out)
+                if m:
+                    return int(m.group(1)), int(m.group(2))
+            except Exception:
+                pass
+        return None
+
+    def position_at_top(self):
+        display = Gdk.Display.get_default()
+        monitors = display.get_monitors() if display else None
+        target_w = self.get_width() or 720
+
+        screen_x = 0
+        screen_y = 0
+        screen_w = 1920
+        if monitors and monitors.get_n_items() > 0:
+            m = monitors.get_item(0)
+            geom = m.get_geometry()
+            screen_x = geom.x
+            screen_y = geom.y
+            screen_w = geom.width
+
+        pos_x = screen_x + (screen_w - target_w) // 2
+        pos_y = screen_y + 38  # Position directly below GNOME top bar as a floating dynamic island
+
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                xid = surface.get_xid()
+                subprocess.run(['xdotool', 'windowmove', str(xid), str(pos_x), str(pos_y)], check=False)
+            except Exception as e:
+                log(f"Window move exception: {e}")
+
     def build_ui(self):
         root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         self.set_content(root_box)
@@ -288,9 +340,11 @@ class MochiWindow(Adw.ApplicationWindow):
         click_gesture.connect('pressed', lambda *_: self.entry.grab_focus())
         card.add_controller(click_gesture)
 
-        # --- Header ---
+        # --- Header wrapped in WindowHandle for effortless dragging ---
+        self.handle = Gtk.WindowHandle()
         header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        card.append(header)
+        self.handle.set_child(header)
+        card.append(self.handle)
 
         # Mascot Avatar
         avatar = Gtk.Label(label="🍡")
@@ -302,7 +356,7 @@ class MochiWindow(Adw.ApplicationWindow):
         title_box.set_hexpand(True)
         title = Gtk.Label(label="Mochi", xalign=0)
         title.add_css_class('mochi-title')
-        subtitle = Gtk.Label(label="Screen Companion • Multi-Page", xalign=0)
+        subtitle = Gtk.Label(label="Screen Companion • Top Island", xalign=0)
         subtitle.add_css_class('mochi-subtitle')
         title_box.append(title)
         title_box.append(subtitle)
@@ -340,7 +394,7 @@ class MochiWindow(Adw.ApplicationWindow):
         self.close_btn.connect('clicked', lambda _: self.close())
         ctrls_box.append(self.close_btn)
 
-        # --- Pages Strip / Tray (Supports up to 3 pages) ---
+        # --- Pages Strip / Tray (Supports up to 5 pages) ---
         self.pages_tray = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.pages_tray.add_css_class('mochi-pages-tray')
         card.append(self.pages_tray)
@@ -349,10 +403,14 @@ class MochiWindow(Adw.ApplicationWindow):
         tray_lbl.add_css_class('mochi-tray-label')
         self.pages_tray.append(tray_lbl)
 
-        # Container for attached page cards
+        # Container for attached page cards with smooth horizontal scrolling
+        pages_scroll = Gtk.ScrolledWindow()
+        pages_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        pages_scroll.set_hexpand(True)
+        pages_scroll.set_propagate_natural_width(True)
         self.pages_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.pages_box.set_hexpand(True)
-        self.pages_tray.append(self.pages_box)
+        pages_scroll.set_child(self.pages_box)
+        self.pages_tray.append(pages_scroll)
 
         # Add Page Buttons
         self.add_snip_btn = Gtk.Button(label="✂️ + Snip")
@@ -502,16 +560,16 @@ class MochiWindow(Adw.ApplicationWindow):
         self.add_full_btn.set_sensitive(can_add)
 
         if can_add:
-            self.add_snip_btn.set_label(f"✂️ + Snip ({count}/3)")
+            self.add_snip_btn.set_label(f"✂️ + Snip ({count}/5)")
             self.add_full_btn.set_label("🖥️ + Screen")
         else:
-            self.add_snip_btn.set_label("✂️ Max (3/3)")
-            self.add_full_btn.set_label("🖥️ Max (3/3)")
+            self.add_snip_btn.set_label("✂️ Max (5/5)")
+            self.add_full_btn.set_label("🖥️ Max (5/5)")
 
         if count == 0:
             self.status_pill.set_text("⚠️ No pages")
         else:
-            self.status_pill.set_text(f"● {count}/3 Pages")
+            self.status_pill.set_text(f"● {count}/5 Pages")
 
     def remove_page(self, page_index):
         if 0 <= page_index < len(self.captured_pages):
@@ -550,6 +608,17 @@ class MochiWindow(Adw.ApplicationWindow):
             # Completely restore window and focus entry
             self.set_visible(True)
             self.present()
+            if self.saved_pos:
+                surface = self.get_surface()
+                if surface and hasattr(surface, 'get_xid'):
+                    try:
+                        xid = surface.get_xid()
+                        subprocess.run(['xdotool', 'windowmove', str(xid), str(self.saved_pos[0]), str(self.saved_pos[1])], check=False)
+                    except Exception:
+                        pass
+            else:
+                self.position_at_top()
+
             self.set_focus(self.entry)
             GLib.idle_add(lambda: (self.entry.grab_focus(), GLib.SOURCE_REMOVE)[1])
 
@@ -564,6 +633,7 @@ class MochiWindow(Adw.ApplicationWindow):
     def on_add_snip(self, _):
         if len(self.captured_pages) >= self.max_pages:
             return
+        self.saved_pos = self.get_current_pos()
         # Completely unmap window from Wayland so zero pointer events or pixels are blocked
         self.set_visible(False)
         GLib.timeout_add(150, lambda: self.capture_screen_and_reveal(interactive=True, append_mode=True))
@@ -571,11 +641,13 @@ class MochiWindow(Adw.ApplicationWindow):
     def on_add_full(self, _):
         if len(self.captured_pages) >= self.max_pages:
             return
+        self.saved_pos = self.get_current_pos()
         # Hide window and give 1.2s delay so user can switch/raise their target window
         self.set_visible(False)
         GLib.timeout_add(1200, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=True))
 
     def on_recapture(self, _):
+        self.saved_pos = self.get_current_pos()
         self.set_visible(False)
         GLib.timeout_add(150, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=False))
 
@@ -590,9 +662,9 @@ class MochiWindow(Adw.ApplicationWindow):
     def process_screenshot(self, shot_path, is_snip=False, append_mode=False):
         try:
             with Image.open(shot_path) as im:
-                # 1. Preview thumbnail
+                # 1. Preview thumbnail (compact for up to 5 cards)
                 thumb = im.copy()
-                thumb.thumbnail((72, 45), Image.Resampling.LANCZOS)
+                thumb.thumbnail((60, 38), Image.Resampling.LANCZOS)
                 thumb_bytes = io.BytesIO()
                 thumb.save(thumb_bytes, format='PNG')
                 gbytes = GLib.Bytes.new(thumb_bytes.getvalue())
@@ -624,11 +696,11 @@ class MochiWindow(Adw.ApplicationWindow):
 
             if append_mode and len(self.captured_pages) < self.max_pages:
                 self.captured_pages.append(page_data)
-                welcome = f"📸 Page {len(self.captured_pages)} attached! ({len(self.captured_pages)}/3 pages ready). Type your question or add another."
+                welcome = f"📸 Page {len(self.captured_pages)} attached! ({len(self.captured_pages)}/5 pages ready). Type your question or add another."
             else:
                 self.captured_pages = [page_data]
                 self.conversation = []
-                welcome = "✂️ Page 1 snip captured! Click '✂️ + Snip' to attach up to 3 pages, or type your question." if is_snip else "👋 Page 1 screen seen! Click '✂️ + Snip' to attach up to 3 pages, or type your question."
+                welcome = "✂️ Page 1 snip captured! Click '✂️ + Snip' to attach up to 5 pages, or type your question." if is_snip else "👋 Page 1 screen seen! Click '✂️ + Snip' to attach up to 5 pages, or type your question."
 
             self.update_pages_tray_ui()
             self.text_buffer.set_text(welcome)
@@ -892,6 +964,8 @@ class MochiApp(Adw.Application):
             win = self.active_window
             win.set_visible(True)
             win.present()
+            if not win.saved_pos:
+                win.position_at_top()
             win.entry.grab_focus()
         else:
             self.hold()
@@ -913,6 +987,7 @@ class MochiApp(Adw.Application):
             win = self.active_window
             if len(win.captured_pages) < win.max_pages:
                 # Append page seamlessly
+                win.saved_pos = win.get_current_pos()
                 win.set_visible(False)
                 GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=True))
             else:

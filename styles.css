@@ -4,13 +4,18 @@ window.mochi-window {
     background-color: transparent;
 }
 
+windowhandle {
+    background: transparent;
+    cursor: default;
+}
+
 .mochi-card {
     background: alpha(@window_bg_color, 0.94);
-    border-radius: 24px;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
-    border: 1px solid alpha(@accent_color, 0.25);
-    padding: 20px;
-    margin: 12px;
+    border-radius: 22px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px alpha(@window_fg_color, 0.08);
+    border: 1.5px solid alpha(#ff758c, 0.35);
+    padding: 16px 18px;
+    margin: 6px 10px 10px 10px;
 }
 
 /* Header Avatar Badge */
@@ -177,7 +182,7 @@ textview.mochi-answer-text text {
     background: transparent;
 }
 
-/* Multi-Page Tray (Up to 3 pages) */
+/* Multi-Page Tray (Up to 5 pages) */
 .mochi-pages-tray {
     background: alpha(@window_fg_color, 0.04);
     border-radius: 14px;
