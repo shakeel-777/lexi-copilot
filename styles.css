@@ -50,7 +50,6 @@ window.lexi-window, window.mochi-window {
 
 windowhandle {
     background: transparent;
-    cursor: default;
 }
 
 /* Card Container with Drop-in Animation on Entrance */
@@ -85,7 +84,6 @@ windowhandle {
     border: none;
     padding: 0;
     border-radius: 20px;
-    cursor: pointer;
     transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
