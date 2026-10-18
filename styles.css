@@ -10,7 +10,7 @@ window.lexi-window, window.mochi-window {
     background-color: transparent;
 }
 
-windowhandle {
+windowhandle, revealer {
     background: transparent;
 }
 

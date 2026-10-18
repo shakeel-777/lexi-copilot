@@ -716,6 +716,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
         # Keyboard controllers
         key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         key_ctrl.connect('key-pressed', self.on_key_pressed)
         self.add_controller(key_ctrl)
 
@@ -730,6 +731,12 @@ class LexiWindow(Adw.ApplicationWindow):
 
         # Screen-wide pointer polling (when outside window)
         GLib.timeout_add(40, self.poll_screen_mouse)
+
+        # Automatically reveal child if unminimized or activated
+        def on_active_notify(win, _):
+            if win.is_active() and hasattr(win, 'revealer') and not win.revealer.get_reveal_child():
+                win.revealer.set_reveal_child(True)
+        self.connect('notify::is-active', on_active_notify)
 
     def on_close_request(self, _):
         if hasattr(self, 'app') and self.app:
@@ -785,54 +792,52 @@ class LexiWindow(Adw.ApplicationWindow):
     on_pet_mochi = on_pet_lexi
 
     def trigger_drop_animation(self):
-        if not hasattr(self, 'card'):
+        if not hasattr(self, 'revealer'):
             return
-        self.card.set_margin_top(-72)
-        self.card.set_opacity(0.0)
-
-        def on_frame(val):
-            self.card.set_margin_top(int(val))
-            prog = max(0.0, min(1.0, (val + 72.0) / 60.0))
-            self.card.set_opacity(prog)
-
-        target = Adw.CallbackAnimationTarget.new(on_frame)
-        self._drop_anim = Adw.TimedAnimation.new(self.card, -72.0, 4.0, 360, target)
-        self._drop_anim.set_easing(Adw.Easing.EASE_OUT_BACK)
-        self._drop_anim.play()
+        self.revealer.set_reveal_child(True)
 
     def animate_and_close(self):
-        if not hasattr(self, 'card'):
+        if getattr(self, '_is_closing', False):
+            return
+        self._is_closing = True
+        if not hasattr(self, 'revealer'):
             self.close()
             return
 
-        start_margin = self.card.get_margin_top()
-        def on_frame(val):
-            self.card.set_margin_top(int(val))
-            prog = max(0.0, min(1.0, (val + 90.0) / (start_margin + 90.0)))
-            self.card.set_opacity(prog)
+        def on_revealed(rev, _):
+            if not rev.get_reveal_child() and not rev.get_child_revealed():
+                try:
+                    rev.disconnect(handler_id)
+                except Exception:
+                    pass
+                self.close()
 
-        target = Adw.CallbackAnimationTarget.new(on_frame)
-        self._exit_anim = Adw.TimedAnimation.new(self.card, float(start_margin), -90.0, 220, target)
-        self._exit_anim.set_easing(Adw.Easing.EASE_IN_CUBIC)
-        self._exit_anim.connect('done', lambda _: self.close())
-        self._exit_anim.play()
+        handler_id = self.revealer.connect('notify::child-revealed', on_revealed)
+        self.revealer.set_reveal_child(False)
+        # Safe fallback in case signal is dropped
+        GLib.timeout_add(320, lambda: (self.close(), GLib.SOURCE_REMOVE)[1])
 
     def animate_and_minimize(self):
-        if not hasattr(self, 'card'):
+        if getattr(self, '_is_minimizing', False):
+            return
+        self._is_minimizing = True
+        if not hasattr(self, 'revealer'):
             self.minimize()
             return
 
-        start_margin = self.card.get_margin_top()
-        def on_frame(val):
-            self.card.set_margin_top(int(val))
-            prog = max(0.0, min(1.0, (val + 90.0) / (start_margin + 90.0)))
-            self.card.set_opacity(prog)
+        def on_revealed(rev, _):
+            if not rev.get_reveal_child() and not rev.get_child_revealed():
+                try:
+                    rev.disconnect(handler_id)
+                except Exception:
+                    pass
+                self.minimize()
+                self._is_minimizing = False
 
-        target = Adw.CallbackAnimationTarget.new(on_frame)
-        self._exit_anim = Adw.TimedAnimation.new(self.card, float(start_margin), -90.0, 220, target)
-        self._exit_anim.set_easing(Adw.Easing.EASE_IN_CUBIC)
-        self._exit_anim.connect('done', lambda _: (self.minimize(), self.card.set_margin_top(4), self.card.set_opacity(1.0)))
-        self._exit_anim.play()
+        handler_id = self.revealer.connect('notify::child-revealed', on_revealed)
+        self.revealer.set_reveal_child(False)
+        # Safe fallback in case signal is dropped
+        GLib.timeout_add(320, lambda: (self.minimize(), setattr(self, '_is_minimizing', False), GLib.SOURCE_REMOVE)[2])
 
     def get_current_pos(self):
         surface = self.get_surface()
@@ -876,13 +881,19 @@ class LexiWindow(Adw.ApplicationWindow):
                 log(f"Window move exception: {e}")
 
     def build_ui(self):
-        root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.set_content(root_box)
+        self.revealer = Gtk.Revealer()
+        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.revealer.set_transition_duration(260)
+        self.revealer.set_vexpand(True)
+        self.revealer.set_hexpand(True)
+        self.revealer.set_reveal_child(False)
+        self.set_content(self.revealer)
 
         self.card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.card.add_css_class('lexi-card')
-        self.card.add_css_class('lexi-card-drop')
-        root_box.append(self.card)
+        self.card.set_vexpand(True)
+        self.card.set_hexpand(True)
+        self.revealer.set_child(self.card)
         card = self.card
 
         # Click anywhere on card background focuses entry
@@ -1573,6 +1584,8 @@ class LexiApp(Adw.Application):
                 # Append page seamlessly
                 win.saved_pos = win.get_current_pos()
                 win.set_visible(False)
+                if hasattr(win, 'revealer'):
+                    win.revealer.set_reveal_child(False)
                 GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=True))
             else:
                 # At max pages, bring window back up
