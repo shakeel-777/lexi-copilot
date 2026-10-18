@@ -48,9 +48,18 @@ windowhandle, revealer {
     transform: scale(0.92);
 }
 
+/* Left Mascot & Companion Stage */
+.lexi-companion-stage {
+    background: alpha(@window_bg_color, 0.4);
+    border: 1px solid alpha(#a855f7, 0.22);
+    border-radius: 20px;
+    padding: 10px 8px 12px 8px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 .lexi-mascot-area {
-    min-width: 52px;
-    min-height: 52px;
+    min-width: 115px;
+    min-height: 130px;
 }
 
 .lexi-title, .mochi-title {
@@ -67,21 +76,33 @@ windowhandle, revealer {
 }
 
 .lexi-status-pill, .mochi-status-pill {
-    background: alpha(#a855f7, 0.15);
-    color: #d8b4fe;
+    background: alpha(#a855f7, 0.18);
+    color: #e9d5ff;
     border-radius: 9999px;
-    padding: 3px 12px;
-    font-size: 11px;
+    padding: 4px 10px;
+    font-size: 10.5px;
     font-weight: 600;
-    border: 1px solid alpha(#a855f7, 0.3);
+    border: 1px solid alpha(#a855f7, 0.35);
     transition: all 180ms ease;
+}
+
+/* Action Strip & Scrollbars */
+.lexi-action-strip {
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.lexi-chips-scroll scrollbar, .lexi-pages-scroll scrollbar {
+    opacity: 0;
+    min-width: 0;
+    min-height: 0;
 }
 
 /* Quick Action Suggestion Pills */
 .lexi-pill-btn, .mochi-pill-btn {
     border-radius: 9999px;
-    font-size: 12px;
-    padding: 6px 14px;
+    font-size: 11.5px;
+    padding: 4px 11px;
     background: alpha(@window_fg_color, 0.06);
     border: 1px solid alpha(@window_fg_color, 0.12);
     color: @window_fg_color;
