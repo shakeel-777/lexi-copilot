@@ -7,15 +7,16 @@
 [![Python 3](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Mochi brings multimodal vision intelligence to your desktop. Capture any screen area or window with a single keypress, attach up to 3 pages to compare documents or debug code, and converse seamlessly with your AI companion.
+Mochi brings multimodal vision intelligence to your desktop. Capture any screen area or window with a single keypress, attach up to 5 pages to compare documents or debug code, and converse seamlessly with your AI companion from a sleek, floating Dynamic Island anchored at the top of your screen.
 
 ---
 
 ## ✨ Features
 
+- **🏝️ Coucou-Style Floating Island**: Anchored cleanly at the top-center of the screen right beneath GNOME's top panel, keeping your primary work area completely visible. Includes an interactive draggable header handle.
 - **✂️ Interactive Region Snip (<kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>)**: Natively invokes GNOME Shell crosshairs without blocking clicks or freezing compositor surfaces.
 - **🖥️ Full Screen Copilot (<kbd>Super</kbd> + <kbd>C</kbd>)**: One-touch full screen capture with a clean unmapping lifecycle.
-- **📄 Multi-Page Attachment (Up to 3 Pages)**: Attach multiple windows, PDF pages, or terminal logs. Compare code diffs, logs vs implementation, or multi-step errors in a single prompt.
+- **📄 Multi-Page Attachment (Up to 5 Pages)**: Attach multiple windows, PDF pages, or terminal logs. Compare code diffs, logs vs implementation, or multi-step errors in a single prompt.
 - **💬 Multi-Turn Conversational Memory**: Ask follow-up questions about your screen. Subsequent turns use cached text context—no redundant multi-megabyte image re-uploads.
 - **🎨 Rich Markdown & Syntax Highlighting**: Custom parser renders headings, bullet lists, blockquotes, and syntax-highlighted code blocks (Python, Rust, Shell, JS, C, Go).
 - **🛡️ Runaway Cost Protection**: Strict OpenRouter fallback chain (`google/gemini-2.5-flash-lite` $\rightarrow$ `nvidia/nemotron-3.5-super-vl:free`) with capped token limits ($0.000001 per query).
