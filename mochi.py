@@ -18,6 +18,7 @@ import time
 import base64
 import io
 import re
+import random
 import threading
 import subprocess
 import urllib.request
@@ -283,10 +284,58 @@ class MochiWindow(Adw.ApplicationWindow):
         # Connect close request to clean up app reference
         self.connect('close-request', self.on_close_request)
 
+        # Start gentle ambient mascot idle animation
+        self.start_idle_animation()
+
     def on_close_request(self, _):
         if hasattr(self, 'app') and self.app:
             self.app.active_window = None
         return False
+
+    MOCHI_PET_REACTIONS = [
+        ("🍡", "🍡 *squish!* ( ⸝⸝•ᴗ•⸝⸝ ) Ready to help!"),
+        ("💖", "🌸 *nuzzle* You're doing amazing today!"),
+        ("✨", "🍡 ( ˶ˆ꒳ˆ˵ ) *happy mochi bounce*"),
+        ("🐾", "🍡 *boop!* What are we working on?"),
+        ("🍰", "🍡 (◕‿◕✿) Sweet and focused!"),
+        ("🍵", "🍡 (*˘︶˘*).｡.:*♡ *cozy purr*"),
+        ("🌟", "🍡 ( •̀ ᴗ •́ )و Let's solve this screen!"),
+    ]
+
+    def on_pet_mochi(self, _):
+        emoji, message = random.choice(self.MOCHI_PET_REACTIONS)
+        self.avatar_label.set_text(emoji)
+        self.avatar_label.add_css_class('mochi-avatar-bounce')
+        self.status_pill.set_text(message)
+
+        def reset_mood():
+            self.avatar_label.remove_css_class('mochi-avatar-bounce')
+            if not self.is_streaming:
+                self.avatar_label.set_text("🍡")
+                count = len(self.captured_pages)
+                self.status_pill.set_text(f"● {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
+            return GLib.SOURCE_REMOVE
+
+        GLib.timeout_add(2500, reset_mood)
+
+    def on_avatar_enter(self, controller, x, y):
+        if not self.is_streaming:
+            self.avatar_label.set_text("✨")
+
+    def on_avatar_leave(self, controller):
+        if not self.is_streaming:
+            self.avatar_label.set_text("🍡")
+
+    def start_idle_animation(self):
+        def on_idle_tick():
+            if not self.is_streaming and self.get_visible():
+                self.avatar_label.set_text("✨")
+                GLib.timeout_add(600, lambda: (
+                    self.avatar_label.set_text("🍡") if not self.is_streaming else None,
+                    GLib.SOURCE_REMOVE
+                )[1])
+            return GLib.SOURCE_CONTINUE
+        GLib.timeout_add_seconds(8, on_idle_tick)
 
     def get_current_pos(self):
         surface = self.get_surface()
@@ -346,10 +395,23 @@ class MochiWindow(Adw.ApplicationWindow):
         self.handle.set_child(header)
         card.append(self.handle)
 
-        # Mascot Avatar
-        avatar = Gtk.Label(label="🍡")
-        avatar.add_css_class('mochi-avatar')
-        header.append(avatar)
+        # Mascot Avatar (Interactive Button with Hover Wink & Squish Petting)
+        self.avatar_btn = Gtk.Button()
+        self.avatar_btn.set_focusable(False)
+        self.avatar_btn.add_css_class('mochi-avatar-btn')
+        self.avatar_btn.set_tooltip_text("Click to pet Mochi! 🍡 (squish)")
+
+        self.avatar_label = Gtk.Label(label="🍡")
+        self.avatar_label.add_css_class('mochi-avatar')
+        self.avatar_btn.set_child(self.avatar_label)
+        self.avatar_btn.connect('clicked', self.on_pet_mochi)
+
+        avatar_hover = Gtk.EventControllerMotion()
+        avatar_hover.connect('enter', self.on_avatar_enter)
+        avatar_hover.connect('leave', self.on_avatar_leave)
+        self.avatar_btn.add_controller(avatar_hover)
+
+        header.append(self.avatar_btn)
 
         # Title & Subtitle
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -737,14 +799,16 @@ class MochiWindow(Adw.ApplicationWindow):
 
         self.is_streaming = True
         self.send_btn.set_sensitive(False)
-        self.thinking_label.set_text("🍡 Analyzing page(s)... (0s)")
+        self.avatar_label.set_text("✨")
+        self.avatar_label.add_css_class('mochi-avatar-bounce')
+        self.thinking_label.set_text("🍡 Analyzing page(s)... ● ○ ○")
         self.thinking_box.set_visible(True)
         self.spinner.start()
         self.query_start_time = time.time()
 
         if self.timer_source_id:
             GLib.source_remove(self.timer_source_id)
-        self.timer_source_id = GLib.timeout_add(1000, self.update_thinking_timer)
+        self.timer_source_id = GLib.timeout_add(450, self.update_thinking_timer)
 
         # Multi-turn formatting in text buffer
         if len(self.conversation) == 0:
@@ -775,9 +839,19 @@ class MochiWindow(Adw.ApplicationWindow):
     def update_thinking_timer(self):
         if not self.is_streaming:
             return GLib.SOURCE_REMOVE
-        elapsed = int(time.time() - self.query_start_time)
+        elapsed = time.time() - self.query_start_time
         pages_count = len(self.captured_pages)
-        self.thinking_label.set_text(f"🍡 Analyzing {pages_count} page(s)... ({elapsed}s)")
+
+        # Cute cycling expressions and animated sparkling dots
+        frames = ["✨", "🍡", "💭", "🌸"]
+        dot_cycles = ["● ○ ○", "○ ● ○", "○ ○ ●", "● ● ●"]
+
+        step = int(elapsed * 2.2)
+        face = frames[step % len(frames)]
+        dots = dot_cycles[step % len(dot_cycles)]
+
+        self.avatar_label.set_text(face)
+        self.thinking_label.set_text(f"🍡 Reading {pages_count} page(s)... {dots} ({int(elapsed)}s)")
         return GLib.SOURCE_CONTINUE
 
     def get_payload_messages(self, current_user_question):
@@ -918,6 +992,20 @@ class MochiWindow(Adw.ApplicationWindow):
         self.scroll_to_end()
         self.entry.grab_focus()
 
+        # Celebratory mascot reaction when answer completes
+        if full_text and not full_text.startswith("\n⚠️ Error"):
+            self.avatar_label.set_text("🌸")
+            self.avatar_label.add_css_class('mochi-avatar-bounce')
+            self.status_pill.set_text("🌸 Answer ready! ✨")
+            def reset_celebration():
+                self.avatar_label.remove_css_class('mochi-avatar-bounce')
+                if not self.is_streaming:
+                    self.avatar_label.set_text("🍡")
+                    count = len(self.captured_pages)
+                    self.status_pill.set_text(f"● {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
+                return GLib.SOURCE_REMOVE
+            GLib.timeout_add(2500, reset_celebration)
+
     def on_copy(self, _):
         text_to_copy = self.last_answer
         if not text_to_copy:
@@ -929,8 +1017,16 @@ class MochiWindow(Adw.ApplicationWindow):
             display = Gdk.Display.get_default()
             clipboard = display.get_clipboard()
             clipboard.set(text_to_copy)
-            self.copy_btn.set_label("Copied! 🌸")
-            GLib.timeout_add_seconds(2, lambda: (self.copy_btn.set_label("📋 Copy Answer"), GLib.SOURCE_REMOVE)[1])
+            self.copy_btn.set_label("Copied! 🌸✨")
+            self.avatar_label.set_text("💖")
+            self.avatar_label.add_css_class('mochi-avatar-bounce')
+            def reset_copy():
+                self.copy_btn.set_label("📋 Copy Answer")
+                self.avatar_label.remove_css_class('mochi-avatar-bounce')
+                if not self.is_streaming:
+                    self.avatar_label.set_text("🍡")
+                return GLib.SOURCE_REMOVE
+            GLib.timeout_add_seconds(2, reset_copy)
 
 
 class MochiApp(Adw.Application):
