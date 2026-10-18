@@ -24,6 +24,8 @@ import subprocess
 import urllib.request
 import urllib.error
 import urllib.parse
+import math
+import cairo
 import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 
@@ -252,6 +254,197 @@ def render_markdown_to_buffer(buffer, text):
             buffer.insert(buffer.get_end_iter(), '\n')
 
 
+class LexiMascotWidget(Gtk.DrawingArea):
+    """
+    Animated Cosmic Screen Spirit with interactive eye-tracking physics,
+    natural blinking, squishy pet reactions, and dynamic mood expressions.
+    """
+    def __init__(self, size=48):
+        super().__init__()
+        self.size = size
+        self.set_content_width(size)
+        self.set_content_height(size)
+        self.add_css_class('lexi-mascot-area')
+        self.set_draw_func(self.on_draw)
+
+        # Gaze & Eye position (-1.0 to 1.0)
+        self.look_x = 0.0
+        self.look_y = 0.0
+        self.target_look_x = 0.0
+        self.target_look_y = 0.0
+
+        # Animation states
+        self.mood = "normal"  # "normal", "happy", "thinking", "dizzy", "sleepy"
+        self.is_blinking = False
+        self.squish_x = 1.0
+        self.squish_y = 1.0
+        self.think_angle = 0.0
+
+        # Periodic timers for blinking and gaze physics
+        self.blink_timer = GLib.timeout_add(3800, self.trigger_blink)
+        self.anim_timer = GLib.timeout_add(30, self.on_anim_frame)
+
+    def trigger_blink(self):
+        if self.mood == "normal" and not self.is_blinking:
+            self.is_blinking = True
+            self.queue_draw()
+            GLib.timeout_add(150, self.finish_blink)
+        return GLib.SOURCE_CONTINUE
+
+    def finish_blink(self):
+        self.is_blinking = False
+        self.queue_draw()
+        return GLib.SOURCE_REMOVE
+
+    def set_gaze(self, lx, ly):
+        self.target_look_x = max(-1.0, min(1.0, lx))
+        self.target_look_y = max(-1.0, min(1.0, ly))
+
+    def on_anim_frame(self):
+        diff_x = self.target_look_x - self.look_x
+        diff_y = self.target_look_y - self.look_y
+        self.look_x += diff_x * 0.22
+        self.look_y += diff_y * 0.22
+
+        self.squish_x += (1.0 - self.squish_x) * 0.16
+        self.squish_y += (1.0 - self.squish_y) * 0.16
+
+        if self.mood == "thinking":
+            self.think_angle = (self.think_angle + 0.12) % (2 * math.pi)
+
+        needs_redraw = (abs(diff_x) > 0.01 or abs(diff_y) > 0.01 or
+                        abs(self.squish_x - 1.0) > 0.01 or self.mood == "thinking")
+        if needs_redraw:
+            self.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    def pet(self):
+        self.squish_x = 1.28
+        self.squish_y = 0.78
+        self.mood = "happy"
+        self.queue_draw()
+        GLib.timeout_add(2200, self.reset_mood)
+
+    def set_mood(self, mood):
+        self.mood = mood
+        if mood == "happy":
+            self.squish_x = 1.15
+            self.squish_y = 0.88
+        self.queue_draw()
+
+    def reset_mood(self):
+        self.mood = "normal"
+        self.queue_draw()
+        return GLib.SOURCE_REMOVE
+
+    def on_draw(self, area, cr, w, h):
+        cx, cy = w / 2.0, h / 2.0
+        r = min(w, h) * 0.38
+
+        # --- Body ---
+        cr.save()
+        cr.translate(cx, cy)
+        cr.scale(self.squish_x, self.squish_y)
+
+        # Cosmic Gradient Body
+        pat = cairo.LinearGradient(-r, -r, r, r)
+        pat.add_color_stop_rgba(0.0, 1.0, 0.0, 0.5, 0.95)
+        pat.add_color_stop_rgba(0.5, 0.47, 0.16, 0.79, 0.95)
+        pat.add_color_stop_rgba(1.0, 0.3, 0.79, 0.94, 0.95)
+        cr.set_source(pat)
+        cr.arc(0, 0, r, 0, 2 * math.pi)
+        cr.fill()
+
+        # Cheeks (soft glowing blush)
+        for cheek_x in [-r * 0.55, r * 0.55]:
+            cr.save()
+            cr.translate(cheek_x, r * 0.28)
+            cr.scale(3.6, 2.0)
+            cr.arc(0, 0, 1, 0, 2 * math.pi)
+            cr.set_source_rgba(1.0, 0.5, 0.65, 0.5)
+            cr.fill()
+            cr.restore()
+
+        # Mouth
+        cr.save()
+        cr.set_line_width(1.6)
+        cr.set_line_cap(cairo.LINE_CAP_ROUND)
+        cr.set_source_rgba(0.12, 0.02, 0.2, 0.7)
+        cr.arc(0, r * 0.22, 2.8, 0.15 * math.pi, 0.85 * math.pi)
+        cr.stroke()
+        cr.restore()
+
+        # --- Eyes ---
+        eye_spacing = r * 0.42
+        eye_y = -r * 0.12
+        eye_rx = 3.6
+        eye_ry = 4.8
+
+        for eye_x in [-eye_spacing, eye_spacing]:
+            if self.is_blinking or self.mood == "sleepy":
+                # Closed blinking eye arc
+                cr.save()
+                cr.set_line_width(2.0)
+                cr.set_line_cap(cairo.LINE_CAP_ROUND)
+                cr.set_source_rgba(0.12, 0.02, 0.22, 0.85)
+                cr.arc(eye_x, eye_y + 1, 4.0, 0.2 * math.pi, 0.8 * math.pi)
+                cr.stroke()
+                cr.restore()
+            elif self.mood == "happy":
+                # Happy smiling crescent eye arc ^ ^
+                cr.save()
+                cr.set_line_width(2.2)
+                cr.set_line_cap(cairo.LINE_CAP_ROUND)
+                cr.set_source_rgba(0.12, 0.02, 0.22, 0.9)
+                cr.arc(eye_x, eye_y + 2, 4.2, 1.15 * math.pi, 1.85 * math.pi)
+                cr.stroke()
+                cr.restore()
+            elif self.mood == "thinking":
+                # Twinkling star eye
+                cr.save()
+                cr.translate(eye_x, eye_y)
+                cr.rotate(self.think_angle)
+                cr.set_line_width(1.8)
+                cr.set_line_cap(cairo.LINE_CAP_ROUND)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.move_to(-4, 0)
+                cr.line_to(4, 0)
+                cr.move_to(0, -4)
+                cr.line_to(0, 4)
+                cr.stroke()
+                cr.restore()
+            else:
+                # Normal Eye with Pupil Tracking Gaze
+                cr.save()
+                cr.translate(eye_x, eye_y)
+                cr.scale(eye_rx, eye_ry)
+                cr.arc(0, 0, 1.0, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill()
+                cr.restore()
+
+                # Pupil
+                px = eye_x + self.look_x * 2.1
+                py = eye_y + self.look_y * 2.1
+                cr.save()
+                cr.arc(px, py, 2.5, 0, 2 * math.pi)
+                cr.set_source_rgb(0.08, 0.02, 0.18)
+                cr.fill()
+
+                # Big Twinkle Catchlight
+                cr.arc(px - 0.9, py - 0.9, 1.0, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill()
+
+                # Tiny secondary twinkle
+                cr.arc(px + 0.8, py + 0.8, 0.5, 0, 2 * math.pi)
+                cr.set_source_rgb(1.0, 1.0, 1.0)
+                cr.fill()
+                cr.restore()
+
+        cr.restore()
+
+
 class LexiWindow(Adw.ApplicationWindow):
     def __init__(self, app, config, is_snip=False):
         super().__init__(application=app, title="Lexi Cosmic Screen Copilot")
@@ -282,11 +475,16 @@ class LexiWindow(Adw.ApplicationWindow):
         key_ctrl.connect('key-pressed', self.on_key_pressed)
         self.add_controller(key_ctrl)
 
+        # Mouse pointer motion tracking for dynamic eye physics
+        motion_ctrl = Gtk.EventControllerMotion()
+        motion_ctrl.connect('motion', self.on_pointer_motion)
+        self.add_controller(motion_ctrl)
+
         # Connect close request to clean up app reference
         self.connect('close-request', self.on_close_request)
 
-        # Start gentle ambient mascot idle animation
-        self.start_idle_animation()
+        # Screen-wide pointer polling (when outside window)
+        GLib.timeout_add(120, self.poll_screen_mouse)
 
     def on_close_request(self, _):
         if hasattr(self, 'app') and self.app:
@@ -304,16 +502,37 @@ class LexiWindow(Adw.ApplicationWindow):
     ]
     MOCHI_PET_REACTIONS = LEXI_PET_REACTIONS
 
+    def on_pointer_motion(self, ctrl, x, y):
+        if hasattr(self, 'mascot') and self.mascot:
+            dx = (x - 42.0) / 180.0
+            dy = (y - 36.0) / 140.0
+            self.mascot.set_gaze(dx, dy)
+
+    def poll_screen_mouse(self):
+        if not self.get_visible() or not hasattr(self, 'mascot') or not self.mascot:
+            return GLib.SOURCE_CONTINUE
+        try:
+            out = subprocess.check_output(['xdotool', 'getmouselocation'], stderr=subprocess.DEVNULL).decode()
+            m = re.search(r'x:(\d+)\s+y:(\d+)', out)
+            if m:
+                mx, my = int(m.group(1)), int(m.group(2))
+                cur_pos = self.get_current_pos()
+                if cur_pos:
+                    wx, wy = cur_pos
+                    dx = (mx - (wx + 42.0)) / 450.0
+                    dy = (my - (wy + 36.0)) / 320.0
+                    self.mascot.set_gaze(dx, dy)
+        except Exception:
+            pass
+        return GLib.SOURCE_CONTINUE
+
     def on_pet_lexi(self, _):
         emoji, message = random.choice(self.LEXI_PET_REACTIONS)
-        self.avatar_label.set_text(emoji)
-        self.avatar_label.add_css_class('lexi-avatar-bounce')
+        self.mascot.pet()
         self.status_pill.set_text(message)
 
         def reset_mood():
-            self.avatar_label.remove_css_class('lexi-avatar-bounce')
             if not self.is_streaming:
-                self.avatar_label.set_text("✨")
                 count = len(self.captured_pages)
                 self.status_pill.set_text(f"✨ {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
             return GLib.SOURCE_REMOVE
@@ -321,32 +540,30 @@ class LexiWindow(Adw.ApplicationWindow):
         GLib.timeout_add(2500, reset_mood)
     on_pet_mochi = on_pet_lexi
 
-    def on_avatar_enter(self, controller, x, y):
-        if not self.is_streaming:
-            self.avatar_label.set_text("🌟")
-
-    def on_avatar_leave(self, controller):
-        if not self.is_streaming:
-            self.avatar_label.set_text("✨")
-
-    def start_idle_animation(self):
-        def on_idle_tick():
-            if not self.is_streaming and self.get_visible():
-                self.avatar_label.set_text("🌟")
-                GLib.timeout_add(600, lambda: (
-                    self.avatar_label.set_text("✨") if not self.is_streaming else None,
-                    GLib.SOURCE_REMOVE
-                )[1])
-            return GLib.SOURCE_CONTINUE
-        GLib.timeout_add_seconds(8, on_idle_tick)
-
     def trigger_drop_animation(self):
         if hasattr(self, 'card'):
+            self.card.remove_css_class('lexi-card-exit')
             self.card.remove_css_class('lexi-card-drop')
             GLib.timeout_add(15, lambda: (
                 self.card.add_css_class('lexi-card-drop'),
                 GLib.SOURCE_REMOVE
             )[1])
+
+    def animate_and_close(self):
+        if hasattr(self, 'card'):
+            self.card.remove_css_class('lexi-card-drop')
+            self.card.add_css_class('lexi-card-exit')
+            GLib.timeout_add(250, lambda: (self.close(), GLib.SOURCE_REMOVE)[1])
+        else:
+            self.close()
+
+    def animate_and_minimize(self):
+        if hasattr(self, 'card'):
+            self.card.remove_css_class('lexi-card-drop')
+            self.card.add_css_class('lexi-card-exit')
+            GLib.timeout_add(250, lambda: (self.minimize(), GLib.SOURCE_REMOVE)[1])
+        else:
+            self.minimize()
 
     def get_current_pos(self):
         surface = self.get_surface()
@@ -408,21 +625,15 @@ class LexiWindow(Adw.ApplicationWindow):
         self.handle.set_child(header)
         self.card.append(self.handle)
 
-        # Mascot Avatar (Interactive Button with Hover Wink & Squish Petting)
+        # Mascot Avatar (Interactive DrawingArea with dynamic eye-tracking)
         self.avatar_btn = Gtk.Button()
         self.avatar_btn.set_focusable(False)
-        self.avatar_btn.add_css_class('lexi-avatar-btn')
-        self.avatar_btn.set_tooltip_text("Click to pet Lexi! ✨ (cosmic sparkle)")
+        self.avatar_btn.add_css_class('lexi-mascot-btn')
+        self.avatar_btn.set_tooltip_text("Click to pet Lexi! ✨ (eyes follow your mouse)")
 
-        self.avatar_label = Gtk.Label(label="✨")
-        self.avatar_label.add_css_class('lexi-avatar')
-        self.avatar_btn.set_child(self.avatar_label)
+        self.mascot = LexiMascotWidget(size=48)
+        self.avatar_btn.set_child(self.mascot)
         self.avatar_btn.connect('clicked', self.on_pet_lexi)
-
-        avatar_hover = Gtk.EventControllerMotion()
-        avatar_hover.connect('enter', self.on_avatar_enter)
-        avatar_hover.connect('leave', self.on_avatar_leave)
-        self.avatar_btn.add_controller(avatar_hover)
 
         header.append(self.avatar_btn)
 
@@ -458,15 +669,15 @@ class LexiWindow(Adw.ApplicationWindow):
         self.minimize_btn.set_tooltip_text("Minimize window (Ctrl+M)")
         self.minimize_btn.add_css_class('flat')
         self.minimize_btn.add_css_class('mochi-win-btn')
-        self.minimize_btn.connect('clicked', lambda _: self.minimize())
+        self.minimize_btn.connect('clicked', lambda _: self.animate_and_minimize())
         ctrls_box.append(self.minimize_btn)
 
         self.close_btn = Gtk.Button.new_from_icon_name('window-close-symbolic')
         self.close_btn.set_focusable(False)
-        self.close_btn.set_tooltip_text("Close Mochi (Esc)")
+        self.close_btn.set_tooltip_text("Close Lexi (Esc)")
         self.close_btn.add_css_class('flat')
         self.close_btn.add_css_class('mochi-win-btn')
-        self.close_btn.connect('clicked', lambda _: self.close())
+        self.close_btn.connect('clicked', lambda _: self.animate_and_close())
         ctrls_box.append(self.close_btn)
 
         # --- Pages Strip / Tray (Supports up to 5 pages) ---
@@ -717,15 +928,16 @@ class LexiWindow(Adw.ApplicationWindow):
     def on_add_full(self, _):
         if len(self.captured_pages) >= self.max_pages:
             return
+        self.status_pill.set_text("⏳ Seeing screen...")
         self.saved_pos = self.get_current_pos()
-        # Hide window and give 1.2s delay so user can switch/raise their target window
         self.set_visible(False)
-        GLib.timeout_add(1200, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=True))
+        GLib.timeout_add(250, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=True))
 
     def on_recapture(self, _):
+        self.status_pill.set_text("⏳ Seeing screen...")
         self.saved_pos = self.get_current_pos()
         self.set_visible(False)
-        GLib.timeout_add(150, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=False))
+        GLib.timeout_add(250, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=False))
 
     def on_clear_chat(self, _):
         self.conversation = []
@@ -786,10 +998,10 @@ class LexiWindow(Adw.ApplicationWindow):
 
     def on_key_pressed(self, controller, keyval, keycode, state):
         if keyval == Gdk.KEY_Escape:
-            self.close()
+            self.animate_and_close()
             return True
         if (state & Gdk.ModifierType.CONTROL_MASK) and (keyval in (Gdk.KEY_m, Gdk.KEY_M)):
-            self.minimize()
+            self.animate_and_minimize()
             return True
         return False
 
@@ -813,8 +1025,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
         self.is_streaming = True
         self.send_btn.set_sensitive(False)
-        self.avatar_label.set_text("✨")
-        self.avatar_label.add_css_class('lexi-avatar-bounce')
+        self.mascot.set_mood("thinking")
         self.thinking_label.set_text("✨ Lexi navigating page(s)... ✦ ✧ ✧")
         self.thinking_box.set_visible(True)
         self.spinner.start()
@@ -856,15 +1067,11 @@ class LexiWindow(Adw.ApplicationWindow):
         elapsed = time.time() - self.query_start_time
         pages_count = len(self.captured_pages)
 
-        # Cosmic cycling expressions and animated stardust sparkle dots
-        frames = ["✨", "🪐", "🌟", "💫", "🛸"]
+        # Animated stardust sparkle dots
         dot_cycles = ["✦ ✧ ✧", "✧ ✦ ✧", "✧ ✧ ✦", "✦ ✦ ✦"]
-
         step = int(elapsed * 2.2)
-        face = frames[step % len(frames)]
         dots = dot_cycles[step % len(dot_cycles)]
 
-        self.avatar_label.set_text(face)
         self.thinking_label.set_text(f"✨ Lexi exploring {pages_count} page(s)... {dots} ({int(elapsed)}s)")
         return GLib.SOURCE_CONTINUE
 
@@ -1008,13 +1215,11 @@ class LexiWindow(Adw.ApplicationWindow):
 
         # Celebratory mascot reaction when answer completes
         if full_text and not full_text.startswith("\n⚠️ Error"):
-            self.avatar_label.set_text("🌟")
-            self.avatar_label.add_css_class('lexi-avatar-bounce')
+            self.mascot.set_mood("happy")
             self.status_pill.set_text("🌟 Cosmic answer ready! ✨")
             def reset_celebration():
-                self.avatar_label.remove_css_class('lexi-avatar-bounce')
+                self.mascot.reset_mood()
                 if not self.is_streaming:
-                    self.avatar_label.set_text("✨")
                     count = len(self.captured_pages)
                     self.status_pill.set_text(f"✨ {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
                 return GLib.SOURCE_REMOVE
@@ -1032,13 +1237,11 @@ class LexiWindow(Adw.ApplicationWindow):
             clipboard = display.get_clipboard()
             clipboard.set(text_to_copy)
             self.copy_btn.set_label("Copied! ✨🚀")
-            self.avatar_label.set_text("🪐")
-            self.avatar_label.add_css_class('lexi-avatar-bounce')
+            self.mascot.set_mood("happy")
             def reset_copy():
                 self.copy_btn.set_label("📋 Copy Answer")
-                self.avatar_label.remove_css_class('lexi-avatar-bounce')
                 if not self.is_streaming:
-                    self.avatar_label.set_text("✨")
+                    self.mascot.reset_mood()
                 return GLib.SOURCE_REMOVE
             GLib.timeout_add_seconds(2, reset_copy)
 
