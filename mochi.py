@@ -2153,6 +2153,11 @@ class LexiWindow(Adw.ApplicationWindow):
                 except Exception:
                     pass
             self.set_visible(False)
+            if hasattr(self, 'app') and self.app:
+                try:
+                    self.app.quit()
+                except Exception:
+                    pass
             self.destroy()
 
         if not hasattr(self, 'revealer'):
@@ -3323,15 +3328,11 @@ class LexiApp(Adw.Application):
             self.active_window = win
             win.set_visible(False)
             if is_notch:
-                self.has_startup_hold = False
-                self.release()
                 nw = win.get_notch_window()
                 nw.set_visible(True)
                 nw.present()
                 GLib.timeout_add(50, nw.position_at_top)
             elif is_pet:
-                self.has_startup_hold = False
-                self.release()
                 pw = win.get_pet_window()
                 pw.set_visible(True)
                 pw.present()
