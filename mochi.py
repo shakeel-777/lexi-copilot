@@ -401,13 +401,17 @@ class LexiMascotWidget(Gtk.DrawingArea):
     with expressive anime eyes, perky ears, working hands/paws, sitting feet with
     pink toe beans, swaying fluffy tail, dynamic mouse gaze tracking, and active working animations.
     """
-    def __init__(self, width=130, height=145):
+    def __init__(self, width=130, height=145, is_mini=False):
         super().__init__()
+        self.is_mini = is_mini
         self.mascot_w = width
         self.mascot_h = height
         self.set_content_width(width)
         self.set_content_height(height)
-        self.add_css_class('lexi-mascot-area')
+        if not is_mini:
+            self.add_css_class('lexi-mascot-area')
+        else:
+            self.add_css_class('dynamic-island-mascot')
         self.set_draw_func(self.on_draw)
 
         # Gaze & Eye position (-1.0 to 1.0)
@@ -831,6 +835,144 @@ class LexiMascotWidget(Gtk.DrawingArea):
         return GLib.SOURCE_REMOVE
 
     def on_draw(self, area, cr, w, h):
+        if getattr(self, 'is_mini', False):
+            s = min(w / 48.0, h / 46.0)
+            cx = w / 2.0
+            cy = h / 2.0 + 3.8 * s
+
+            cr.save()
+            cr.translate(cx, cy)
+            cr.scale(self.squish_x, self.squish_y)
+
+            # 1. Ears
+            for sign in [-1, 1]:
+                cr.save()
+                ear_base_x = sign * 11.5 * s
+                ear_base_y = -12.5 * s
+                cr.translate(ear_base_x, ear_base_y)
+                cr.rotate(sign * 0.35 + (sign * self.ear_wiggle))
+
+                # Outer ear
+                cr.move_to(-sign * 5.5 * s, 5 * s)
+                cr.curve_to(-sign * 2.5 * s, -5 * s, sign * 2 * s, -16 * s, sign * 5.5 * s, -14 * s)
+                cr.curve_to(sign * 9.5 * s, -10 * s, sign * 7.5 * s, 1 * s, sign * 4.5 * s, 6 * s)
+                cr.close_path()
+
+                pat_ear = cairo.LinearGradient(0, -16 * s, 0, 6 * s)
+                pat_ear.add_color_stop_rgb(0, 0.98, 0.98, 1.0)
+                pat_ear.add_color_stop_rgb(1, 0.88, 0.91, 0.98)
+                cr.set_source(pat_ear)
+                cr.fill_preserve()
+                cr.set_line_width(0.9 * s)
+                cr.set_source_rgba(0.65, 0.70, 0.85, 0.5)
+                cr.stroke()
+
+                # Inner ear pink fluff
+                cr.move_to(-sign * 3.5 * s, 3.5 * s)
+                cr.curve_to(-sign * 1.5 * s, -3 * s, sign * 1.5 * s, -10 * s, sign * 4.5 * s, -9 * s)
+                cr.curve_to(sign * 7.0 * s, -7 * s, sign * 5.5 * s, 0, sign * 3.0 * s, 4.5 * s)
+                cr.close_path()
+                pat_inner = cairo.LinearGradient(0, -10 * s, 0, 4 * s)
+                pat_inner.add_color_stop_rgba(0, 1.0, 0.45, 0.65, 0.9)
+                pat_inner.add_color_stop_rgba(1, 0.98, 0.70, 0.80, 0.5)
+                cr.set_source(pat_inner)
+                cr.fill()
+                cr.restore()
+
+            # 2. Head contour
+            cr.save()
+            cr.move_to(0, -19 * s)
+            cr.curve_to(16 * s, -19 * s, 21 * s, -9 * s, 21 * s, 0 * s)
+            cr.curve_to(21 * s, 10 * s, 13 * s, 15 * s, 0, 15 * s)
+            cr.curve_to(-13 * s, 15 * s, -21 * s, 10 * s, -21 * s, 0 * s)
+            cr.curve_to(-21 * s, -9 * s, -16 * s, -19 * s, 0, -19 * s)
+            cr.close_path()
+
+            pat_head = cairo.RadialGradient(-4 * s, -8 * s, 2 * s, 0, -2 * s, 24 * s)
+            pat_head.add_color_stop_rgb(0.0, 1.0, 1.0, 1.0)
+            pat_head.add_color_stop_rgb(0.70, 0.96, 0.98, 1.0)
+            pat_head.add_color_stop_rgb(1.0, 0.86, 0.89, 0.98)
+            cr.set_source(pat_head)
+            cr.fill_preserve()
+            cr.set_line_width(1.0 * s)
+            cr.set_source_rgba(0.65, 0.70, 0.85, 0.55)
+            cr.stroke()
+
+            # 3. Soft Pink Blush
+            for sign in [-1, 1]:
+                bx = sign * 12.0 * s
+                by = 4.0 * s
+                pat_b = cairo.RadialGradient(bx, by, 0.5 * s, bx, by, 5.5 * s)
+                pat_b.add_color_stop_rgba(0, 1.0, 0.40, 0.60, 0.55)
+                pat_b.add_color_stop_rgba(1, 1.0, 0.40, 0.60, 0.0)
+                cr.set_source(pat_b)
+                cr.arc(bx, by, 5.5 * s, 0, 2 * math.pi)
+                cr.fill()
+
+            # 4. Anime Sparkling Eyes
+            eye_dx = 8.5 * s
+            eye_dy = -1.0 * s
+            for sign in [-1, 1]:
+                ex = sign * eye_dx
+                ey = eye_dy
+
+                if self.is_blinking:
+                    cr.save()
+                    cr.translate(ex, ey)
+                    cr.move_to(-sign * 3.8 * s, 0)
+                    cr.curve_to(-sign * 1.5 * s, -3.2 * s, sign * 1.5 * s, -3.2 * s, sign * 3.8 * s, 0)
+                    cr.set_line_width(1.2 * s)
+                    cr.set_source_rgba(0.18, 0.12, 0.28, 0.95)
+                    cr.stroke()
+                    cr.restore()
+                else:
+                    cr.save()
+                    cr.translate(ex, ey)
+                    cr.move_to(-sign * 5.0 * s, -4.5 * s)
+                    cr.curve_to(-sign * 2.5 * s, -6.5 * s, sign * 2.5 * s, -6.5 * s, sign * 5.0 * s, -4.5 * s)
+                    cr.set_line_width(1.2 * s)
+                    cr.set_source_rgba(0.18, 0.12, 0.28, 0.95)
+                    cr.stroke()
+
+                    cr.save()
+                    cr.scale(1.0, 1.15)
+                    cr.arc(0, 0, 3.8 * s, 0, 2 * math.pi)
+                    cr.set_source_rgb(1.0, 1.0, 1.0)
+                    cr.fill_preserve()
+                    cr.clip()
+
+                    pat_iris = cairo.LinearGradient(0, -4 * s, 0, 4 * s)
+                    pat_iris.add_color_stop_rgb(0, 0.25, 0.05, 0.42)
+                    pat_iris.add_color_stop_rgb(0.5, 0.62, 0.18, 0.85)
+                    pat_iris.add_color_stop_rgb(1.0, 0.92, 0.38, 0.85)
+                    cr.set_source(pat_iris)
+                    cr.arc(self.look_x * 0.8 * s, self.look_y * 0.8 * s, 3.4 * s, 0, 2 * math.pi)
+                    cr.fill()
+
+                    cr.arc(sign * 1.0 * s + self.look_x * 0.4 * s, -1.2 * s, 1.2 * s, 0, 2 * math.pi)
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+                    cr.fill()
+                    cr.arc(-sign * 1.1 * s, 1.1 * s, 0.65 * s, 0, 2 * math.pi)
+                    cr.fill()
+
+                    cr.restore()
+                    cr.restore()
+
+            # 5. Nose & Cute Cat Mouth :3
+            cr.arc(0, 2.8 * s, 0.65 * s, 0, 2 * math.pi)
+            cr.set_source_rgba(1.0, 0.45, 0.60, 0.95)
+            cr.fill()
+
+            cr.move_to(-2.8 * s, 5.0 * s)
+            cr.curve_to(-1.8 * s, 6.8 * s, -0.6 * s, 6.8 * s, 0, 5.4 * s)
+            cr.curve_to(0.6 * s, 6.8 * s, 1.8 * s, 6.8 * s, 2.8 * s, 5.0 * s)
+            cr.set_line_width(0.85 * s)
+            cr.set_source_rgba(0.25, 0.18, 0.35, 0.85)
+            cr.stroke()
+
+            cr.restore()
+            return
+
         s = min(w / 125.0, h / 125.0) if self.is_pet_mode else min(w / 110.0, h / 130.0)
         scale_walk = min(1.0, s / 0.8)
         cx = w / 2.0 + ((self.walk_x * scale_walk) if (w > 50 and not self.is_pet_mode) else 0.0)
@@ -1628,46 +1770,142 @@ class LexiMascotWidget(Gtk.DrawingArea):
             cr.restore()
 
 
-class LexiNotchWindow(Gtk.Window):
+class LexiDynamicIslandWindow(Gtk.Window):
     """
-    Authentic Apple Mac Notch Pill:
-    Sits flush at top screen edge (MacBook / Dynamic Island aesthetic).
-    Expands into the full Copilot card on hover or click.
+    Apple Dynamic Island (Liquid Morphing Pill):
+    Floats at top of screen as a deep OLED black pill with neon rim light.
+    Morphs seamlessly between:
+      1. Compact Resting Pill: Mini Lexi mascot, dynamic live status, glowing pulse dot.
+      2. Expanded Action Island (on hover): Smoothly slides open quick chips:
+         [💬 Copilot] [✂️ Snip] [🐾 Detach Pet]
+      3. Drop-to-Feed Target: When files are dragged over, island expands into a glowing
+         feeding portal.
+      4. Expands into full Copilot Card on click.
     """
     def __init__(self, copilot_win):
-        super().__init__(title="Lexi Mac Notch")
+        super().__init__(title="Lexi Dynamic Island")
         self.copilot_win = copilot_win
         self.set_decorated(False)
         self.set_resizable(False)
-        self.set_default_size(210, 36)
-        self.add_css_class('lexi-notch-win')
+        self.set_default_size(520, 48)
+        self.add_css_class('lexi-island-win')
 
-        pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        pill.add_css_class('mac-notch-pill')
-        pill.set_halign(Gtk.Align.CENTER)
-        pill.set_valign(Gtk.Align.CENTER)
-        self.set_child(pill)
+        # Outer centering container
+        outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        outer.set_halign(Gtk.Align.CENTER)
+        outer.set_valign(Gtk.Align.CENTER)
+        self.set_child(outer)
 
-        self.mini_mascot = LexiMascotWidget(width=28, height=30)
-        pill.append(self.mini_mascot)
+        # Dynamic Island Pill
+        self.pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.pill.add_css_class('dynamic-island-pill')
+        self.pill.set_valign(Gtk.Align.CENTER)
+        outer.append(self.pill)
 
-        lbl = Gtk.Label(label="✨ Lexi")
-        lbl.add_css_class('mac-notch-label')
-        pill.append(lbl)
+        # Mini animated Lexi mascot (24x24 avatar with blinking anime eyes)
+        self.mini_mascot = LexiMascotWidget(width=24, height=24, is_mini=True)
+        self.pill.append(self.mini_mascot)
 
-        chev = Gtk.Label(label="⌄")
-        chev.add_css_class('mac-notch-chev')
-        pill.append(chev)
+        # Dynamic Status text
+        self.status_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.status_box.set_valign(Gtk.Align.CENTER)
+        self.pill.append(self.status_box)
 
+        self.status_label = Gtk.Label(label="✨ Lexi")
+        self.status_label.add_css_class('dynamic-island-label')
+        self.status_box.append(self.status_label)
+
+        self.pulse_dot = Gtk.Label(label="●")
+        self.pulse_dot.add_css_class('dynamic-island-dot')
+        self.status_box.append(self.pulse_dot)
+
+        # Expanded action buttons revealer (morphs open on hover)
+        self.actions_revealer = Gtk.Revealer()
+        self.actions_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_LEFT)
+        self.actions_revealer.set_transition_duration(200)
+        self.actions_revealer.set_reveal_child(False)
+        self.pill.append(self.actions_revealer)
+
+        actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        actions_box.set_valign(Gtk.Align.CENTER)
+        self.actions_revealer.set_child(actions_box)
+
+        def make_btn(label, css_class, tooltip, cb):
+            b = Gtk.Button(label=label)
+            b.set_focusable(False)
+            b.add_css_class('island-action-btn')
+            b.add_css_class(css_class)
+            b.set_tooltip_text(tooltip)
+            b.connect('clicked', lambda *_: cb())
+            return b
+
+        actions_box.append(make_btn("💬 Copilot", "island-btn-primary", "Open full screen copilot", self.on_expand_copilot))
+        actions_box.append(make_btn("✂️ Snip", "island-btn-secondary", "Interactive region snip", self.on_trigger_snip))
+        actions_box.append(make_btn("🐾 Pet", "island-btn-secondary", "Detach Lexi to roam desktop", self.on_detach_pet))
+
+        # Mouse hover motion: smooth morphing expansion
         motion = Gtk.EventControllerMotion()
-        motion.connect('enter', lambda *_: self.on_expand())
-        pill.add_controller(motion)
+        motion.connect('enter', self.on_hover_enter)
+        motion.connect('leave', self.on_hover_leave)
+        self.pill.add_controller(motion)
 
+        # Click on compact island expands copilot
         click = Gtk.GestureClick()
-        click.connect('pressed', lambda *_: self.on_expand())
-        pill.add_controller(click)
+        click.connect('pressed', self.on_island_click)
+        self.pill.add_controller(click)
+
+        # File drag & drop directly onto Dynamic Island
+        drop_target = Gtk.DropTarget(actions=Gdk.DragAction.COPY)
+        drop_target.set_gtypes([Gdk.FileList, Gio.File, str])
+        drop_target.set_preload(True)
+        drop_target.connect('enter', self.on_drag_enter)
+        drop_target.connect('leave', self.on_drag_leave)
+        drop_target.connect('drop', self.on_drag_drop)
+        self.pill.add_controller(drop_target)
 
         self.connect('realize', self.on_realize)
+
+    def update_input_region(self, expanded=False):
+        surface = self.get_surface()
+        if not surface:
+            return
+        try:
+            if expanded:
+                rect = cairo.RectangleInt(40, 2, 440, 44)
+            else:
+                rect = cairo.RectangleInt(190, 2, 140, 44)
+            region = cairo.Region(rect)
+            surface.set_input_region(region)
+        except Exception:
+            pass
+
+    def on_hover_enter(self, *args):
+        self.update_input_region(expanded=True)
+        self.pill.add_css_class('dynamic-island-expanded')
+        self.actions_revealer.set_reveal_child(True)
+
+    def on_hover_leave(self, *args):
+        self.pill.remove_css_class('dynamic-island-expanded')
+        self.actions_revealer.set_reveal_child(False)
+        GLib.timeout_add(220, lambda: self.update_input_region(expanded=False))
+
+    def on_island_click(self, gesture, n_press, x, y):
+        self.on_expand_copilot()
+
+    def on_expand_copilot(self):
+        self.set_visible(False)
+        if self.copilot_win:
+            self.copilot_win.expand_from_notch()
+
+    def on_trigger_snip(self):
+        self.set_visible(False)
+        if self.copilot_win:
+            GLib.timeout_add(100, lambda: self.copilot_win.capture_screen_and_reveal(interactive=True, append_mode=True))
+
+    def on_detach_pet(self):
+        self.set_visible(False)
+        if self.copilot_win:
+            self.copilot_win.detach_to_desktop()
 
     def on_realize(self, _):
         GLib.timeout_add(50, self.position_at_top)
@@ -1681,18 +1919,62 @@ class LexiNotchWindow(Gtk.Window):
                 display = Gdk.Display.get_default()
                 if display and display.get_monitors():
                     screen_w = display.get_monitors().get_item(0).get_geometry().width
-                pos_x = (screen_w - 210) // 2
-                X11Helper.get().move_window(xid, pos_x, 32)
+                pos_x = (screen_w - 520) // 2
+                X11Helper.get().move_window(xid, pos_x, 34)
                 subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
                                 '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
             except Exception:
                 pass
+        self.update_input_region(expanded=False)
         return GLib.SOURCE_REMOVE
 
-    def on_expand(self):
-        self.set_visible(False)
-        if self.copilot_win:
-            self.copilot_win.expand_from_notch()
+    def update_status(self, text, dot_active=True):
+        self.status_label.set_text(text)
+        if dot_active:
+            self.pulse_dot.set_visible(True)
+        else:
+            self.pulse_dot.set_visible(False)
+
+    def on_drag_enter(self, target, x, y):
+        self.update_input_region(expanded=True)
+        self.pill.add_css_class('dynamic-island-feeding')
+        self.status_label.set_text("😋 Feed to Lexi!")
+        self.actions_revealer.set_reveal_child(False)
+        return Gdk.DragAction.COPY
+
+    def on_drag_leave(self, target):
+        self.pill.remove_css_class('dynamic-island-feeding')
+        self.status_label.set_text("✨ Lexi")
+        self.update_input_region(expanded=False)
+
+    def on_drag_drop(self, target, value, x, y):
+        self.pill.remove_css_class('dynamic-island-feeding')
+        self.status_label.set_text("✨ Lexi")
+        paths = []
+        if value is not None:
+            if hasattr(value, 'get_files'):
+                for gf in value.get_files():
+                    p = gf.get_path()
+                    if p and os.path.exists(p):
+                        paths.append(p)
+            elif isinstance(value, Gio.File):
+                p = value.get_path()
+                if p and os.path.exists(p):
+                    paths.append(p)
+            elif isinstance(value, str):
+                for line in value.strip().splitlines():
+                    p = line.strip().replace('file://', '')
+                    if os.path.exists(p):
+                        paths.append(p)
+        if paths and self.copilot_win:
+            for p in paths:
+                self.copilot_win.feed_file(p)
+            self.on_expand_copilot()
+            return True
+        return False
+
+# Backwards compatibility alias
+LexiNotchWindow = LexiDynamicIslandWindow
 
 
 class LexiPetWindow(Gtk.Window):
@@ -1883,7 +2165,7 @@ class LexiPetWindow(Gtk.Window):
     def dock_back(self):
         self.set_visible(False)
         if self.copilot_win:
-            self.copilot_win.expand_from_notch()
+            self.copilot_win.collapse_to_notch()
 
     def on_drag_enter(self, target, x, y):
         self.mascot.set_mood("hungry")
@@ -2091,6 +2373,8 @@ class LexiWindow(Adw.ApplicationWindow):
             GLib.timeout_add(150, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=False))
 
     def collapse_to_notch(self):
+        if self.pet_win:
+            self.pet_win.set_visible(False)
         nw = self.get_notch_window()
         # Pre-position and show notch at the top BEFORE sliding copilot up
         nw.set_visible(True)
@@ -3278,11 +3562,11 @@ class LexiApp(Adw.Application):
     def do_command_line(self, command_line):
         args = command_line.get_arguments()
         if '--help' in args or '-h' in args:
-            print("Lexi Copilot - Cosmic Screen Companion\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip    Interactive region snip\n  -n, --notch   Dock as Mac Notch pill at top of screen\n  -p, --pet     Launch as floating Desktop Pet\n  -f, --feed    Feed a file to Lexi\n  -h, --help    Show this help message")
+            print("Lexi Copilot - Cosmic Screen Companion\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip                 Interactive region snip\n  -i, --island, -n, --notch  Dock as Apple Dynamic Island at top of screen\n  -p, --pet                  Launch as floating Desktop Pet\n  -f, --feed <file>          Feed a file to Lexi\n  -h, --help                 Show this help message")
             return 0
 
         is_snip = ('--snip' in args) or ('-s' in args)
-        is_notch = ('--notch' in args) or ('-n' in args)
+        is_notch = ('--notch' in args) or ('-n' in args) or ('--island' in args) or ('-i' in args)
         is_pet = ('--pet' in args) or ('-p' in args)
 
         feed_file = None
@@ -3316,7 +3600,7 @@ class LexiApp(Adw.Application):
                     win.set_visible(True)
                     win.present()
             else:
-                if win.get_visible() and win.is_active():
+                if win.get_visible():
                     win.collapse_to_notch()
                 else:
                     win.expand_from_notch()
