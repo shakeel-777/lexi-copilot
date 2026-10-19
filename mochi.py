@@ -1171,7 +1171,37 @@ class LexiWindow(Adw.ApplicationWindow):
         # Build UI layout
         self.build_ui()
 
-        # Keyboard controllers
+        # Window-wide shortcut controller (Global scope)
+        shortcut_ctrl = Gtk.ShortcutController.new()
+        shortcut_ctrl.set_scope(Gtk.ShortcutScope.GLOBAL)
+
+        esc_trig = Gtk.ShortcutTrigger.parse_string("Escape")
+        esc_act = Gtk.CallbackAction.new(lambda *_: (self.animate_and_close(), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(esc_trig, esc_act))
+
+        cw_trig = Gtk.ShortcutTrigger.parse_string("<Control>w")
+        cw_act = Gtk.CallbackAction.new(lambda *_: (self.animate_and_close(), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cw_trig, cw_act))
+
+        cq_trig = Gtk.ShortcutTrigger.parse_string("<Control>q")
+        cq_act = Gtk.CallbackAction.new(lambda *_: (self.animate_and_close(), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cq_trig, cq_act))
+
+        cm_trig = Gtk.ShortcutTrigger.parse_string("<Control>m")
+        cm_act = Gtk.CallbackAction.new(lambda *_: (self.animate_and_minimize(), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cm_trig, cm_act))
+
+        cl_trig = Gtk.ShortcutTrigger.parse_string("<Control>l")
+        cl_act = Gtk.CallbackAction.new(lambda *_: (self.on_clear_chat(None), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cl_trig, cl_act))
+
+        co_trig = Gtk.ShortcutTrigger.parse_string("<Control>o")
+        co_act = Gtk.CallbackAction.new(lambda *_: (self.on_feed_file_clicked(None), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(co_trig, co_act))
+
+        self.add_controller(shortcut_ctrl)
+
+        # Keyboard controllers (Capture phase)
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         key_ctrl.connect('key-pressed', self.on_key_pressed)
@@ -1251,14 +1281,30 @@ class LexiWindow(Adw.ApplicationWindow):
     def trigger_drop_animation(self):
         if not hasattr(self, 'revealer'):
             return
+        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        self.revealer.set_transition_duration(220)
         self.revealer.set_reveal_child(True)
 
     def animate_and_close(self):
         if getattr(self, '_is_closing', False):
             return
         self._is_closing = True
+        if hasattr(self, 'app') and self.app:
+            self.app.active_window = None
+
+        def do_finish_close():
+            surface = self.get_surface()
+            if surface and hasattr(surface, 'get_xid'):
+                try:
+                    xid = surface.get_xid()
+                    subprocess.run(['xdotool', 'windowunmap', str(xid)], check=False)
+                except Exception:
+                    pass
+            self.set_visible(False)
+            self.destroy()
+
         if not hasattr(self, 'revealer'):
-            self.close()
+            do_finish_close()
             return
 
         def on_revealed(rev, _):
@@ -1267,12 +1313,14 @@ class LexiWindow(Adw.ApplicationWindow):
                     rev.disconnect(handler_id)
                 except Exception:
                     pass
-                self.close()
+                do_finish_close()
 
         handler_id = self.revealer.connect('notify::child-revealed', on_revealed)
+        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
+        self.revealer.set_transition_duration(180)
         self.revealer.set_reveal_child(False)
         # Safe fallback in case signal is dropped
-        GLib.timeout_add(320, lambda: (self.close(), GLib.SOURCE_REMOVE)[1])
+        GLib.timeout_add(220, lambda: (do_finish_close(), GLib.SOURCE_REMOVE)[1])
 
     def animate_and_minimize(self):
         if getattr(self, '_is_minimizing', False):
@@ -1280,6 +1328,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self._is_minimizing = True
         if not hasattr(self, 'revealer'):
             self.minimize()
+            self._is_minimizing = False
             return
 
         def on_revealed(rev, _):
@@ -1292,9 +1341,11 @@ class LexiWindow(Adw.ApplicationWindow):
                 self._is_minimizing = False
 
         handler_id = self.revealer.connect('notify::child-revealed', on_revealed)
+        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
+        self.revealer.set_transition_duration(180)
         self.revealer.set_reveal_child(False)
         # Safe fallback in case signal is dropped
-        GLib.timeout_add(320, lambda: (self.minimize(), setattr(self, '_is_minimizing', False), GLib.SOURCE_REMOVE)[2])
+        GLib.timeout_add(220, lambda: (self.minimize(), setattr(self, '_is_minimizing', False), GLib.SOURCE_REMOVE)[2])
 
     def get_current_pos(self):
         surface = self.get_surface()
@@ -1340,129 +1391,15 @@ class LexiWindow(Adw.ApplicationWindow):
             except Exception as e:
                 log(f"Window move/above exception: {e}")
 
-    def on_window_mouse_enter(self, controller, x, y):
-        if hasattr(self, 'autohide_timer') and self.autohide_timer:
-            GLib.source_remove(self.autohide_timer)
-            self.autohide_timer = None
-        if hasattr(self, 'is_expanded') and not self.is_expanded:
-            self.expand_copilot()
-
-    def on_window_mouse_leave(self, controller):
-        if getattr(self, 'is_expanded', False):
-            if hasattr(self, 'autohide_timer') and self.autohide_timer:
-                GLib.source_remove(self.autohide_timer)
-            self.autohide_timer = GLib.timeout_add(3200, self.check_autohide)
-
-    def check_autohide(self):
-        self.autohide_timer = None
-        if getattr(self, 'is_query_running', False):
-            return GLib.SOURCE_REMOVE
-        if hasattr(self, 'entry'):
-            text = self.entry.get_text().strip()
-            if text or self.entry.has_focus():
-                return GLib.SOURCE_REMOVE
-        self.collapse_to_notch()
-        return GLib.SOURCE_REMOVE
-
-    def expand_copilot(self):
-        self.is_expanded = True
-        surface = self.get_surface()
-        if surface and hasattr(surface, 'get_xid'):
-            try:
-                xid = surface.get_xid()
-                screen_w = 1920
-                display = Gdk.Display.get_default()
-                if display and display.get_monitors():
-                    screen_w = display.get_monitors().get_item(0).get_geometry().width
-                full_x = (screen_w - 940) // 2
-                subprocess.run(['xdotool', 'windowsize', str(xid), '940', '385'], check=False)
-                subprocess.run(['xdotool', 'windowmove', str(xid), str(full_x), '30'], check=False)
-                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
-                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
-            except Exception:
-                pass
-
-        self.revealer.set_reveal_child(True)
-        if hasattr(self, 'notch_icon'):
-            self.notch_icon.set_text("⌃")
-        if hasattr(self, 'notch_title'):
-            self.notch_title.set_text("✨ Lexi Cosmic Copilot")
-        if hasattr(self, 'entry'):
-            self.entry.grab_focus()
-
-    def collapse_to_notch(self):
-        self.is_expanded = False
-        self.revealer.set_reveal_child(False)
-        if hasattr(self, 'notch_icon'):
-            self.notch_icon.set_text("⌄")
-        if hasattr(self, 'notch_title'):
-            self.notch_title.set_text("🐾 Lexi  •  Hover to open")
-
-        def apply_notch_geom():
-            surface = self.get_surface()
-            if surface and hasattr(surface, 'get_xid'):
-                try:
-                    xid = surface.get_xid()
-                    screen_w = 1920
-                    display = Gdk.Display.get_default()
-                    if display and display.get_monitors():
-                        screen_w = display.get_monitors().get_item(0).get_geometry().width
-                    notch_x = (screen_w - 240) // 2
-                    subprocess.run(['xdotool', 'windowsize', str(xid), '240', '44'], check=False)
-                    subprocess.run(['xdotool', 'windowmove', str(xid), str(notch_x), '30'], check=False)
-                    subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
-                                    '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
-                except Exception:
-                    pass
-            return GLib.SOURCE_REMOVE
-
-        GLib.timeout_add(270, apply_notch_geom)
-
-    def toggle_expansion(self):
-        if getattr(self, 'is_expanded', False):
-            self.collapse_to_notch()
-        else:
-            self.expand_copilot()
-
     def build_ui(self):
-        self.is_expanded = True
-        self.autohide_timer = None
-
-        # Root Box containing top notch and revealer
-        self.root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-        self.root_box.set_halign(Gtk.Align.CENTER)
-        self.set_content(self.root_box)
-
-        # 1. Coucou-Style Top Dynamic Island Notch (Always at top)
-        self.notch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.notch.add_css_class('lexi-top-notch')
-        self.notch.set_halign(Gtk.Align.CENTER)
-        self.notch.set_size_request(240, 36)
-
-        self.notch_mascot = LexiMascotWidget(width=34, height=34)
-        self.notch.append(self.notch_mascot)
-
-        self.notch_title = Gtk.Label(label="✨ Lexi Cosmic Copilot")
-        self.notch_title.add_css_class('lexi-notch-title')
-        self.notch.append(self.notch_title)
-
-        self.notch_icon = Gtk.Label(label="⌃")
-        self.notch_icon.add_css_class('lexi-notch-icon')
-        self.notch.append(self.notch_icon)
-
-        notch_click = Gtk.GestureClick()
-        notch_click.connect('pressed', lambda *_: self.toggle_expansion())
-        self.notch.add_controller(notch_click)
-        self.root_box.append(self.notch)
-
-        # 2. Revealer with Full Copilot Card
+        # Main Revealer Container (Slides down smoothly on open, slides up on close)
         self.revealer = Gtk.Revealer()
         self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-        self.revealer.set_transition_duration(260)
+        self.revealer.set_transition_duration(220)
         self.revealer.set_vexpand(True)
         self.revealer.set_hexpand(True)
         self.revealer.set_reveal_child(True)
-        self.root_box.append(self.revealer)
+        self.set_content(self.revealer)
 
         # Main Card Container: Horizontal 2-Column Split
         self.card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
@@ -1480,12 +1417,6 @@ class LexiWindow(Adw.ApplicationWindow):
         drop_target.connect('leave', self.on_drag_leave)
         drop_target.connect('drop', self.on_drag_drop)
         self.add_controller(drop_target)
-
-        # Mouse hover motion controller for Coucou top drawer behavior
-        motion = Gtk.EventControllerMotion()
-        motion.connect('enter', self.on_window_mouse_enter)
-        motion.connect('leave', self.on_window_mouse_leave)
-        self.add_controller(motion)
 
         # Click anywhere on card background focuses entry
         click_gesture = Gtk.GestureClick()
@@ -1552,17 +1483,17 @@ class LexiWindow(Adw.ApplicationWindow):
         self.min_dot.set_tooltip_text("Minimize (Ctrl+M)")
         self.min_dot.add_css_class('mac-dot')
         self.min_dot.add_css_class('mac-dot-min')
-        self.min_dot.connect('clicked', lambda _: self.collapse_to_notch())
+        self.min_dot.connect('clicked', lambda _: self.animate_and_minimize())
         ctrls_box.append(self.min_dot)
 
         self.close_dot = Gtk.Button()
         self.close_dot.set_focusable(False)
         self.close_dot.set_valign(Gtk.Align.CENTER)
         self.close_dot.set_size_request(13, 13)
-        self.close_dot.set_tooltip_text("Collapse (Esc)")
+        self.close_dot.set_tooltip_text("Close (Esc)")
         self.close_dot.add_css_class('mac-dot')
         self.close_dot.add_css_class('mac-dot-close')
-        self.close_dot.connect('clicked', lambda _: self.collapse_to_notch())
+        self.close_dot.connect('clicked', lambda _: self.animate_and_close())
         ctrls_box.append(self.close_dot)
 
         # Unified Wide Action Strip (Pages Tray + Quick Chips)
@@ -1856,9 +1787,6 @@ class LexiWindow(Adw.ApplicationWindow):
             self.status_pill.set_text("⚠️ Lexi is full! (5/5)")
             return
 
-        if hasattr(self, 'is_expanded') and not self.is_expanded:
-            self.expand_copilot()
-
         filename = os.path.basename(filepath)
         ext = os.path.splitext(filepath)[1].lower()
 
@@ -2005,8 +1933,6 @@ class LexiWindow(Adw.ApplicationWindow):
             log(f"Zenity fallback error: {err}")
 
     def on_drag_enter(self, target, x, y):
-        if hasattr(self, 'is_expanded') and not self.is_expanded:
-            self.expand_copilot()
         self.mascot.set_mood("hungry")
         self.stage_box.add_css_class('lexi-stage-hover')
         self.status_pill.set_text("😋 Feed Lexi! Drop file here...")
@@ -2183,11 +2109,11 @@ class LexiWindow(Adw.ApplicationWindow):
 
     def on_key_pressed(self, controller, keyval, keycode, state):
         if keyval == Gdk.KEY_Escape:
-            self.collapse_to_notch()
+            self.animate_and_close()
             return True
         if state & Gdk.ModifierType.CONTROL_MASK:
             if keyval in (Gdk.KEY_m, Gdk.KEY_M):
-                self.collapse_to_notch()
+                self.animate_and_minimize()
                 return True
             elif keyval in (Gdk.KEY_o, Gdk.KEY_O):
                 self.on_feed_file_clicked(None)
@@ -2476,12 +2402,16 @@ class LexiApp(Adw.Application):
     def do_activate(self):
         if self.active_window and hasattr(self.active_window, 'captured_pages'):
             win = self.active_window
-            win.set_visible(True)
-            win.present()
-            if not win.saved_pos:
-                win.position_at_top()
-            win.trigger_drop_animation()
-            win.entry.grab_focus()
+            if win.get_visible() and win.is_active():
+                win.animate_and_close()
+            else:
+                win.set_visible(True)
+                win.present()
+                if not win.saved_pos:
+                    win.position_at_top()
+                win.trigger_drop_animation()
+                if hasattr(win, 'entry'):
+                    win.entry.grab_focus()
         else:
             self.hold()
             self.has_startup_hold = True
@@ -2522,11 +2452,17 @@ class LexiApp(Adw.Application):
                         win.revealer.set_reveal_child(False)
                     GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=True, append_mode=True))
                 else:
-                    win.expand_copilot()
+                    win.set_visible(True)
+                    win.present()
             else:
-                win.set_visible(True)
-                win.present()
-                win.toggle_expansion()
+                if win.get_visible() and win.is_active():
+                    win.animate_and_close()
+                else:
+                    win.set_visible(True)
+                    win.present()
+                    win.trigger_drop_animation()
+                    if hasattr(win, 'entry'):
+                        win.entry.grab_focus()
         else:
             # First launch: keep hold until window reveals
             self.hold()
