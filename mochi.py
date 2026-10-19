@@ -206,11 +206,11 @@ class X11Helper:
                     ev.xclient.window = int(xid)
                     ev.xclient.message_type = atom_mr
                     ev.xclient.format = 32
-                    ev.xclient.data.l[0] = 0x0F01  # bits 8..11 (x, y, w, h), gravity=NorthWest
-                    ev.xclient.data.l[1] = int(x)
-                    ev.xclient.data.l[2] = int(y)
-                    ev.xclient.data.l[3] = int(width)
-                    ev.xclient.data.l[4] = int(height)
+                    ev.xclient.data_l[0] = 0x0F01  # bits 8..11 (x, y, w, h), gravity=NorthWest
+                    ev.xclient.data_l[1] = int(x)
+                    ev.xclient.data_l[2] = int(y)
+                    ev.xclient.data_l[3] = int(width)
+                    ev.xclient.data_l[4] = int(height)
                     mask = (1 << 20) | (1 << 19)
                     self.x11.XSendEvent(self.dpy, self.root, 0, mask, ctypes.byref(ev))
 
