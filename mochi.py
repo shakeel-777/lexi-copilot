@@ -426,8 +426,9 @@ class LexiMascotWidget(Gtk.DrawingArea):
         return GLib.SOURCE_REMOVE
 
     def on_draw(self, area, cr, w, h):
-        cx, cy = w / 2.0 + self.walk_x, h / 2.0
         s = min(w / 110.0, h / 130.0)
+        scale_walk = min(1.0, s / 0.8)
+        cx, cy = w / 2.0 + (self.walk_x * scale_walk if w > 50 else 0.0), h / 2.0
 
         # Walking bounce & bobbing physics
         bounce_y = 0.0
@@ -1146,6 +1147,224 @@ class LexiMascotWidget(Gtk.DrawingArea):
         cr.restore() # End overall translate
 
 
+class LexiNotchWindow(Gtk.Window):
+    """
+    Authentic Apple Mac Notch Pill:
+    Sits flush at top screen edge (MacBook / Dynamic Island aesthetic).
+    Expands into the full Copilot card on hover or click.
+    """
+    def __init__(self, copilot_win):
+        super().__init__(title="Lexi Mac Notch")
+        self.copilot_win = copilot_win
+        self.set_decorated(False)
+        self.set_resizable(False)
+        self.set_default_size(210, 36)
+        self.add_css_class('lexi-notch-win')
+
+        pill = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        pill.add_css_class('mac-notch-pill')
+        pill.set_halign(Gtk.Align.CENTER)
+        pill.set_valign(Gtk.Align.CENTER)
+        self.set_child(pill)
+
+        self.mini_mascot = LexiMascotWidget(width=28, height=30)
+        pill.append(self.mini_mascot)
+
+        lbl = Gtk.Label(label="✨ Lexi")
+        lbl.add_css_class('mac-notch-label')
+        pill.append(lbl)
+
+        chev = Gtk.Label(label="⌄")
+        chev.add_css_class('mac-notch-chev')
+        pill.append(chev)
+
+        motion = Gtk.EventControllerMotion()
+        motion.connect('enter', lambda *_: self.on_expand())
+        pill.add_controller(motion)
+
+        click = Gtk.GestureClick()
+        click.connect('pressed', lambda *_: self.on_expand())
+        pill.add_controller(click)
+
+        self.connect('realize', self.on_realize)
+
+    def on_realize(self, _):
+        GLib.timeout_add(50, self.position_at_top)
+
+    def position_at_top(self):
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                xid = surface.get_xid()
+                screen_w = 1920
+                display = Gdk.Display.get_default()
+                if display and display.get_monitors():
+                    screen_w = display.get_monitors().get_item(0).get_geometry().width
+                pos_x = (screen_w - 210) // 2
+                subprocess.run(['xdotool', 'windowmove', str(xid), str(pos_x), '32'], check=False)
+                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
+                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
+            except Exception:
+                pass
+        return GLib.SOURCE_REMOVE
+
+    def on_expand(self):
+        self.set_visible(False)
+        if self.copilot_win:
+            self.copilot_win.expand_from_notch()
+
+
+class LexiPetWindow(Gtk.Window):
+    """
+    Detachable Desktop Pet Mode:
+    A transparent, frameless floating companion that wanders your desktop,
+    follows your cursor, reacts to pets, eats dropped files, and docks on double-click.
+    """
+    def __init__(self, copilot_win):
+        super().__init__(title="Lexi Desktop Pet")
+        self.copilot_win = copilot_win
+        self.set_decorated(False)
+        self.set_resizable(False)
+        self.set_default_size(140, 165)
+        self.add_css_class('lexi-pet-win')
+
+        self.pet_x = 1650
+        self.pet_y = 800
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box.set_halign(Gtk.Align.CENTER)
+        self.set_child(box)
+
+        self.mascot = LexiMascotWidget(width=130, height=145)
+        box.append(self.mascot)
+
+        self.badge = Gtk.Label(label="✨ Double-click to dock")
+        self.badge.add_css_class('pet-badge')
+        box.append(self.badge)
+
+        # Drag gesture to position Lexi anywhere on desktop
+        drag = Gtk.GestureDrag()
+        drag.connect('drag-begin', self.on_drag_begin)
+        drag.connect('drag-update', self.on_drag_update)
+        self.add_controller(drag)
+
+        # Click & Double-click
+        click = Gtk.GestureClick()
+        click.connect('pressed', self.on_click)
+        self.add_controller(click)
+
+        # Drag-and-Drop file feeding directly on desktop pet!
+        drop_target = Gtk.DropTarget(actions=Gdk.DragAction.COPY)
+        drop_target.set_gtypes([Gdk.FileList, Gio.File, str])
+        drop_target.set_preload(True)
+        drop_target.connect('enter', self.on_drag_enter)
+        drop_target.connect('drop', self.on_drag_drop)
+        self.add_controller(drop_target)
+
+        # Screen mouse gaze tracking
+        GLib.timeout_add(40, self.poll_screen_mouse)
+
+        self.connect('realize', self.on_realize)
+
+    def on_realize(self, _):
+        GLib.timeout_add(50, self.position_on_desktop)
+
+    def position_on_desktop(self):
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                xid = surface.get_xid()
+                subprocess.run(['xdotool', 'windowmove', str(xid), str(self.pet_x), str(self.pet_y)], check=False)
+                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
+                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
+            except Exception:
+                pass
+        return GLib.SOURCE_REMOVE
+
+    def on_drag_begin(self, gesture, x, y):
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                out = subprocess.check_output(['xdotool', 'getwindowgeometry', str(surface.get_xid())], stderr=subprocess.DEVNULL).decode()
+                m = re.search(r'Position:\s*(\d+),(\d+)', out)
+                if m:
+                    self.win_x, self.win_y = int(m.group(1)), int(m.group(2))
+                else:
+                    self.win_x, self.win_y = self.pet_x, self.pet_y
+            except Exception:
+                self.win_x, self.win_y = self.pet_x, self.pet_y
+
+    def on_drag_update(self, gesture, offset_x, offset_y):
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            self.pet_x = int(self.win_x + offset_x)
+            self.pet_y = int(self.win_y + offset_y)
+            subprocess.run(['xdotool', 'windowmove', str(surface.get_xid()), str(self.pet_x), str(self.pet_y)], check=False)
+
+    def on_click(self, gesture, n_press, x, y):
+        if n_press == 1:
+            self.mascot.pet()
+            emoji, msg = random.choice([
+                ("💖", "💖 Purr... ( ˶ˆ꒳ˆ˵ )"),
+                ("✨", "✨ *stardust!* Watching your desktop!"),
+                ("🐾", "🐾 ( •̀ ᴗ •́ )و Ready when you are!"),
+                ("🪐", "🪐 *orbital spin!*"),
+            ])
+            self.badge.set_text(msg)
+            GLib.timeout_add(2400, lambda: self.badge.set_text("✨ Double-click to dock") if self.get_visible() else None)
+        elif n_press == 2:
+            self.dock_back()
+
+    def dock_back(self):
+        self.set_visible(False)
+        if self.copilot_win:
+            self.copilot_win.expand_from_notch()
+
+    def on_drag_enter(self, target, x, y):
+        self.mascot.set_mood("hungry")
+        self.badge.set_text("😋 Feed Lexi!")
+        return Gdk.DragAction.COPY
+
+    def on_drag_drop(self, target, value, x, y):
+        paths = []
+        if value is not None:
+            if hasattr(value, 'get_files'):
+                for gf in value.get_files():
+                    p = gf.get_path()
+                    if p and os.path.exists(p):
+                        paths.append(p)
+            elif isinstance(value, Gio.File):
+                p = value.get_path()
+                if p and os.path.exists(p):
+                    paths.append(p)
+            elif isinstance(value, str):
+                for line in value.strip().splitlines():
+                    p = line.strip().replace('file://', '')
+                    if os.path.exists(p):
+                        paths.append(p)
+        if paths and self.copilot_win:
+            for p in paths:
+                self.copilot_win.feed_file(p)
+            self.dock_back()
+            return True
+        return False
+
+    def poll_screen_mouse(self):
+        if not self.get_visible() or not self.mascot:
+            return GLib.SOURCE_CONTINUE
+        try:
+            out = subprocess.check_output(['xdotool', 'getmouselocation'], stderr=subprocess.DEVNULL).decode()
+            m = re.search(r'x:(\d+)\s+y:(\d+)', out)
+            if m:
+                mx, my = int(m.group(1)), int(m.group(2))
+                dx = (mx - (self.pet_x + 65.0)) / 500.0
+                dy = (my - (self.pet_y + 70.0)) / 400.0
+                self.mascot.set_gaze(dx, dy)
+        except Exception:
+            pass
+        return GLib.SOURCE_CONTINUE
+
+
 class LexiWindow(Adw.ApplicationWindow):
     def __init__(self, app, config, is_snip=False):
         super().__init__(application=app, title="Lexi Cosmic Screen Copilot")
@@ -1161,6 +1380,8 @@ class LexiWindow(Adw.ApplicationWindow):
         self.conversation = []
         self.last_answer = ""
         self.turn_start_mark = None
+        self.notch_win = None
+        self.pet_win = None
 
         self.set_default_size(940, 385)
         self.set_resizable(True)
@@ -1176,7 +1397,7 @@ class LexiWindow(Adw.ApplicationWindow):
         shortcut_ctrl.set_scope(Gtk.ShortcutScope.GLOBAL)
 
         esc_trig = Gtk.ShortcutTrigger.parse_string("Escape")
-        esc_act = Gtk.CallbackAction.new(lambda *_: (self.animate_and_close(), True)[1])
+        esc_act = Gtk.CallbackAction.new(lambda *_: (self.collapse_to_notch(), True)[1])
         shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(esc_trig, esc_act))
 
         cw_trig = Gtk.ShortcutTrigger.parse_string("<Control>w")
@@ -1188,8 +1409,12 @@ class LexiWindow(Adw.ApplicationWindow):
         shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cq_trig, cq_act))
 
         cm_trig = Gtk.ShortcutTrigger.parse_string("<Control>m")
-        cm_act = Gtk.CallbackAction.new(lambda *_: (self.animate_and_minimize(), True)[1])
+        cm_act = Gtk.CallbackAction.new(lambda *_: (self.collapse_to_notch(), True)[1])
         shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cm_trig, cm_act))
+
+        cd_trig = Gtk.ShortcutTrigger.parse_string("<Control>d")
+        cd_act = Gtk.CallbackAction.new(lambda *_: (self.detach_to_desktop(), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cd_trig, cd_act))
 
         cl_trig = Gtk.ShortcutTrigger.parse_string("<Control>l")
         cl_act = Gtk.CallbackAction.new(lambda *_: (self.on_clear_chat(None), True)[1])
@@ -1285,6 +1510,66 @@ class LexiWindow(Adw.ApplicationWindow):
         self.revealer.set_transition_duration(220)
         self.revealer.set_reveal_child(True)
 
+    def get_notch_window(self):
+        if not self.notch_win:
+            self.notch_win = LexiNotchWindow(self)
+            self.notch_win.set_application(self.app)
+        return self.notch_win
+
+    def get_pet_window(self):
+        if not self.pet_win:
+            self.pet_win = LexiPetWindow(self)
+            self.pet_win.set_application(self.app)
+        return self.pet_win
+
+    def expand_from_notch(self):
+        if self.notch_win:
+            self.notch_win.set_visible(False)
+        if self.pet_win:
+            self.pet_win.set_visible(False)
+        self.set_visible(True)
+        self.present()
+        self.position_at_top()
+        self.trigger_drop_animation()
+        if hasattr(self, 'entry'):
+            self.entry.grab_focus()
+        if not self.captured_pages:
+            GLib.timeout_add(150, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=False))
+
+    def collapse_to_notch(self):
+        def finish_collapse():
+            self.set_visible(False)
+            nw = self.get_notch_window()
+            nw.set_visible(True)
+            nw.present()
+            GLib.timeout_add(50, nw.position_at_top)
+
+        if hasattr(self, 'revealer'):
+            self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
+            self.revealer.set_transition_duration(180)
+            self.revealer.set_reveal_child(False)
+            GLib.timeout_add(190, lambda: (finish_collapse(), GLib.SOURCE_REMOVE)[1])
+        else:
+            finish_collapse()
+
+    def detach_to_desktop(self):
+        def finish_detach():
+            self.set_visible(False)
+            if self.notch_win:
+                self.notch_win.set_visible(False)
+            pw = self.get_pet_window()
+            pw.set_visible(True)
+            pw.present()
+            GLib.timeout_add(50, pw.position_on_desktop)
+
+        if hasattr(self, 'revealer'):
+            self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
+            self.revealer.set_transition_duration(180)
+            self.revealer.set_reveal_child(False)
+            GLib.timeout_add(190, lambda: (finish_detach(), GLib.SOURCE_REMOVE)[1])
+        else:
+            finish_detach()
+
     def animate_and_close(self):
         if getattr(self, '_is_closing', False):
             return
@@ -1293,6 +1578,16 @@ class LexiWindow(Adw.ApplicationWindow):
             self.app.active_window = None
 
         def do_finish_close():
+            if self.notch_win:
+                try:
+                    self.notch_win.destroy()
+                except Exception:
+                    pass
+            if self.pet_win:
+                try:
+                    self.pet_win.destroy()
+                except Exception:
+                    pass
             surface = self.get_surface()
             if surface and hasattr(surface, 'get_xid'):
                 try:
@@ -1444,6 +1739,13 @@ class LexiWindow(Adw.ApplicationWindow):
         self.status_pill.add_css_class('lexi-status-pill')
         self.stage_box.append(self.status_pill)
 
+        self.detach_btn = Gtk.Button(label="🐾 Detach Pet")
+        self.detach_btn.set_focusable(False)
+        self.detach_btn.add_css_class('lexi-detach-btn')
+        self.detach_btn.set_tooltip_text("Detach Lexi onto your desktop wallpaper (Ctrl+D)")
+        self.detach_btn.connect('clicked', lambda _: self.detach_to_desktop())
+        self.stage_box.append(self.detach_btn)
+
         # --- Right Content Column (Wide macOS-style Island) ---
         self.content_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.content_col.set_hexpand(True)
@@ -1480,17 +1782,17 @@ class LexiWindow(Adw.ApplicationWindow):
         self.min_dot.set_focusable(False)
         self.min_dot.set_valign(Gtk.Align.CENTER)
         self.min_dot.set_size_request(13, 13)
-        self.min_dot.set_tooltip_text("Minimize (Ctrl+M)")
+        self.min_dot.set_tooltip_text("Collapse to Mac Notch (Esc / Ctrl+M)")
         self.min_dot.add_css_class('mac-dot')
         self.min_dot.add_css_class('mac-dot-min')
-        self.min_dot.connect('clicked', lambda _: self.animate_and_minimize())
+        self.min_dot.connect('clicked', lambda _: self.collapse_to_notch())
         ctrls_box.append(self.min_dot)
 
         self.close_dot = Gtk.Button()
         self.close_dot.set_focusable(False)
         self.close_dot.set_valign(Gtk.Align.CENTER)
         self.close_dot.set_size_request(13, 13)
-        self.close_dot.set_tooltip_text("Close (Esc)")
+        self.close_dot.set_tooltip_text("Close completely (Ctrl+Q)")
         self.close_dot.add_css_class('mac-dot')
         self.close_dot.add_css_class('mac-dot-close')
         self.close_dot.connect('clicked', lambda _: self.animate_and_close())
@@ -2108,17 +2410,24 @@ class LexiWindow(Adw.ApplicationWindow):
             self.status_pill.set_text("⚠️ No screen")
 
     def on_key_pressed(self, controller, keyval, keycode, state):
-        if keyval == Gdk.KEY_Escape:
-            self.animate_and_close()
+        lower_kv = Gdk.keyval_to_lower(keyval)
+        if lower_kv == Gdk.KEY_Escape:
+            self.collapse_to_notch()
             return True
         if state & Gdk.ModifierType.CONTROL_MASK:
-            if keyval in (Gdk.KEY_m, Gdk.KEY_M):
-                self.animate_and_minimize()
+            if lower_kv == Gdk.KEY_m:
+                self.collapse_to_notch()
                 return True
-            elif keyval in (Gdk.KEY_o, Gdk.KEY_O):
+            elif lower_kv == Gdk.KEY_d:
+                self.detach_to_desktop()
+                return True
+            elif lower_kv in (Gdk.KEY_q, Gdk.KEY_w):
+                self.animate_and_close()
+                return True
+            elif lower_kv == Gdk.KEY_o:
                 self.on_feed_file_clicked(None)
                 return True
-            elif keyval in (Gdk.KEY_l, Gdk.KEY_L):
+            elif lower_kv == Gdk.KEY_l:
                 self.on_clear_chat(None)
                 return True
         return False
@@ -2403,15 +2712,9 @@ class LexiApp(Adw.Application):
         if self.active_window and hasattr(self.active_window, 'captured_pages'):
             win = self.active_window
             if win.get_visible() and win.is_active():
-                win.animate_and_close()
+                win.collapse_to_notch()
             else:
-                win.set_visible(True)
-                win.present()
-                if not win.saved_pos:
-                    win.position_at_top()
-                win.trigger_drop_animation()
-                if hasattr(win, 'entry'):
-                    win.entry.grab_focus()
+                win.expand_from_notch()
         else:
             self.hold()
             self.has_startup_hold = True
@@ -2423,10 +2726,12 @@ class LexiApp(Adw.Application):
     def do_command_line(self, command_line):
         args = command_line.get_arguments()
         if '--help' in args or '-h' in args:
-            print("Lexi Copilot - Cosmic Screen Companion\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip    Interactive region snip\n  -h, --help    Show this help message")
+            print("Lexi Copilot - Cosmic Screen Companion\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip    Interactive region snip\n  -n, --notch   Dock as Mac Notch pill at top of screen\n  -p, --pet     Launch as floating Desktop Pet\n  -f, --feed    Feed a file to Lexi\n  -h, --help    Show this help message")
             return 0
 
         is_snip = ('--snip' in args) or ('-s' in args)
+        is_notch = ('--notch' in args) or ('-n' in args)
+        is_pet = ('--pet' in args) or ('-p' in args)
 
         feed_file = None
         for i, a in enumerate(args[1:], 1):
@@ -2444,7 +2749,11 @@ class LexiApp(Adw.Application):
 
         if self.active_window and hasattr(self.active_window, 'captured_pages'):
             win = self.active_window
-            if is_snip:
+            if is_notch:
+                win.collapse_to_notch()
+            elif is_pet:
+                win.detach_to_desktop()
+            elif is_snip:
                 if len(win.captured_pages) < win.max_pages:
                     win.saved_pos = win.get_current_pos()
                     win.set_visible(False)
@@ -2456,13 +2765,9 @@ class LexiApp(Adw.Application):
                     win.present()
             else:
                 if win.get_visible() and win.is_active():
-                    win.animate_and_close()
+                    win.collapse_to_notch()
                 else:
-                    win.set_visible(True)
-                    win.present()
-                    win.trigger_drop_animation()
-                    if hasattr(win, 'entry'):
-                        win.entry.grab_focus()
+                    win.expand_from_notch()
         else:
             # First launch: keep hold until window reveals
             self.hold()
@@ -2470,7 +2775,22 @@ class LexiApp(Adw.Application):
             win = LexiWindow(self, self.config, is_snip=is_snip)
             self.active_window = win
             win.set_visible(False)
-            GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=False))
+            if is_notch:
+                self.has_startup_hold = False
+                self.release()
+                nw = win.get_notch_window()
+                nw.set_visible(True)
+                nw.present()
+                GLib.timeout_add(50, nw.position_at_top)
+            elif is_pet:
+                self.has_startup_hold = False
+                self.release()
+                pw = win.get_pet_window()
+                pw.set_visible(True)
+                pw.present()
+                GLib.timeout_add(50, pw.position_on_desktop)
+            else:
+                GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=False))
 
         return 0
 
