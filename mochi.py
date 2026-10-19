@@ -63,6 +63,25 @@ def log(msg):
 
 import ctypes
 
+class _XClientMessageEvent(ctypes.Structure):
+    _fields_ = [
+        ('type', ctypes.c_int),
+        ('serial', ctypes.c_ulong),
+        ('send_event', ctypes.c_int),
+        ('display', ctypes.c_void_p),
+        ('window', ctypes.c_ulong),
+        ('message_type', ctypes.c_ulong),
+        ('format', ctypes.c_int),
+        ('data_l', ctypes.c_long * 5)
+    ]
+
+class _XEvent(ctypes.Union):
+    _fields_ = [
+        ('type', ctypes.c_int),
+        ('xclient', _XClientMessageEvent),
+        ('pad', ctypes.c_byte * 192)
+    ]
+
 class X11Helper:
     """
     Zero-overhead direct X11 interface via ctypes libX11.
@@ -92,6 +111,30 @@ class X11Helper:
 
                 self.x11.XFlush.argtypes = [ctypes.c_void_p]
                 self.x11.XFlush.restype = ctypes.c_int
+
+                self.x11.XInternAtom.restype = ctypes.c_ulong
+                self.x11.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+
+                self.x11.XSendEvent.restype = ctypes.c_int
+                self.x11.XSendEvent.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_long, ctypes.c_void_p]
+
+                self.x11.XRaiseWindow.restype = ctypes.c_int
+                self.x11.XRaiseWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+
+                self.x11.XChangeProperty.restype = ctypes.c_int
+                self.x11.XChangeProperty.argtypes = [
+                    ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
+                    ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int
+                ]
+
+                # Intern EWMH atoms
+                self.atom_net_wm_state = self.x11.XInternAtom(self.dpy, b'_NET_WM_STATE', 0)
+                self.atom_state_above = self.x11.XInternAtom(self.dpy, b'_NET_WM_STATE_ABOVE', 0)
+                self.atom_state_sticky = self.x11.XInternAtom(self.dpy, b'_NET_WM_STATE_STICKY', 0)
+                self.atom_state_skip_tb = self.x11.XInternAtom(self.dpy, b'_NET_WM_STATE_SKIP_TASKBAR', 0)
+                self.atom_state_skip_pager = self.x11.XInternAtom(self.dpy, b'_NET_WM_STATE_SKIP_PAGER', 0)
+                self.atom_net_wm_desktop = self.x11.XInternAtom(self.dpy, b'_NET_WM_DESKTOP', 0)
+                self.atom_cardinal = self.x11.XInternAtom(self.dpy, b'CARDINAL', 0)
 
                 self.x11.XQueryPointer.restype = ctypes.c_int
                 self.x11.XQueryPointer.argtypes = [
@@ -169,6 +212,84 @@ class X11Helper:
         except Exception:
             pass
         return None
+
+    def raise_window(self, xid):
+        if self.dpy and xid:
+            try:
+                self.x11.XRaiseWindow(self.dpy, int(xid))
+                self.x11.XFlush(self.dpy)
+                return True
+            except Exception:
+                pass
+        try:
+            subprocess.run(['xdotool', 'windowraise', str(xid)], check=False)
+            return True
+        except Exception:
+            return False
+
+    def make_always_on_top_and_sticky(self, xid):
+        """
+        Permanently elevates window into EWMH top layer across ALL virtual desktops and workspaces.
+        Ensures the window survives tab switches, maximized windows, and workspace changes without
+        appearing in taskbar/Alt+Tab.
+        """
+        if not xid:
+            return False
+        if self.dpy and self.root:
+            try:
+                ixid = int(xid)
+                mask = (1 << 20) | (1 << 19)  # SubstructureRedirectMask | SubstructureNotifyMask
+
+                # 1. EWMH ClientMessage: Add _NET_WM_STATE_ABOVE and _NET_WM_STATE_STICKY
+                ev1 = _XEvent()
+                ev1.xclient.type = 33  # ClientMessage
+                ev1.xclient.window = ixid
+                ev1.xclient.message_type = self.atom_net_wm_state
+                ev1.xclient.format = 32
+                ev1.xclient.data_l[0] = 1  # _NET_WM_STATE_ADD
+                ev1.xclient.data_l[1] = self.atom_state_above
+                ev1.xclient.data_l[2] = self.atom_state_sticky
+                ev1.xclient.data_l[3] = 1
+                self.x11.XSendEvent(self.dpy, self.root, 0, mask, ctypes.byref(ev1))
+
+                # 2. EWMH ClientMessage: Add _NET_WM_STATE_SKIP_TASKBAR and _NET_WM_STATE_SKIP_PAGER
+                ev2 = _XEvent()
+                ev2.xclient.type = 33
+                ev2.xclient.window = ixid
+                ev2.xclient.message_type = self.atom_net_wm_state
+                ev2.xclient.format = 32
+                ev2.xclient.data_l[0] = 1  # _NET_WM_STATE_ADD
+                ev2.xclient.data_l[1] = self.atom_state_skip_tb
+                ev2.xclient.data_l[2] = self.atom_state_skip_pager
+                ev2.xclient.data_l[3] = 1
+                self.x11.XSendEvent(self.dpy, self.root, 0, mask, ctypes.byref(ev2))
+
+                # 3. EWMH ClientMessage: Set _NET_WM_DESKTOP = 0xFFFFFFFF (Sticky on all workspaces)
+                ev3 = _XEvent()
+                ev3.xclient.type = 33
+                ev3.xclient.window = ixid
+                ev3.xclient.message_type = self.atom_net_wm_desktop
+                ev3.xclient.format = 32
+                ev3.xclient.data_l[0] = 0xFFFFFFFF
+                ev3.xclient.data_l[1] = 1
+                self.x11.XSendEvent(self.dpy, self.root, 0, mask, ctypes.byref(ev3))
+
+                # 4. Direct property write for _NET_WM_DESKTOP = 0xFFFFFFFF
+                desktop_val = (ctypes.c_ulong * 1)(0xFFFFFFFF)
+                self.x11.XChangeProperty(
+                    self.dpy, ixid, self.atom_net_wm_desktop,
+                    self.atom_cardinal, 32, 0,
+                    ctypes.cast(desktop_val, ctypes.c_char_p), 1
+                )
+
+                # 5. Immediate raise to topmost z-order
+                self.x11.XRaiseWindow(self.dpy, ixid)
+                self.x11.XFlush(self.dpy)
+                return True
+            except Exception as e:
+                log(f"make_always_on_top_and_sticky error: {e}")
+        return False
+
 
 DEFAULT_CONFIG = {
     "api_base": "https://openrouter.ai/api/v1",
@@ -1894,6 +2015,12 @@ class LexiDynamicIslandWindow(Gtk.Window):
             pass
 
     def on_hover_enter(self, *args):
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                X11Helper.get().raise_window(surface.get_xid())
+            except Exception:
+                pass
         self.update_input_region(expanded=True)
         self.pill.add_css_class('dynamic-island-expanded')
         self.actions_revealer.set_reveal_child(True)
@@ -1922,6 +2049,14 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.copilot_win.detach_to_desktop()
 
     def on_realize(self, _):
+        surface = self.get_surface()
+        if surface:
+            if hasattr(surface, 'move_to_desktop'):
+                surface.move_to_desktop(0xFFFFFFFF)
+            if hasattr(surface, 'set_skip_taskbar_hint'):
+                surface.set_skip_taskbar_hint(True)
+            if hasattr(surface, 'set_skip_pager_hint'):
+                surface.set_skip_pager_hint(True)
         GLib.timeout_add(50, self.position_at_top)
 
     def position_at_top(self):
@@ -1935,12 +2070,30 @@ class LexiDynamicIslandWindow(Gtk.Window):
                     screen_w = display.get_monitors().get_item(0).get_geometry().width
                 pos_x = (screen_w - 520) // 2
                 X11Helper.get().move_window(xid, pos_x, 34)
-                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
-                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
+                X11Helper.get().make_always_on_top_and_sticky(xid)
+                if hasattr(surface, 'move_to_desktop'):
+                    surface.move_to_desktop(0xFFFFFFFF)
+                if hasattr(surface, 'set_skip_taskbar_hint'):
+                    surface.set_skip_taskbar_hint(True)
+                if hasattr(surface, 'set_skip_pager_hint'):
+                    surface.set_skip_pager_hint(True)
             except Exception:
                 pass
         self.update_input_region(expanded=False)
+        if not getattr(self, 'watchdog_id', None):
+            self.watchdog_id = GLib.timeout_add_seconds(2, self._watchdog_keep_on_top)
         return GLib.SOURCE_REMOVE
+
+    def _watchdog_keep_on_top(self):
+        if not self.get_mapped() or not self.get_visible():
+            return GLib.SOURCE_CONTINUE
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                X11Helper.get().raise_window(surface.get_xid())
+            except Exception:
+                pass
+        return GLib.SOURCE_CONTINUE
 
     def update_status(self, text, dot_active=True):
         self.status_label.set_text(text)
@@ -2054,6 +2207,14 @@ class LexiPetWindow(Gtk.Window):
         self.connect('realize', self.on_realize)
 
     def on_realize(self, _):
+        surface = self.get_surface()
+        if surface:
+            if hasattr(surface, 'move_to_desktop'):
+                surface.move_to_desktop(0xFFFFFFFF)
+            if hasattr(surface, 'set_skip_taskbar_hint'):
+                surface.set_skip_taskbar_hint(True)
+            if hasattr(surface, 'set_skip_pager_hint'):
+                surface.set_skip_pager_hint(True)
         GLib.timeout_add(50, self.position_on_desktop)
 
     def position_on_desktop(self):
@@ -2064,8 +2225,13 @@ class LexiPetWindow(Gtk.Window):
             try:
                 xid = surface.get_xid()
                 X11Helper.get().move_window(xid, int(self.pet_x), int(self.pet_y))
-                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
-                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
+                X11Helper.get().make_always_on_top_and_sticky(xid)
+                if hasattr(surface, 'move_to_desktop'):
+                    surface.move_to_desktop(0xFFFFFFFF)
+                if hasattr(surface, 'set_skip_taskbar_hint'):
+                    surface.set_skip_taskbar_hint(True)
+                if hasattr(surface, 'set_skip_pager_hint'):
+                    surface.set_skip_pager_hint(True)
             except Exception:
                 pass
         return GLib.SOURCE_REMOVE
@@ -2547,8 +2713,9 @@ class LexiWindow(Adw.ApplicationWindow):
                 xid = surface.get_xid()
                 X11Helper.get().move_window(xid, pos_x, pos_y)
                 # Keep always above all windows (Coucou style persistent top dock)
-                subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
-                                '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
+                X11Helper.get().make_always_on_top_and_sticky(xid)
+                if hasattr(surface, 'move_to_desktop'):
+                    surface.move_to_desktop(0xFFFFFFFF)
             except Exception as e:
                 log(f"Window move/above exception: {e}")
 
