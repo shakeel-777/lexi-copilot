@@ -190,11 +190,34 @@ class X11Helper:
     def move_resize_window(self, xid, x, y, width, height):
         if self.dpy and xid:
             try:
+                # 1. Direct X11 move and resize
                 self.x11.XMoveResizeWindow(self.dpy, int(xid), int(x), int(y), int(width), int(height))
+                self.x11.XMoveWindow(self.dpy, int(xid), int(x), int(y))
+
+                # 2. EWMH _NET_MOVERESIZE_WINDOW client message to root (commands Mutter to reposition frame)
+                atom_mr = self.x11.XInternAtom(self.dpy, b'_NET_MOVERESIZE_WINDOW', 0)
+                if atom_mr and self.root:
+                    ev = _XEvent()
+                    ev.type = 33  # ClientMessage
+                    ev.xclient.type = 33
+                    ev.xclient.serial = 0
+                    ev.xclient.send_event = 1
+                    ev.xclient.display = self.dpy
+                    ev.xclient.window = int(xid)
+                    ev.xclient.message_type = atom_mr
+                    ev.xclient.format = 32
+                    ev.xclient.data.l[0] = 0x0F01  # bits 8..11 (x, y, w, h), gravity=NorthWest
+                    ev.xclient.data.l[1] = int(x)
+                    ev.xclient.data.l[2] = int(y)
+                    ev.xclient.data.l[3] = int(width)
+                    ev.xclient.data.l[4] = int(height)
+                    mask = (1 << 20) | (1 << 19)
+                    self.x11.XSendEvent(self.dpy, self.root, 0, mask, ctypes.byref(ev))
+
                 self.x11.XFlush(self.dpy)
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                log(f"move_resize_window error: {e}")
         try:
             subprocess.run(['xdotool', 'windowmove', str(xid), str(int(x)), str(int(y))], check=False)
             subprocess.run(['xdotool', 'windowsize', str(xid), str(int(width)), str(int(height))], check=False)
@@ -3400,18 +3423,19 @@ class LexiWindow(Adw.ApplicationWindow):
             self.screen_h = geom.height
 
         if mode == 'side_panel':
-            self.card_w = 460
+            self.card_w = 440
             self.card_h = self.screen_h - 38
             pos_x = self.screen_w - self.card_w
             pos_y = 35
 
             self.stage_box.set_visible(False)
             self.header_mascot.set_visible(True)
-            self.header_status_pill.set_visible(True)
             self.card.add_css_class('lexi-side-panel')
             self.subtitle.set_text("Gemini Side Panel")
-            self.mode_toggle_btn.set_label("🗖 Card")
+            self.mode_toggle_btn.set_label("🗖 Center Card")
             self.mode_toggle_btn.set_tooltip_text("Switch to Floating Center Card (Ctrl+B or drag left)")
+            if hasattr(self, 'detach_header_btn'):
+                self.detach_header_btn.set_visible(False)
             self.clear_btn.set_label("🧹")
             if hasattr(self, 'action_strip'):
                 self.action_strip.set_orientation(Gtk.Orientation.VERTICAL)
@@ -3426,6 +3450,17 @@ class LexiWindow(Adw.ApplicationWindow):
             self.window_pos = (pos_x, pos_y)
             self.saved_pos = (pos_x, pos_y)
 
+            def enforce_dock():
+                s = self.get_surface()
+                cur_x = s.get_xid() if (s and hasattr(s, 'get_xid')) else xid
+                if cur_x:
+                    X11Helper.get().move_resize_window(cur_x, pos_x, pos_y, self.card_w, self.card_h)
+                    X11Helper.get().make_always_on_top_and_sticky(cur_x)
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(30, enforce_dock)
+            GLib.timeout_add(100, enforce_dock)
+
         else: # 'card'
             self.card_w = 940
             self.card_h = 385
@@ -3434,11 +3469,12 @@ class LexiWindow(Adw.ApplicationWindow):
 
             self.stage_box.set_visible(True)
             self.header_mascot.set_visible(False)
-            self.header_status_pill.set_visible(False)
             self.card.remove_css_class('lexi-side-panel')
             self.subtitle.set_text("Cosmic Screen Copilot")
             self.mode_toggle_btn.set_label("◨ Side Panel")
             self.mode_toggle_btn.set_tooltip_text("Dock to Gemini-style Side Panel (Ctrl+B or drag to right edge)")
+            if hasattr(self, 'detach_header_btn'):
+                self.detach_header_btn.set_visible(True)
             self.clear_btn.set_label("🧹 Clear")
             if hasattr(self, 'action_strip'):
                 self.action_strip.set_orientation(Gtk.Orientation.HORIZONTAL)
@@ -3452,6 +3488,17 @@ class LexiWindow(Adw.ApplicationWindow):
                 X11Helper.get().make_always_on_top_and_sticky(xid)
             self.window_pos = (pos_x, pos_y)
             self.saved_pos = (pos_x, pos_y)
+
+            def enforce_center():
+                s = self.get_surface()
+                cur_x = s.get_xid() if (s and hasattr(s, 'get_xid')) else xid
+                if cur_x:
+                    X11Helper.get().move_resize_window(cur_x, pos_x, pos_y, self.card_w, self.card_h)
+                    X11Helper.get().make_always_on_top_and_sticky(cur_x)
+                return GLib.SOURCE_REMOVE
+
+            GLib.timeout_add(30, enforce_center)
+            GLib.timeout_add(100, enforce_center)
 
         self.update_mascot_mood(getattr(self.mascot, 'mood', 'happy'))
 
@@ -3604,11 +3651,6 @@ class LexiWindow(Adw.ApplicationWindow):
         title_box.append(self.subtitle)
         self.title_handle_box.append(title_box)
 
-        self.header_status_pill = Gtk.Label(label="✨ Ready")
-        self.header_status_pill.add_css_class('lexi-status-pill')
-        self.header_status_pill.set_visible(False)
-        self.title_handle_box.append(self.header_status_pill)
-
         # Smooth zero-latency X11 dragging & edge snapping on header
         header_drag = Gtk.GestureDrag()
         header_drag.connect('drag-begin', self.on_header_drag_begin)
@@ -3692,7 +3734,7 @@ class LexiWindow(Adw.ApplicationWindow):
         pages_scroll.set_child(self.pages_box)
         self.pages_tray.append(pages_scroll)
 
-        self.add_snip_btn = Gtk.Button(label="✂️ + Snip")
+        self.add_snip_btn = Gtk.Button(label="✂️ Snip")
         self.add_snip_btn.set_focusable(False)
         self.add_snip_btn.set_tooltip_text("Snip an additional area (Lexi hides completely)")
         self.add_snip_btn.add_css_class('lexi-tray-btn')
@@ -3700,14 +3742,14 @@ class LexiWindow(Adw.ApplicationWindow):
         self.add_snip_btn.connect('clicked', self.on_add_snip)
         self.pages_tray.append(self.add_snip_btn)
 
-        self.add_full_btn = Gtk.Button(label="🖥️ + Screen")
+        self.add_full_btn = Gtk.Button(label="🖥️ Screen")
         self.add_full_btn.set_focusable(False)
         self.add_full_btn.set_tooltip_text("Add entire screen as next page")
         self.add_full_btn.add_css_class('lexi-tray-btn')
         self.add_full_btn.connect('clicked', self.on_add_full)
         self.pages_tray.append(self.add_full_btn)
 
-        self.add_feed_btn = Gtk.Button(label="📁 + Feed File")
+        self.add_feed_btn = Gtk.Button(label="📁 Feed")
         self.add_feed_btn.set_focusable(False)
         self.add_feed_btn.set_tooltip_text("Feed an image, code file, or PDF to Lexi (Ctrl+O)")
         self.add_feed_btn.add_css_class('lexi-tray-btn')
@@ -3737,10 +3779,10 @@ class LexiWindow(Adw.ApplicationWindow):
 
         quick_prompts = [
             ("✨ Explain", "Explain what is on the attached page(s) and fed files clearly and concisely."),
-            ("🔄 Compare", "Compare the information across all attached pages, highlighting differences or relationships."),
-            ("🐛 Fix / Debug", "Identify any errors, bugs, or problems across these pages and code files and provide the fix."),
+            ("🐛 Fix", "Identify any errors, bugs, or problems across these pages and code files and provide the fix."),
             ("⚡ Summarize", "Provide a high-signal executive summary of the attached content."),
-            ("📝 Read Text", "Extract all key text, commands, or code from the attached pages."),
+            ("🔄 Compare", "Compare the information across all attached pages, highlighting differences or relationships."),
+            ("📝 Text", "Extract all key text, commands, or code from the attached pages."),
         ]
 
         for label_text, prompt_text in quick_prompts:
