@@ -3158,10 +3158,7 @@ class LexiWindow(Adw.ApplicationWindow):
             self.set_focus(self.entry)
             GLib.idle_add(lambda: (self.entry.grab_focus(), GLib.SOURCE_REMOVE)[1])
 
-            # Release hold if active from application startup
-            if hasattr(self.app, 'has_startup_hold') and self.app.has_startup_hold:
-                self.app.has_startup_hold = False
-                self.app.release()
+            pass
 
         portal.take_screenshot(None, flags, None, on_done, None)
         return GLib.SOURCE_REMOVE
@@ -3526,10 +3523,10 @@ class LexiApp(Adw.Application):
         )
         self.config = config
         self.active_window = None
-        self.has_startup_hold = False
 
     def do_startup(self):
         Adw.Application.do_startup(self)
+        self.hold()  # Keep primary companion daemon permanently alive
         self.load_css()
 
     def load_css(self):
@@ -3547,23 +3544,31 @@ class LexiApp(Adw.Application):
     def do_activate(self):
         if self.active_window and hasattr(self.active_window, 'captured_pages'):
             win = self.active_window
-            if win.get_visible() and win.is_active():
+            if win.get_visible():
                 win.collapse_to_notch()
             else:
                 win.expand_from_notch()
         else:
-            self.hold()
-            self.has_startup_hold = True
             win = LexiWindow(self, self.config, is_snip=False)
             self.active_window = win
             win.set_visible(False)
             GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=False, append_mode=False))
 
     def do_command_line(self, command_line):
+        def finish_cmd(code=0):
+            try:
+                if hasattr(command_line, 'set_exit_status'):
+                    command_line.set_exit_status(code)
+                if hasattr(command_line, 'done'):
+                    command_line.done()
+            except Exception:
+                pass
+            return code
+
         args = command_line.get_arguments()
         if '--help' in args or '-h' in args:
             print("Lexi Copilot - Cosmic Screen Companion\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip                 Interactive region snip\n  -i, --island, -n, --notch  Dock as Apple Dynamic Island at top of screen\n  -p, --pet                  Launch as floating Desktop Pet\n  -f, --feed <file>          Feed a file to Lexi\n  -h, --help                 Show this help message")
-            return 0
+            return finish_cmd(0)
 
         is_snip = ('--snip' in args) or ('-s' in args)
         is_notch = ('--notch' in args) or ('-n' in args) or ('--island' in args) or ('-i' in args)
@@ -3581,7 +3586,7 @@ class LexiApp(Adw.Application):
         if feed_file:
             if self.active_window and hasattr(self.active_window, 'feed_file'):
                 self.active_window.feed_file(feed_file)
-                return 0
+                return finish_cmd(0)
 
         if self.active_window and hasattr(self.active_window, 'captured_pages'):
             win = self.active_window
@@ -3605,9 +3610,6 @@ class LexiApp(Adw.Application):
                 else:
                     win.expand_from_notch()
         else:
-            # First launch: keep hold until window reveals
-            self.hold()
-            self.has_startup_hold = True
             win = LexiWindow(self, self.config, is_snip=is_snip)
             self.active_window = win
             win.set_visible(False)
@@ -3624,7 +3626,7 @@ class LexiApp(Adw.Application):
             else:
                 GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=False))
 
-        return 0
+        return finish_cmd(0)
 
 
 # Backwards compatibility aliases
