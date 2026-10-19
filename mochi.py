@@ -48,6 +48,7 @@ except Exception:
 from gi.repository import Gtk, Adw, GLib, Gdk, Pango, Xdp, Gio, GObject
 
 from PIL import Image
+import converter
 
 APP_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
@@ -1905,6 +1906,388 @@ class LexiMascotWidget(Gtk.DrawingArea):
             cr.restore()
 
 
+class LexiRadialDonutWindow(Gtk.Window):
+    """
+    Filee Radial Donut Menu:
+    Transparent, topmost floating circular donut window that opens at cursor.
+    Features:
+      - Clean Cairo segmented ring geometry with adaptive presets per file
+      - Hovered slice pops out with neon glowing accent border
+      - Instant offline background conversion upon click or file drop
+      - Animated spinning stardust progress ring during conversion
+      - Center hub displays Lexi's mascot face and status
+      - Closes on Escape or click outside
+    """
+    def __init__(self, file_path=None, on_converted_cb=None, spawn_pos=None):
+        super().__init__(title="Filee Radial Donut")
+        self.set_decorated(False)
+        self.set_resizable(False)
+        self.set_default_size(340, 340)
+        self.add_css_class('lexi-donut-win')
+
+        self.file_path = file_path
+        self.on_converted_cb = on_converted_cb
+        self.spawn_pos = spawn_pos
+        self.presets = []
+        if file_path:
+            self.presets = converter.get_presets_for_file(file_path)
+        if not self.presets:
+            self.presets = [
+                {"id": "webp", "label": "WEBP", "desc": "Web-optimized image", "ext": "webp"},
+                {"id": "png", "label": "PNG", "desc": "Lossless crisp image", "ext": "png"},
+                {"id": "jpg", "label": "JPG", "desc": "Standard photo 90%", "ext": "jpg"},
+                {"id": "pdf", "label": "PDF", "desc": "Clean formatted PDF", "ext": "pdf"},
+                {"id": "docx", "label": "DOCX", "desc": "Editable Word document", "ext": "docx"},
+                {"id": "zip", "label": "ZIP", "desc": "Compressed archive", "ext": "zip"},
+            ]
+
+        self.hovered_idx = -1
+        self.is_converting = False
+        self.anim_phase = 0.0
+        self.convert_status = ""
+        self.convert_result = None
+        self.anim_timer_id = None
+
+        self.darea = Gtk.DrawingArea()
+        self.darea.set_content_width(340)
+        self.darea.set_content_height(340)
+        self.darea.set_draw_func(self.on_draw)
+        self.set_child(self.darea)
+
+        # Motion controller
+        motion = Gtk.EventControllerMotion()
+        motion.connect('motion', self.on_mouse_motion)
+        motion.connect('leave', self.on_mouse_leave)
+        self.darea.add_controller(motion)
+
+        # Click controller
+        click = Gtk.GestureClick()
+        click.connect('pressed', self.on_clicked)
+        self.darea.add_controller(click)
+
+        # Drop target
+        drop_target = Gtk.DropTarget(actions=Gdk.DragAction.COPY)
+        drop_target.set_gtypes([Gdk.FileList, Gio.File, str])
+        drop_target.set_preload(True)
+        drop_target.connect('enter', self.on_drag_enter)
+        drop_target.connect('drop', self.on_drag_drop)
+        self.darea.add_controller(drop_target)
+
+        # Key controller (Esc to close)
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.connect('key-pressed', self.on_key_pressed)
+        self.add_controller(key_ctrl)
+
+        self.connect('realize', self.on_realize)
+
+    def on_realize(self, _):
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            try:
+                xid = surface.get_xid()
+                X11Helper.get().make_always_on_top_and_sticky(xid)
+                if hasattr(surface, 'move_to_desktop'):
+                    surface.move_to_desktop(0xFFFFFFFF)
+            except Exception:
+                pass
+        GLib.timeout_add(20, self.position_at_cursor)
+
+    def position_at_cursor(self):
+        if self.spawn_pos:
+            mx, my = self.spawn_pos
+        else:
+            pt = X11Helper.get().get_pointer()
+            if not pt:
+                pt = (960, 540)
+            mx, my = pt
+        x = max(20, min(1920 - 360, mx - 170))
+        y = max(40, min(1080 - 360, my - 170))
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            X11Helper.get().move_window(surface.get_xid(), int(x), int(y))
+        return GLib.SOURCE_REMOVE
+
+    def on_key_pressed(self, ctrl, keyval, keycode, state):
+        if keyval == Gdk.KEY_Escape:
+            self.close_donut()
+            return True
+        return False
+
+    def on_mouse_leave(self, ctrl):
+        if not self.is_converting and self.hovered_idx != -1:
+            self.hovered_idx = -1
+            self.darea.queue_draw()
+
+    def on_mouse_motion(self, ctrl, x, y):
+        if self.is_converting:
+            return
+        cx, cy = 170.0, 170.0
+        dx = x - cx
+        dy = y - cy
+        dist = math.hypot(dx, dy)
+        n = len(self.presets)
+        new_hover = -1
+        if dist < 62.0:
+            new_hover = -2  # center hole
+        elif 68.0 <= dist <= 148.0 and n > 0:
+            angle = math.atan2(dy, dx) + math.pi / 2
+            if angle < 0:
+                angle += 2 * math.pi
+            span = 2 * math.pi / n
+            new_hover = int(math.floor(angle / span)) % n
+
+        if new_hover != self.hovered_idx:
+            self.hovered_idx = new_hover
+            self.darea.queue_draw()
+
+    def on_clicked(self, gesture, n_press, x, y):
+        if self.is_converting:
+            return
+        if self.hovered_idx >= 0 and self.hovered_idx < len(self.presets):
+            pr = self.presets[self.hovered_idx]
+            if self.file_path:
+                self.start_conversion(self.file_path, pr)
+        elif self.hovered_idx == -2:
+            if self.convert_result and self.convert_result.get("output_path"):
+                out_p = self.convert_result["output_path"]
+                folder = out_p if os.path.isdir(out_p) else os.path.dirname(out_p)
+                subprocess.Popen(['xdg-open', folder])
+                self.close_donut()
+            elif self.file_path:
+                self.close_donut()
+        else:
+            self.close_donut()
+
+    def on_drag_enter(self, target, x, y):
+        return Gdk.DragAction.COPY
+
+    def on_drag_drop(self, target, value, x, y):
+        paths = []
+        if value is not None:
+            if hasattr(value, 'get_files'):
+                for gf in value.get_files():
+                    p = gf.get_path()
+                    if p and os.path.exists(p):
+                        paths.append(p)
+            elif isinstance(value, Gio.File):
+                p = value.get_path()
+                if p and os.path.exists(p):
+                    paths.append(p)
+            elif isinstance(value, str):
+                for line in value.strip().splitlines():
+                    p = line.strip().replace('file://', '')
+                    if os.path.exists(p):
+                        paths.append(p)
+        if paths:
+            self.file_path = paths[0]
+            self.presets = converter.get_presets_for_file(self.file_path)
+            cx, cy = 170.0, 170.0
+            dx = x - cx
+            dy = y - cy
+            dist = math.hypot(dx, dy)
+            n = len(self.presets)
+            if 68.0 <= dist <= 148.0 and n > 0:
+                angle = math.atan2(dy, dx) + math.pi / 2
+                if angle < 0:
+                    angle += 2 * math.pi
+                span = 2 * math.pi / n
+                idx = int(math.floor(angle / span)) % n
+                self.start_conversion(self.file_path, self.presets[idx])
+            else:
+                self.darea.queue_draw()
+            return True
+        return False
+
+    def start_conversion(self, file_path, preset):
+        self.is_converting = True
+        self.convert_status = f"Converting to {preset['label']}..."
+        if not self.anim_timer_id:
+            self.anim_timer_id = GLib.timeout_add(33, self._anim_tick)
+        self.darea.queue_draw()
+
+        def done(res):
+            GLib.idle_add(self._on_convert_done, res)
+
+        converter.async_convert(file_path, preset['ext'], preset.get('option'), on_complete=done)
+
+    def _anim_tick(self):
+        if not self.is_converting:
+            self.anim_timer_id = None
+            return GLib.SOURCE_REMOVE
+        self.anim_phase += 0.15
+        self.darea.queue_draw()
+        return GLib.SOURCE_CONTINUE
+
+    def _on_convert_done(self, res):
+        self.is_converting = False
+        self.convert_result = res
+        if res["success"]:
+            self.convert_status = f"Saved {res.get('summary', '')}"
+            if self.on_converted_cb:
+                self.on_converted_cb(res)
+            GLib.timeout_add(2000, self.close_donut)
+        else:
+            self.convert_status = f"{res.get('error', 'Error')[:20]}"
+            GLib.timeout_add(2500, self.close_donut)
+        self.darea.queue_draw()
+        return GLib.SOURCE_REMOVE
+
+    def close_donut(self):
+        if self.anim_timer_id:
+            GLib.source_remove(self.anim_timer_id)
+            self.anim_timer_id = None
+        self.destroy()
+
+    def on_draw(self, area, cr, width, height):
+        cx, cy = 170.0, 170.0
+        r_in = 70.0
+        r_out = 140.0
+        r_center = 62.0
+
+        n = len(self.presets)
+        span = 2 * math.pi / max(1, n)
+        gap = 0.035
+
+        # 1. Subtle Outer Ambient Glow
+        cr.save()
+        cr.arc(cx, cy, r_out + 18, 0, 2 * math.pi)
+        pat = cairo.RadialGradient(cx, cy, r_in, cx, cy, r_out + 18)
+        pat.add_color_stop_rgba(0.0, 0.45, 0.22, 0.85, 0.20)
+        pat.add_color_stop_rgba(1.0, 0.0, 0.0, 0.0, 0.0)
+        cr.set_source(pat)
+        cr.fill()
+        cr.restore()
+
+        # 2. Draw Sectors
+        for i, p in enumerate(self.presets):
+            start_a = i * span - math.pi / 2 + gap
+            end_a = (i + 1) * span - math.pi / 2 - gap
+            mid_a = (start_a + end_a) / 2.0
+
+            is_hov = (i == self.hovered_idx)
+            cur_rout = r_out + (8.0 if is_hov else 0.0)
+            cur_rin = r_in - (2.0 if is_hov else 0.0)
+
+            cr.new_path()
+            cr.arc(cx, cy, cur_rout, start_a, end_a)
+            cr.arc_negative(cx, cy, cur_rin, end_a, start_a)
+            cr.close_path()
+
+            if is_hov:
+                grad = cairo.RadialGradient(cx, cy, cur_rin, cx, cy, cur_rout)
+                grad.add_color_stop_rgba(0.0, 0.28, 0.14, 0.45, 0.98)
+                grad.add_color_stop_rgba(1.0, 0.50, 0.22, 0.78, 0.98)
+                cr.set_source(grad)
+                cr.fill_preserve()
+                cr.set_source_rgba(0.85, 0.60, 1.0, 0.95)
+                cr.set_line_width(2.0)
+                cr.stroke()
+            else:
+                cr.set_source_rgba(0.08, 0.06, 0.14, 0.94)
+                cr.fill_preserve()
+                cr.set_source_rgba(0.40, 0.35, 0.55, 0.40)
+                cr.set_line_width(1.2)
+                cr.stroke()
+
+            # Label
+            cr.new_path()
+            label_r = (cur_rin + cur_rout) / 2.0
+            tx = cx + label_r * math.cos(mid_a)
+            ty = cy + label_r * math.sin(mid_a)
+
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+            cr.set_font_size(13.0 if is_hov else 11.5)
+            ext = cr.text_extents(p["label"])
+            cr.move_to(tx - ext.width / 2 - ext.x_bearing, ty - ext.height / 2 - ext.y_bearing)
+            if is_hov:
+                cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
+            else:
+                cr.set_source_rgba(0.88, 0.85, 0.95, 0.85)
+            cr.show_text(p["label"])
+
+        # 3. Rotating Stardust Progress Arc if converting
+        if self.is_converting:
+            cr.new_path()
+            arc_start = self.anim_phase
+            arc_end = arc_start + 1.2
+            cr.arc(cx, cy, r_out + 12, arc_start, arc_end)
+            cr.set_source_rgba(0.9, 0.6, 1.0, 0.95)
+            cr.set_line_width(3.5)
+            cr.stroke()
+
+        # 4. Center Hub
+        cr.new_path()
+        cr.arc(cx, cy, r_center, 0, 2 * math.pi)
+        cr.set_source_rgba(0.04, 0.03, 0.08, 0.98)
+        cr.fill_preserve()
+        cr.set_source_rgba(0.58, 0.35, 0.95, 0.6)
+        cr.set_line_width(1.5)
+        cr.stroke()
+
+        # Center Text Content
+        cr.new_path()
+        cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+
+        if self.is_converting:
+            cr.set_font_size(12.0)
+            ext = cr.text_extents("Converting...")
+            cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy - 8 - ext.y_bearing)
+            cr.set_source_rgba(0.9, 0.6, 1.0, 1.0)
+            cr.show_text("Converting...")
+
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(9.5)
+            ext2 = cr.text_extents(self.convert_status[:18])
+            cr.move_to(cx - ext2.width / 2 - ext2.x_bearing, cy + 12 - ext2.y_bearing)
+            cr.set_source_rgba(0.7, 0.7, 0.8, 0.9)
+            cr.show_text(self.convert_status[:18])
+
+        elif self.convert_result:
+            cr.set_font_size(12.0)
+            ext = cr.text_extents("Done!")
+            cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy - 8 - ext.y_bearing)
+            cr.set_source_rgba(0.4, 0.9, 0.6, 1.0)
+            cr.show_text("Done!")
+
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(8.5)
+            ext2 = cr.text_extents("Click to Open")
+            cr.move_to(cx - ext2.width / 2 - ext2.x_bearing, cy + 12 - ext2.y_bearing)
+            cr.set_source_rgba(0.8, 0.8, 0.9, 0.9)
+            cr.show_text("Click to Open")
+
+        elif self.hovered_idx >= 0 and self.hovered_idx < len(self.presets):
+            pr = self.presets[self.hovered_idx]
+            cr.set_font_size(13.0)
+            ext = cr.text_extents(pr['label'])
+            cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy - 8 - ext.y_bearing)
+            cr.set_source_rgba(0.9, 0.6, 1.0, 1.0)
+            cr.show_text(pr['label'])
+
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(8.5)
+            desc_text = pr.get('desc', '')[:19]
+            ext2 = cr.text_extents(desc_text)
+            cr.move_to(cx - ext2.width / 2 - ext2.x_bearing, cy + 12 - ext2.y_bearing)
+            cr.set_source_rgba(0.7, 0.7, 0.8, 0.9)
+            cr.show_text(desc_text)
+
+        else:
+            fname = Path(self.file_path).name[:12] if self.file_path else "Drop File"
+            cr.set_font_size(12.0)
+            ext = cr.text_extents("Filee Donut")
+            cr.move_to(cx - ext.width / 2 - ext.x_bearing, cy - 8 - ext.y_bearing)
+            cr.set_source_rgba(0.9, 0.7, 1.0, 1.0)
+            cr.show_text("Filee Donut")
+
+            cr.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
+            cr.set_font_size(9.0)
+            ext2 = cr.text_extents(fname)
+            cr.move_to(cx - ext2.width / 2 - ext2.x_bearing, cy + 12 - ext2.y_bearing)
+            cr.set_source_rgba(0.65, 0.65, 0.75, 0.9)
+            cr.show_text(fname)
+
+
 class LexiDynamicIslandWindow(Gtk.Window):
     """
     Apple Dynamic Island (Liquid Morphing Pill):
@@ -1913,17 +2296,21 @@ class LexiDynamicIslandWindow(Gtk.Window):
       1. Compact Resting Pill: Mini Lexi mascot, dynamic live status, glowing pulse dot.
       2. Expanded Action Island (on hover): Smoothly slides open quick chips:
          [💬 Copilot] [✂️ Snip] [🐾 Detach Pet]
-      3. Drop-to-Feed Target: When files are dragged over, island expands into a glowing
-         feeding portal.
-      4. Expands into full Copilot Card on click.
+      3. Drop-to-Convert Filee Bar: Dropping a file opens instant offline format chips:
+         [📄 photo.png] [WEBP] [JPG] [PDF] [🍩 Donut] [💬 Ask AI] [✕]
+      4. Conversion Status & Completion: Live animated feedback with savings % and [📂 Open] button.
     """
     def __init__(self, copilot_win):
         super().__init__(title="Lexi Dynamic Island")
         self.copilot_win = copilot_win
         self.set_decorated(False)
         self.set_resizable(False)
-        self.set_default_size(520, 48)
+        self.set_default_size(680, 52)
         self.add_css_class('lexi-island-win')
+
+        self.current_mode = "compact"  # "compact", "actions", "convert"
+        self.active_file_paths = []
+        self.dismiss_timer_id = None
 
         # Outer centering container
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -1978,6 +2365,17 @@ class LexiDynamicIslandWindow(Gtk.Window):
         actions_box.append(make_btn("✂️ Snip", "island-btn-secondary", "Interactive region snip", self.on_trigger_snip))
         actions_box.append(make_btn("🐾 Pet", "island-btn-secondary", "Detach Lexi to roam desktop", self.on_detach_pet))
 
+        # Filee Converter Revealer (morphs open on file drop)
+        self.convert_revealer = Gtk.Revealer()
+        self.convert_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_LEFT)
+        self.convert_revealer.set_transition_duration(220)
+        self.convert_revealer.set_reveal_child(False)
+        self.pill.append(self.convert_revealer)
+
+        self.convert_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.convert_box.set_valign(Gtk.Align.CENTER)
+        self.convert_revealer.set_child(self.convert_box)
+
         # Mouse hover motion: smooth morphing expansion
         motion = Gtk.EventControllerMotion()
         motion.connect('enter', self.on_hover_enter)
@@ -2000,37 +2398,45 @@ class LexiDynamicIslandWindow(Gtk.Window):
 
         self.connect('realize', self.on_realize)
 
-    def update_input_region(self, expanded=False):
+    def update_input_region(self, mode="compact"):
         surface = self.get_surface()
         if not surface:
             return
         try:
-            if expanded:
-                rect = cairo.RectangleInt(40, 2, 440, 44)
+            if mode == "convert":
+                rect = cairo.RectangleInt(40, 2, 600, 48)
+            elif mode == "actions":
+                rect = cairo.RectangleInt(150, 2, 380, 48)
             else:
-                rect = cairo.RectangleInt(190, 2, 140, 44)
+                rect = cairo.RectangleInt(275, 2, 130, 48)
             region = cairo.Region(rect)
             surface.set_input_region(region)
         except Exception:
             pass
 
     def on_hover_enter(self, *args):
+        if self.current_mode == "convert":
+            return
         surface = self.get_surface()
         if surface and hasattr(surface, 'get_xid'):
             try:
                 X11Helper.get().raise_window(surface.get_xid())
             except Exception:
                 pass
-        self.update_input_region(expanded=True)
+        self.update_input_region(mode="actions")
         self.pill.add_css_class('dynamic-island-expanded')
         self.actions_revealer.set_reveal_child(True)
 
     def on_hover_leave(self, *args):
+        if self.current_mode == "convert":
+            return
         self.pill.remove_css_class('dynamic-island-expanded')
         self.actions_revealer.set_reveal_child(False)
-        GLib.timeout_add(220, lambda: self.update_input_region(expanded=False))
+        GLib.timeout_add(220, lambda: self.update_input_region(mode="compact"))
 
     def on_island_click(self, gesture, n_press, x, y):
+        if self.current_mode == "convert":
+            return
         self.on_expand_copilot()
 
     def on_expand_copilot(self):
@@ -2068,7 +2474,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 display = Gdk.Display.get_default()
                 if display and display.get_monitors():
                     screen_w = display.get_monitors().get_item(0).get_geometry().width
-                pos_x = (screen_w - 520) // 2
+                pos_x = (screen_w - 680) // 2
                 X11Helper.get().move_window(xid, pos_x, 34)
                 X11Helper.get().make_always_on_top_and_sticky(xid)
                 if hasattr(surface, 'move_to_desktop'):
@@ -2079,7 +2485,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
                     surface.set_skip_pager_hint(True)
             except Exception:
                 pass
-        self.update_input_region(expanded=False)
+        self.update_input_region(mode="compact")
         if not getattr(self, 'watchdog_id', None):
             self.watchdog_id = GLib.timeout_add_seconds(2, self._watchdog_keep_on_top)
         return GLib.SOURCE_REMOVE
@@ -2103,16 +2509,179 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.pulse_dot.set_visible(False)
 
     def on_drag_enter(self, target, x, y):
-        self.update_input_region(expanded=True)
+        self.update_input_region(mode="convert")
         self.pill.add_css_class('dynamic-island-feeding')
-        self.status_label.set_text("😋 Feed to Lexi!")
+        self.status_label.set_text("😋 Feed / Convert!")
         self.actions_revealer.set_reveal_child(False)
         return Gdk.DragAction.COPY
 
     def on_drag_leave(self, target):
         self.pill.remove_css_class('dynamic-island-feeding')
-        self.status_label.set_text("✨ Lexi")
-        self.update_input_region(expanded=False)
+        if self.current_mode != "convert":
+            self.status_label.set_text("✨ Lexi")
+            self.update_input_region(mode="compact")
+
+    def show_converter_bar(self, paths):
+        if not paths:
+            return
+        self.active_file_paths = paths
+        p = paths[0]
+        fname = os.path.basename(p)
+        try:
+            sz_bytes = os.path.getsize(p)
+            sz_str = converter.format_size(sz_bytes)
+        except Exception:
+            sz_str = ""
+
+        if self.dismiss_timer_id:
+            GLib.source_remove(self.dismiss_timer_id)
+            self.dismiss_timer_id = None
+
+        while child := self.convert_box.get_first_child():
+            self.convert_box.remove(child)
+
+        # 1. File Chip
+        short_name = (fname[:14] + '…') if len(fname) > 15 else fname
+        chip_label = f"📄 {short_name} ({sz_str})" if sz_str else f"📄 {short_name}"
+        chip = Gtk.Label(label=chip_label)
+        chip.add_css_class('island-file-chip')
+        chip.set_tooltip_text(fname)
+        self.convert_box.append(chip)
+
+        # 2. Preset Buttons
+        presets = converter.get_presets_for_file(p)
+        for preset in presets[:3]:
+            btn = Gtk.Button(label=preset['label'])
+            btn.set_focusable(False)
+            btn.add_css_class('island-convert-btn')
+            btn.set_tooltip_text(preset.get('desc', f"Convert to {preset['label']}"))
+            btn.connect('clicked', lambda _, pr=preset, fp=p: self.on_execute_convert(fp, pr))
+            self.convert_box.append(btn)
+
+        # 3. Donut radial button
+        donut_btn = Gtk.Button(label="🍩 Donut")
+        donut_btn.set_focusable(False)
+        donut_btn.add_css_class('island-convert-btn')
+        donut_btn.add_css_class('island-convert-special')
+        donut_btn.set_tooltip_text("Open circular radial donut converter menu at cursor")
+        donut_btn.connect('clicked', lambda *_: self.on_open_donut_from_island(p))
+        self.convert_box.append(donut_btn)
+
+        # 4. Ask AI button
+        ai_btn = Gtk.Button(label="💬 Ask AI")
+        ai_btn.set_focusable(False)
+        ai_btn.add_css_class('island-convert-btn')
+        ai_btn.set_tooltip_text("Feed file to Lexi Copilot chat")
+        ai_btn.connect('clicked', lambda *_: self.on_feed_to_copilot_from_island(paths))
+        self.convert_box.append(ai_btn)
+
+        # 5. Dismiss [✕]
+        close_btn = Gtk.Button(label="✕")
+        close_btn.set_focusable(False)
+        close_btn.add_css_class('island-action-btn')
+        close_btn.add_css_class('island-btn-close')
+        close_btn.set_tooltip_text("Dismiss converter")
+        close_btn.connect('clicked', lambda *_: self.hide_converter_bar())
+        self.convert_box.append(close_btn)
+
+        self.current_mode = "convert"
+        self.actions_revealer.set_reveal_child(False)
+        self.status_box.set_visible(False)
+        self.convert_revealer.set_reveal_child(True)
+        self.pill.add_css_class('dynamic-island-expanded')
+        self.pill.add_css_class('dynamic-island-convert')
+        self.update_input_region(mode="convert")
+        self.mini_mascot.set_mood("happy")
+
+        self.dismiss_timer_id = GLib.timeout_add_seconds(18, self.hide_converter_bar)
+
+    def on_execute_convert(self, file_path, preset):
+        if self.dismiss_timer_id:
+            GLib.source_remove(self.dismiss_timer_id)
+            self.dismiss_timer_id = None
+
+        while child := self.convert_box.get_first_child():
+            self.convert_box.remove(child)
+
+        lbl = Gtk.Label(label=f"⏳ Converting to {preset['label']}...")
+        lbl.add_css_class('dynamic-island-label')
+        self.convert_box.append(lbl)
+        self.mini_mascot.set_mood("working")
+
+        def on_done(res):
+            GLib.idle_add(self._on_island_convert_finished, res)
+
+        converter.async_convert(file_path, preset['ext'], preset.get('option'), on_complete=on_done)
+
+    def _on_island_convert_finished(self, res):
+        while child := self.convert_box.get_first_child():
+            self.convert_box.remove(child)
+
+        if res.get("success"):
+            self.mini_mascot.set_mood("star_eyes")
+            saved_str = res.get('summary', 'Done!')
+            lbl = Gtk.Label(label=f"✨ {saved_str}")
+            lbl.add_css_class('dynamic-island-label')
+            self.convert_box.append(lbl)
+
+            out_p = res.get("output_path")
+            if out_p and os.path.exists(out_p):
+                open_btn = Gtk.Button(label="📂 Open")
+                open_btn.set_focusable(False)
+                open_btn.add_css_class('island-convert-btn')
+                open_btn.add_css_class('island-convert-special')
+                open_btn.set_tooltip_text(f"Show {os.path.basename(out_p)} in file manager")
+                folder = out_p if os.path.isdir(out_p) else os.path.dirname(out_p)
+                open_btn.connect('clicked', lambda *_: subprocess.Popen(['xdg-open', folder]))
+                self.convert_box.append(open_btn)
+
+            close_btn = Gtk.Button(label="✕")
+            close_btn.set_focusable(False)
+            close_btn.add_css_class('island-action-btn')
+            close_btn.connect('clicked', lambda *_: self.hide_converter_bar())
+            self.convert_box.append(close_btn)
+
+            self.dismiss_timer_id = GLib.timeout_add_seconds(6, self.hide_converter_bar)
+        else:
+            self.mini_mascot.set_mood("dizzy")
+            err_msg = res.get('error', 'Failed')[:28]
+            lbl = Gtk.Label(label=f"⚠️ {err_msg}")
+            lbl.add_css_class('dynamic-island-label')
+            self.convert_box.append(lbl)
+
+            close_btn = Gtk.Button(label="✕")
+            close_btn.set_focusable(False)
+            close_btn.add_css_class('island-action-btn')
+            close_btn.connect('clicked', lambda *_: self.hide_converter_bar())
+            self.convert_box.append(close_btn)
+
+            self.dismiss_timer_id = GLib.timeout_add_seconds(4, self.hide_converter_bar)
+        return GLib.SOURCE_REMOVE
+
+    def hide_converter_bar(self):
+        if self.dismiss_timer_id:
+            GLib.source_remove(self.dismiss_timer_id)
+            self.dismiss_timer_id = None
+        self.current_mode = "compact"
+        self.convert_revealer.set_reveal_child(False)
+        self.pill.remove_css_class('dynamic-island-convert')
+        self.pill.remove_css_class('dynamic-island-expanded')
+        self.status_box.set_visible(True)
+        self.mini_mascot.set_mood("happy")
+        self.update_input_region(mode="compact")
+        return GLib.SOURCE_REMOVE
+
+    def on_open_donut_from_island(self, file_path):
+        self.hide_converter_bar()
+        donut = LexiRadialDonutWindow(file_path=file_path)
+        donut.present()
+
+    def on_feed_to_copilot_from_island(self, paths):
+        self.hide_converter_bar()
+        if paths and self.copilot_win:
+            for p in paths:
+                self.copilot_win.feed_file(p)
+            self.on_expand_copilot()
 
     def on_drag_drop(self, target, value, x, y):
         self.pill.remove_css_class('dynamic-island-feeding')
@@ -2133,11 +2702,16 @@ class LexiDynamicIslandWindow(Gtk.Window):
                     p = line.strip().replace('file://', '')
                     if os.path.exists(p):
                         paths.append(p)
-        if paths and self.copilot_win:
-            for p in paths:
-                self.copilot_win.feed_file(p)
-            self.on_expand_copilot()
-            return True
+        if paths:
+            presets = converter.get_presets_for_file(paths[0])
+            if presets:
+                self.show_converter_bar(paths)
+                return True
+            elif self.copilot_win:
+                for p in paths:
+                    self.copilot_win.feed_file(p)
+                self.on_expand_copilot()
+                return True
         return False
 
 # Backwards compatibility alias
@@ -2373,11 +2947,20 @@ class LexiPetWindow(Gtk.Window):
                     p = line.strip().replace('file://', '')
                     if os.path.exists(p):
                         paths.append(p)
-        if paths and self.copilot_win:
-            for p in paths:
-                self.copilot_win.feed_file(p)
-            self.dock_back()
-            return True
+        if paths:
+            presets = converter.get_presets_for_file(paths[0])
+            if presets:
+                self.mascot.set_mood("star_eyes")
+                donut_x = int(self.pet_x + 80)
+                donut_y = int(self.pet_y + 80)
+                donut = LexiRadialDonutWindow(file_path=paths[0], spawn_pos=(donut_x, donut_y))
+                donut.present()
+                return True
+            elif self.copilot_win:
+                for p in paths:
+                    self.copilot_win.feed_file(p)
+                self.dock_back()
+                return True
         return False
 
 
@@ -3763,7 +4346,42 @@ class LexiApp(Adw.Application):
 
         args = command_line.get_arguments()
         if '--help' in args or '-h' in args:
-            print("Lexi Copilot - Cosmic Screen Companion\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip                 Interactive region snip\n  -i, --island, -n, --notch  Dock as Apple Dynamic Island at top of screen\n  -p, --pet                  Launch as floating Desktop Pet\n  -f, --feed <file>          Feed a file to Lexi\n  -h, --help                 Show this help message")
+            print("Lexi Copilot - Cosmic Screen Companion & Filee Converter\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip                 Interactive region snip\n  -i, --island, -n, --notch  Dock as Apple Dynamic Island at top of screen\n  -p, --pet                  Launch as floating Desktop Pet\n  -d, --donut [file]         Open circular Filee Donut converter at cursor\n  -f, --feed <file>          Feed a file to Lexi Copilot\n  --convert <file> --to <fmt> Convert file offline\n  -h, --help                 Show this help message")
+            return finish_cmd(0)
+
+        if '--convert' in args:
+            try:
+                idx = args.index('--convert')
+                if idx < len(args) - 1:
+                    in_f = args[idx + 1]
+                    to_fmt = "webp"
+                    if '--to' in args:
+                        to_idx = args.index('--to')
+                        if to_idx < len(args) - 1:
+                            to_fmt = args[to_idx + 1]
+                    res = converter.convert_file(in_f, to_fmt)
+                    if res.get('success'):
+                        print(f"✨ Converted: {res['output_path']} ({res.get('summary', '')})")
+                        return finish_cmd(0)
+                    else:
+                        print(f"❌ Failed: {res.get('error')}")
+                        return finish_cmd(1)
+            except Exception as e:
+                print(f"❌ Error: {e}")
+                return finish_cmd(1)
+
+        is_donut = ('--donut' in args) or ('-d' in args)
+        if is_donut:
+            target_f = None
+            for i, a in enumerate(args[1:], 1):
+                if a in ('--donut', '-d') and i < len(args) - 1 and not args[i + 1].startswith('-'):
+                    target_f = args[i + 1]
+                    break
+                elif not a.startswith('-') and os.path.exists(a):
+                    target_f = a
+                    break
+            donut = LexiRadialDonutWindow(file_path=target_f)
+            donut.present()
             return finish_cmd(0)
 
         is_snip = ('--snip' in args) or ('-s' in args)
