@@ -466,7 +466,7 @@ class LexiMascotWidget(Gtk.DrawingArea):
 
         # Periodic timers for blinking and frame updates
         self.blink_timer = GLib.timeout_add(3800, self.trigger_blink)
-        self.anim_timer = GLib.timeout_add(30, self.on_anim_frame)
+        self.anim_timer = GLib.timeout_add(30, self.on_anim_frame) if not self.is_mini else None
 
     def spawn_particle(self, x, y, ptype='star', count=1, color=None):
         for _ in range(count):
@@ -562,6 +562,20 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.target_look_y = max(-1.0, min(1.0, ly))
 
     def on_anim_frame(self):
+        if not self.get_mapped():
+            return GLib.SOURCE_CONTINUE
+
+        if getattr(self, 'is_mini', False):
+            # In resting Dynamic Island, sleep completely unless blinking or reacting
+            needs_anim = (
+                self.is_blinking or
+                abs(self.target_ear_wiggle - self.ear_wiggle) > 0.01 or
+                abs(self.squish_x - 1.0) > 0.01 or
+                bool(self.particles)
+            )
+            if not needs_anim:
+                return GLib.SOURCE_CONTINUE
+
         diff_x = self.target_look_x - self.look_x
         diff_y = self.target_look_y - self.look_y
         self.look_x += diff_x * 0.22
@@ -2034,8 +2048,8 @@ class LexiPetWindow(Gtk.Window):
         drop_target.connect('drop', self.on_drag_drop)
         self.add_controller(drop_target)
 
-        # Screen-wide autonomous roaming loop (30 fps / 33 ms)
-        GLib.timeout_add(33, self.roam_tick)
+        # Screen-wide autonomous roaming loop (active only when detached)
+        self.roam_timer_id = None
 
         self.connect('realize', self.on_realize)
 
@@ -2043,6 +2057,8 @@ class LexiPetWindow(Gtk.Window):
         GLib.timeout_add(50, self.position_on_desktop)
 
     def position_on_desktop(self):
+        if not self.roam_timer_id:
+            self.roam_timer_id = GLib.timeout_add(33, self.roam_tick)
         surface = self.get_surface()
         if surface and hasattr(surface, 'get_xid'):
             try:
@@ -2055,7 +2071,7 @@ class LexiPetWindow(Gtk.Window):
         return GLib.SOURCE_REMOVE
 
     def roam_tick(self):
-        if not self.get_visible() or not self.mascot:
+        if not self.get_mapped() or not self.get_visible() or not self.mascot:
             return GLib.SOURCE_CONTINUE
         if self.is_dragging:
             return GLib.SOURCE_CONTINUE
@@ -2163,6 +2179,9 @@ class LexiPetWindow(Gtk.Window):
             self.dock_back()
 
     def dock_back(self):
+        if self.roam_timer_id:
+            GLib.source_remove(self.roam_timer_id)
+            self.roam_timer_id = None
         self.set_visible(False)
         if self.copilot_win:
             self.copilot_win.collapse_to_notch()
@@ -2272,8 +2291,8 @@ class LexiWindow(Adw.ApplicationWindow):
         # Connect close request to clean up app reference
         self.connect('close-request', self.on_close_request)
 
-        # Screen-wide pointer polling (when outside window)
-        GLib.timeout_add(40, self.poll_screen_mouse)
+        # Screen-wide pointer polling (active only when full window is visible)
+        self.mouse_poll_id = None
 
         # Automatically reveal child if unminimized or activated
         def on_active_notify(win, _):
@@ -2304,7 +2323,7 @@ class LexiWindow(Adw.ApplicationWindow):
             self.mascot.set_gaze(dx, dy)
 
     def poll_screen_mouse(self):
-        if not self.get_visible() or not hasattr(self, 'mascot') or not self.mascot:
+        if not self.get_mapped() or not self.get_visible() or not hasattr(self, 'mascot') or not self.mascot:
             return GLib.SOURCE_CONTINUE
         try:
             pt = X11Helper.get().get_pointer()
@@ -2352,6 +2371,8 @@ class LexiWindow(Adw.ApplicationWindow):
         return self.pet_win
 
     def expand_from_notch(self):
+        if not self.mouse_poll_id:
+            self.mouse_poll_id = GLib.timeout_add(40, self.poll_screen_mouse)
         if self.notch_win:
             self.notch_win.set_visible(False)
         if self.pet_win:
@@ -2373,6 +2394,9 @@ class LexiWindow(Adw.ApplicationWindow):
             GLib.timeout_add(150, lambda: self.capture_screen_and_reveal(interactive=False, append_mode=False))
 
     def collapse_to_notch(self):
+        if self.mouse_poll_id:
+            GLib.source_remove(self.mouse_poll_id)
+            self.mouse_poll_id = None
         if self.pet_win:
             self.pet_win.set_visible(False)
         nw = self.get_notch_window()
@@ -2393,6 +2417,9 @@ class LexiWindow(Adw.ApplicationWindow):
             finish_collapse()
 
     def detach_to_desktop(self):
+        if self.mouse_poll_id:
+            GLib.source_remove(self.mouse_poll_id)
+            self.mouse_poll_id = None
         pw = self.get_pet_window()
         pw.set_visible(True)
         pw.present()
@@ -2415,6 +2442,9 @@ class LexiWindow(Adw.ApplicationWindow):
         if getattr(self, '_is_closing', False):
             return
         self._is_closing = True
+        if self.mouse_poll_id:
+            GLib.source_remove(self.mouse_poll_id)
+            self.mouse_poll_id = None
         if hasattr(self, 'app') and self.app:
             self.app.active_window = None
 
