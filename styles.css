@@ -426,18 +426,6 @@ window.lexi-notch-win, window.lexi-pet-win {
     color: #c084fc;
 }
 
-/* Floating Desktop Pet Window Badge */
-.pet-badge {
-    background: rgba(15, 12, 26, 0.88);
-    border: 1px solid rgba(168, 85, 247, 0.45);
-    border-radius: 9999px;
-    padding: 2px 10px;
-    font-size: 10px;
-    font-weight: 600;
-    color: #e9d5ff;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
 /* Detach to Desktop Button */
 .lexi-detach-btn {
     background: rgba(255, 255, 255, 0.05);
@@ -462,36 +450,4 @@ window.lexi-notch-win, window.lexi-pet-win {
     transform: scale(0.96);
 }
 
-/* Pet Actions Container & Mini Buttons */
-.pet-actions-box {
-    margin-top: 3px;
-    background: rgba(12, 10, 22, 0.75);
-    border: 1px solid rgba(168, 85, 247, 0.25);
-    border-radius: 9999px;
-    padding: 3px 5px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
-}
 
-.pet-mini-btn {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(168, 85, 247, 0.28);
-    border-radius: 9999px;
-    padding: 2px 7px;
-    font-size: 9.5px;
-    font-weight: 700;
-    color: #e9d5ff;
-    transition: all 120ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.pet-mini-btn:hover {
-    background: linear-gradient(135deg, rgba(168, 85, 247, 0.45) 0%, rgba(236, 72, 153, 0.45) 100%);
-    border-color: rgba(192, 132, 252, 0.85);
-    color: #ffffff;
-    box-shadow: 0 0 10px rgba(168, 85, 247, 0.45);
-    transform: scale(1.06);
-}
-
-.pet-mini-btn:active {
-    background: rgba(168, 85, 247, 0.6);
-    transform: scale(0.94);
-}

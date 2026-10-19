@@ -580,30 +580,37 @@ class LexiMascotWidget(Gtk.DrawingArea):
                 alive_particles.append(p)
         self.particles = alive_particles
 
-        s = min(self.mascot_w / 145.0, self.mascot_h / 155.0) if self.is_pet_mode else min(self.mascot_w / 110.0, self.mascot_h / 130.0)
+        s = min(self.mascot_w / 125.0, self.mascot_h / 125.0) if self.is_pet_mode else min(self.mascot_w / 110.0, self.mascot_h / 130.0)
 
         # Playful Activities & Autonomous Routine
         if self.mood == "normal":
             if self.activity == "walk":
-                max_walk = 55.0 if self.is_pet_mode else 20.0
                 if self.is_walking:
                     self.walk_phase = (self.walk_phase + 0.16) % (2 * math.pi)
-                    self.walk_x += self.facing * 0.48
-                    if self.walk_x > max_walk:
-                        self.walk_x = max_walk
-                        self.is_walking = False
-                        self.walk_pause_timer = 50
-                        self.facing = -1.0
-                    elif self.walk_x < -max_walk:
-                        self.walk_x = -max_walk
-                        self.is_walking = False
-                        self.walk_pause_timer = 50
-                        self.facing = 1.0
+                    if not self.is_pet_mode:
+                        self.walk_x += self.facing * 0.48
+                        if self.walk_x > 20.0:
+                            self.walk_x = 20.0
+                            self.is_walking = False
+                            self.walk_pause_timer = 50
+                            self.facing = -1.0
+                        elif self.walk_x < -20.0:
+                            self.walk_x = -20.0
+                            self.is_walking = False
+                            self.walk_pause_timer = 50
+                            self.facing = 1.0
+                    else:
+                        self.walk_x = 0.0
+                        self.walk_timer = getattr(self, 'walk_timer', 0) + 1
+                        if self.walk_timer > 140:
+                            self.walk_timer = 0
+                            self.is_walking = False
+                            self.walk_pause_timer = 50
                     self.queue_draw()
                 else:
                     self.walk_pause_timer -= 1
                     if self.walk_pause_timer <= 0:
-                        if self.is_pet_mode and random.random() < 0.70:
+                        if self.is_pet_mode and random.random() < 0.65:
                             self.cycle_next_activity()
                         else:
                             self.is_walking = True
@@ -824,10 +831,10 @@ class LexiMascotWidget(Gtk.DrawingArea):
         return GLib.SOURCE_REMOVE
 
     def on_draw(self, area, cr, w, h):
-        s = min(w / 145.0, h / 155.0) if self.is_pet_mode else min(w / 110.0, h / 130.0)
+        s = min(w / 125.0, h / 125.0) if self.is_pet_mode else min(w / 110.0, h / 130.0)
         scale_walk = min(1.0, s / 0.8)
-        cx = w / 2.0 + (self.walk_x * scale_walk if w > 50 else 0.0)
-        cy = (h - 52.0 * s) if self.is_pet_mode else (h / 2.0)
+        cx = w / 2.0 + ((self.walk_x * scale_walk) if (w > 50 and not self.is_pet_mode) else 0.0)
+        cy = (h / 2.0 + 4.0 * s) if self.is_pet_mode else (h / 2.0)
 
         # Walking bounce & bobbing physics
         bounce_y = 0.0
@@ -1700,56 +1707,39 @@ class LexiPetWindow(Gtk.Window):
         self.copilot_win = copilot_win
         self.set_decorated(False)
         self.set_resizable(False)
-        self.set_default_size(250, 275)
+        self.set_default_size(160, 160)
         self.add_css_class('lexi-pet-win')
 
-        self.pet_x = 1620
-        self.pet_y = 750
+        # Dynamically detect full screen geometry for laptop roaming
+        self.screen_w = 1920
+        self.screen_h = 1080
+        display = Gdk.Display.get_default()
+        if display and display.get_monitors():
+            geom = display.get_monitors().get_item(0).get_geometry()
+            self.screen_w = geom.width
+            self.screen_h = geom.height
+
+        # Position at bottom of screen above dock/taskbar
+        self.floor_y = float(self.screen_h - 190)
+        self.pet_x = float(self.screen_w - 240)
+        self.pet_y = self.floor_y
+        self.is_dragging = False
         self.drag_start_pet_x = self.pet_x
         self.drag_start_pet_y = self.pet_y
 
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        box.set_halign(Gtk.Align.CENTER)
-        self.set_child(box)
-
-        # Generous vertical play stage for full leaping physics & workouts
-        self.mascot = LexiMascotWidget(width=230, height=200)
+        # Pure Mascot Widget - Clean, organic desktop companion (no buttons or badges)
+        self.mascot = LexiMascotWidget(width=160, height=160)
         self.mascot.is_pet_mode = True
-        self.mascot.activity_callback = self.on_activity_update
-        box.append(self.mascot)
+        self.set_child(self.mascot)
 
-        self.badge = Gtk.Label(label="✨ Ready to play! (Drag me / Double-click to dock)")
-        self.badge.add_css_class('pet-badge')
-        box.append(self.badge)
-
-        # Mini interactive action buttons bar
-        actions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-        actions_box.set_halign(Gtk.Align.CENTER)
-        actions_box.add_css_class('pet-actions-box')
-        box.append(actions_box)
-
-        def make_btn(label, tooltip, callback):
-            b = Gtk.Button(label=label)
-            b.set_focusable(False)
-            b.set_tooltip_text(tooltip)
-            b.add_css_class('pet-mini-btn')
-            b.connect('clicked', lambda _: callback())
-            return b
-
-        actions_box.append(make_btn("🐾 Jump", "High leap jump with star landing!", self.mascot.trigger_jump))
-        actions_box.append(make_btn("💪 Fit", "Jumping jacks workout!", self.mascot.trigger_exercise))
-        actions_box.append(make_btn("🐱 Stretch", "Morning cat arch stretch!", self.mascot.trigger_stretch))
-        actions_box.append(make_btn("✨ Star", "Chase stardust celestial orb!", self.mascot.trigger_stardust))
-        actions_box.append(make_btn("💤 Loaf", "Cozy cat loaf nap!", self.mascot.trigger_loaf))
-        actions_box.append(make_btn("🏠 Dock", "Return to notch / copilot dock", self.dock_back))
-
-        # Drag gesture to position Lexi anywhere on desktop with zero latency
+        # Drag gesture to pick up and place Lexi anywhere on screen
         drag = Gtk.GestureDrag()
         drag.connect('drag-begin', self.on_drag_begin)
         drag.connect('drag-update', self.on_drag_update)
+        drag.connect('drag-end', self.on_drag_end)
         self.add_controller(drag)
 
-        # Click & Double-click
+        # Click to pet / Double-click to dock back
         click = Gtk.GestureClick()
         click.connect('pressed', self.on_click)
         self.add_controller(click)
@@ -1762,14 +1752,10 @@ class LexiPetWindow(Gtk.Window):
         drop_target.connect('drop', self.on_drag_drop)
         self.add_controller(drop_target)
 
-        # Direct C X11 pointer gaze tracking (0.01ms latency, 0 subprocesses)
-        GLib.timeout_add(33, self.poll_screen_mouse)
+        # Screen-wide autonomous roaming loop (30 fps / 33 ms)
+        GLib.timeout_add(33, self.roam_tick)
 
         self.connect('realize', self.on_realize)
-
-    def on_activity_update(self, text):
-        if hasattr(self, 'badge') and self.badge and self.get_visible():
-            self.badge.set_text(text)
 
     def on_realize(self, _):
         GLib.timeout_add(50, self.position_on_desktop)
@@ -1779,23 +1765,113 @@ class LexiPetWindow(Gtk.Window):
         if surface and hasattr(surface, 'get_xid'):
             try:
                 xid = surface.get_xid()
-                X11Helper.get().move_window(xid, self.pet_x, self.pet_y)
+                X11Helper.get().move_window(xid, int(self.pet_x), int(self.pet_y))
                 subprocess.run(['xprop', '-id', str(xid), '-f', '_NET_WM_STATE', '32a',
                                 '-set', '_NET_WM_STATE', '_NET_WM_STATE_ABOVE, _NET_WM_STATE_STICKY'], check=False)
             except Exception:
                 pass
         return GLib.SOURCE_REMOVE
 
+    def roam_tick(self):
+        if not self.get_visible() or not self.mascot:
+            return GLib.SOURCE_CONTINUE
+        if self.is_dragging:
+            return GLib.SOURCE_CONTINUE
+
+        surface = self.get_surface()
+        xid = surface.get_xid() if (surface and hasattr(surface, 'get_xid')) else None
+
+        # Track mouse gaze across the laptop
+        try:
+            pt = X11Helper.get().get_pointer()
+            if pt:
+                mx, my = pt
+                dx = (mx - (self.pet_x + 80.0)) / 600.0
+                dy = (my - (self.pet_y + 80.0)) / 450.0
+                self.mascot.set_gaze(dx, dy)
+        except Exception:
+            pass
+
+        old_x, old_y = self.pet_x, self.pet_y
+
+        # Autonomous Roaming Physics across laptop screen
+        if self.mascot.mood == "normal":
+            if self.mascot.activity == "walk":
+                if self.mascot.is_walking:
+                    # Stroll across the screen!
+                    self.pet_x += self.mascot.facing * 1.6
+                    # Screen boundary check: turn around gracefully at edges
+                    if self.pet_x > self.screen_w - 170:
+                        self.pet_x = float(self.screen_w - 170)
+                        self.mascot.facing = -1.0
+                        self.mascot.is_walking = False
+                        self.mascot.walk_pause_timer = 40
+                    elif self.pet_x < 15:
+                        self.pet_x = 15.0
+                        self.mascot.facing = 1.0
+                        self.mascot.is_walking = False
+                        self.mascot.walk_pause_timer = 40
+                self.pet_y += (self.floor_y - self.pet_y) * 0.2
+
+            elif self.mascot.activity == "jump":
+                # Leaping across the screen! Both X and Y move in world coordinates!
+                self.pet_x += self.mascot.facing * 2.6
+                self.pet_y = self.floor_y + self.mascot.jump_y * 1.8
+                if self.pet_y < 50:
+                    self.pet_y = 50.0
+                if self.pet_x > self.screen_w - 170:
+                    self.pet_x = float(self.screen_w - 170)
+                    self.mascot.facing = -1.0
+                elif self.pet_x < 15:
+                    self.pet_x = 15.0
+                    self.mascot.facing = 1.0
+
+            elif self.mascot.activity == "jacks":
+                # Bouncy hops in place
+                self.pet_y = self.floor_y + self.mascot.jump_y * 0.8
+
+            elif self.mascot.activity == "stardust":
+                # Chasing floating stardust across the desktop
+                target_x = self.pet_x + self.mascot.star_orb_x * 0.35
+                self.pet_x += (target_x - self.pet_x) * 0.08
+                self.pet_y = self.floor_y + self.mascot.jump_y * 1.2
+
+            else:
+                # Loaf, stretch, or punch
+                self.pet_y += (self.floor_y - self.pet_y) * 0.2
+
+        # Instant C X11 window movement (0.013ms)
+        if xid and (int(self.pet_x) != int(old_x) or int(self.pet_y) != int(old_y)):
+            X11Helper.get().move_window(xid, int(self.pet_x), int(self.pet_y))
+
+        return GLib.SOURCE_CONTINUE
+
     def on_drag_begin(self, gesture, x, y):
+        self.is_dragging = True
         self.drag_start_pet_x = self.pet_x
         self.drag_start_pet_y = self.pet_y
+        self.mascot.squish_x = 0.88
+        self.mascot.squish_y = 1.18  # Dangle squish when picked up
+        self.mascot.set_mood("happy")
+        self.mascot.spawn_particle(0, -10, 'sparkle', 4)
 
     def on_drag_update(self, gesture, offset_x, offset_y):
         surface = self.get_surface()
         if surface and hasattr(surface, 'get_xid'):
             self.pet_x = int(self.drag_start_pet_x + offset_x)
             self.pet_y = int(self.drag_start_pet_y + offset_y)
-            X11Helper.get().move_window(surface.get_xid(), self.pet_x, self.pet_y)
+            X11Helper.get().move_window(surface.get_xid(), int(self.pet_x), int(self.pet_y))
+
+    def on_drag_end(self, gesture, offset_x, offset_y):
+        self.is_dragging = False
+        # Update floor level to wherever the user dropped her
+        self.floor_y = float(min(self.screen_h - 180, max(50, self.pet_y)))
+        self.pet_y = self.floor_y
+        self.mascot.squish_x = 1.25
+        self.mascot.squish_y = 0.75  # Satisfying landing bounce
+        self.mascot.spawn_particle(0, 20, 'star', 6)
+        self.mascot.activity = "walk"
+        self.mascot.is_walking = True
 
     def on_click(self, gesture, n_press, x, y):
         if n_press == 1:
@@ -1811,7 +1887,6 @@ class LexiPetWindow(Gtk.Window):
 
     def on_drag_enter(self, target, x, y):
         self.mascot.set_mood("hungry")
-        self.badge.set_text("😋 Feed Lexi!")
         return Gdk.DragAction.COPY
 
     def on_drag_drop(self, target, value, x, y):
@@ -1837,20 +1912,6 @@ class LexiPetWindow(Gtk.Window):
             self.dock_back()
             return True
         return False
-
-    def poll_screen_mouse(self):
-        if not self.get_visible() or not self.mascot:
-            return GLib.SOURCE_CONTINUE
-        try:
-            pt = X11Helper.get().get_pointer()
-            if pt:
-                mx, my = pt
-                dx = (mx - (self.pet_x + 115.0)) / 500.0
-                dy = (my - (self.pet_y + 100.0)) / 400.0
-                self.mascot.set_gaze(dx, dy)
-        except Exception:
-            pass
-        return GLib.SOURCE_CONTINUE
 
 
 class LexiWindow(Adw.ApplicationWindow):
