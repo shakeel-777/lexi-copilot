@@ -568,5 +568,57 @@ window.lexi-donut-win {
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.95), 0 0 20px rgba(168, 85, 247, 0.4);
 }
 
+/* Gemini Side Panel Bar Chat Mode */
+.lexi-card.lexi-side-panel {
+    border-radius: 20px 0 0 20px;
+    margin: 0;
+    border-right-width: 0;
+    border-top: 1.2px solid rgba(168, 85, 247, 0.45);
+    border-bottom: 1.2px solid rgba(168, 85, 247, 0.45);
+    border-left: 2px solid rgba(192, 132, 252, 0.75);
+    box-shadow: -15px 0 45px rgba(0, 0, 0, 0.88), 0 0 32px rgba(168, 85, 247, 0.28);
+    padding: 14px 16px;
+}
+
+.lexi-drag-snap-candidate {
+    border-color: #ec4899;
+    box-shadow: 0 0 35px rgba(236, 72, 153, 0.85), -10px 0 30px rgba(168, 85, 247, 0.6);
+}
+
+.lexi-mode-btn {
+    background: rgba(168, 85, 247, 0.22);
+    border: 1px solid rgba(192, 132, 252, 0.45);
+    color: #f3e8ff;
+    border-radius: 9999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    transition: all 140ms ease;
+}
+
+.lexi-mode-btn:hover {
+    background: #a855f7;
+    border-color: #ffffff;
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.7);
+    transform: scale(1.05);
+}
+
+.lexi-header-mini-mascot {
+    margin-right: 8px;
+    min-width: 28px;
+    min-height: 28px;
+}
+
+.lexi-side-panel .lexi-header-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+}
+
+.lexi-side-panel .lexi-mode-btn {
+    padding: 3px 8px;
+    font-size: 11px;
+}
+
 
 

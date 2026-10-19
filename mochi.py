@@ -104,8 +104,18 @@ class X11Helper:
                 self.x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
                 self.root = self.x11.XDefaultRootWindow(self.dpy)
 
+                # Ignore BadWindow and async X11 errors on destroyed surfaces
+                self._x_err_proto = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
+                self._x_err_cb = self._x_err_proto(lambda d, e: 0)
+                self.x11.XSetErrorHandler.argtypes = [self._x_err_proto]
+                self.x11.XSetErrorHandler.restype = ctypes.c_void_p
+                self.x11.XSetErrorHandler(self._x_err_cb)
+
                 self.x11.XMoveWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int]
                 self.x11.XMoveWindow.restype = ctypes.c_int
+
+                self.x11.XMoveResizeWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_uint, ctypes.c_uint]
+                self.x11.XMoveResizeWindow.restype = ctypes.c_int
 
                 self.x11.XUnmapWindow.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
                 self.x11.XUnmapWindow.restype = ctypes.c_int
@@ -173,6 +183,21 @@ class X11Helper:
         # Fallback to xdotool if X11 handle is not active
         try:
             subprocess.run(['xdotool', 'windowmove', str(xid), str(int(x)), str(int(y))], check=False)
+            return True
+        except Exception:
+            return False
+
+    def move_resize_window(self, xid, x, y, width, height):
+        if self.dpy and xid:
+            try:
+                self.x11.XMoveResizeWindow(self.dpy, int(xid), int(x), int(y), int(width), int(height))
+                self.x11.XFlush(self.dpy)
+                return True
+            except Exception:
+                pass
+        try:
+            subprocess.run(['xdotool', 'windowmove', str(xid), str(int(x)), str(int(y))], check=False)
+            subprocess.run(['xdotool', 'windowsize', str(xid), str(int(width)), str(int(height))], check=False)
             return True
         except Exception:
             return False
@@ -2362,6 +2387,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
             return b
 
         actions_box.append(make_btn("💬 Copilot", "island-btn-primary", "Open full screen copilot", self.on_expand_copilot))
+        actions_box.append(make_btn("◨ Side", "island-btn-secondary", "Open Gemini-style side panel", self.on_expand_side_panel))
         actions_box.append(make_btn("✂️ Snip", "island-btn-secondary", "Interactive region snip", self.on_trigger_snip))
         actions_box.append(make_btn("🐾 Pet", "island-btn-secondary", "Detach Lexi to roam desktop", self.on_detach_pet))
 
@@ -2406,7 +2432,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
             if mode == "convert":
                 rect = cairo.RectangleInt(40, 2, 600, 48)
             elif mode == "actions":
-                rect = cairo.RectangleInt(150, 2, 380, 48)
+                rect = cairo.RectangleInt(115, 2, 450, 48)
             else:
                 rect = cairo.RectangleInt(275, 2, 130, 48)
             region = cairo.Region(rect)
@@ -2442,6 +2468,12 @@ class LexiDynamicIslandWindow(Gtk.Window):
     def on_expand_copilot(self):
         self.set_visible(False)
         if self.copilot_win:
+            self.copilot_win.expand_from_notch()
+
+    def on_expand_side_panel(self):
+        self.set_visible(False)
+        if self.copilot_win:
+            self.copilot_win.set_mode('side_panel')
             self.copilot_win.expand_from_notch()
 
     def on_trigger_snip(self):
@@ -2981,6 +3013,12 @@ class LexiWindow(Adw.ApplicationWindow):
         self.turn_start_mark = None
         self.notch_win = None
         self.pet_win = None
+        self.current_mode = "card"  # "card" or "side_panel"
+        self.is_dragging_win = False
+        self.card_w = 940
+        self.card_h = 385
+        self.screen_w = 1920
+        self.screen_h = 1080
 
         self.set_default_size(940, 385)
         self.set_resizable(True)
@@ -2998,6 +3036,10 @@ class LexiWindow(Adw.ApplicationWindow):
         esc_trig = Gtk.ShortcutTrigger.parse_string("Escape")
         esc_act = Gtk.CallbackAction.new(lambda *_: (self.collapse_to_notch(), True)[1])
         shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(esc_trig, esc_act))
+
+        cb_trig = Gtk.ShortcutTrigger.parse_string("<Control>b")
+        cb_act = Gtk.CallbackAction.new(lambda *_: (self.toggle_mode(), True)[1])
+        shortcut_ctrl.add_shortcut(Gtk.Shortcut.new(cb_trig, cb_act))
 
         cw_trig = Gtk.ShortcutTrigger.parse_string("<Control>w")
         cw_act = Gtk.CallbackAction.new(lambda *_: (self.animate_and_close(), True)[1])
@@ -3064,14 +3106,34 @@ class LexiWindow(Adw.ApplicationWindow):
     ]
     MOCHI_PET_REACTIONS = LEXI_PET_REACTIONS
 
-    def on_pointer_motion(self, ctrl, x, y):
+    def update_mascot_mood(self, mood):
         if hasattr(self, 'mascot') and self.mascot:
-            dx = (x - 75.0) / 440.0
-            dy = (y - 75.0) / 280.0
+            self.mascot.set_mood(mood)
+        if hasattr(self, 'header_mascot') and self.header_mascot:
+            self.header_mascot.set_mood(mood)
+        status_map = {
+            "happy": "✨ Ready",
+            "working": "⚡ Thinking",
+            "hungry": "😋 Feed Me",
+            "star_eyes": "🌟 Amazed!",
+            "dizzy": "💫 Oops"
+        }
+        st = status_map.get(mood, "✨ Ready")
+        if hasattr(self, 'status_pill'):
+            self.status_pill.set_text(st)
+        if hasattr(self, 'header_status_pill'):
+            self.header_status_pill.set_text(st)
+
+    def on_pointer_motion(self, ctrl, x, y):
+        dx = (x - 75.0) / 440.0
+        dy = (y - 75.0) / 280.0
+        if hasattr(self, 'mascot') and self.mascot:
             self.mascot.set_gaze(dx, dy)
+        if hasattr(self, 'header_mascot') and self.header_mascot:
+            self.header_mascot.set_gaze(dx, dy)
 
     def poll_screen_mouse(self):
-        if not self.get_mapped() or not self.get_visible() or not hasattr(self, 'mascot') or not self.mascot:
+        if not self.get_mapped() or not self.get_visible():
             return GLib.SOURCE_CONTINUE
         try:
             pt = X11Helper.get().get_pointer()
@@ -3080,7 +3142,10 @@ class LexiWindow(Adw.ApplicationWindow):
                 wx, wy = getattr(self, 'window_pos', (500, 30))
                 dx = (mx - (wx + 75.0)) / 560.0
                 dy = (my - (wy + 75.0)) / 420.0
-                self.mascot.set_gaze(dx, dy)
+                if hasattr(self, 'mascot') and self.mascot:
+                    self.mascot.set_gaze(dx, dy)
+                if hasattr(self, 'header_mascot') and self.header_mascot:
+                    self.header_mascot.set_gaze(dx, dy)
         except Exception:
             pass
         return GLib.SOURCE_CONTINUE
@@ -3102,7 +3167,10 @@ class LexiWindow(Adw.ApplicationWindow):
     def trigger_drop_animation(self):
         if not hasattr(self, 'revealer'):
             return
-        self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+        if getattr(self, 'current_mode', 'card') == 'side_panel':
+            self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_LEFT)
+        else:
+            self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.revealer.set_transition_duration(220)
         self.revealer.set_reveal_child(True)
 
@@ -3157,7 +3225,10 @@ class LexiWindow(Adw.ApplicationWindow):
             self.set_visible(False)
 
         if hasattr(self, 'revealer'):
-            self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
+            if getattr(self, 'current_mode', 'card') == 'side_panel':
+                self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_RIGHT)
+            else:
+                self.revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_UP)
             self.revealer.set_transition_duration(180)
             self.revealer.set_reveal_child(False)
             GLib.timeout_add(190, lambda: (finish_collapse(), GLib.SOURCE_REMOVE)[1])
@@ -3272,20 +3343,33 @@ class LexiWindow(Adw.ApplicationWindow):
     def position_at_top(self):
         display = Gdk.Display.get_default()
         monitors = display.get_monitors() if display else None
-        target_w = self.get_width() or 940
 
         screen_x = 0
         screen_y = 0
         screen_w = 1920
+        screen_h = 1080
         if monitors and monitors.get_n_items() > 0:
             m = monitors.get_item(0)
             geom = m.get_geometry()
             screen_x = geom.x
             screen_y = geom.y
             screen_w = geom.width
+            screen_h = geom.height
 
-        pos_x = screen_x + (screen_w - target_w) // 2
-        pos_y = screen_y + 30  # Sits seamlessly right below GNOME top bar
+        self.screen_w = screen_w
+        self.screen_h = screen_h
+
+        if getattr(self, 'current_mode', 'card') == 'side_panel':
+            self.card_w = 460
+            self.card_h = screen_h - 38
+            pos_x = screen_x + screen_w - self.card_w
+            pos_y = screen_y + 35
+        else:
+            self.card_w = 940
+            self.card_h = 385
+            pos_x = screen_x + (screen_w - self.card_w) // 2
+            pos_y = screen_y + 34
+
         self.window_pos = (pos_x, pos_y)
         self.saved_pos = (pos_x, pos_y)
 
@@ -3293,13 +3377,140 @@ class LexiWindow(Adw.ApplicationWindow):
         if surface and hasattr(surface, 'get_xid'):
             try:
                 xid = surface.get_xid()
-                X11Helper.get().move_window(xid, pos_x, pos_y)
-                # Keep always above all windows (Coucou style persistent top dock)
+                X11Helper.get().move_resize_window(xid, pos_x, pos_y, self.card_w, self.card_h)
                 X11Helper.get().make_always_on_top_and_sticky(xid)
                 if hasattr(surface, 'move_to_desktop'):
                     surface.move_to_desktop(0xFFFFFFFF)
             except Exception as e:
                 log(f"Window move/above exception: {e}")
+
+    def toggle_mode(self):
+        new_mode = 'side_panel' if getattr(self, 'current_mode', 'card') == 'card' else 'card'
+        self.set_mode(new_mode)
+
+    def set_mode(self, mode):
+        self.current_mode = mode
+        surface = self.get_surface()
+        xid = surface.get_xid() if (surface and hasattr(surface, 'get_xid')) else None
+
+        display = Gdk.Display.get_default()
+        if display and display.get_monitors():
+            geom = display.get_monitors().get_item(0).get_geometry()
+            self.screen_w = geom.width
+            self.screen_h = geom.height
+
+        if mode == 'side_panel':
+            self.card_w = 460
+            self.card_h = self.screen_h - 38
+            pos_x = self.screen_w - self.card_w
+            pos_y = 35
+
+            self.stage_box.set_visible(False)
+            self.header_mascot.set_visible(True)
+            self.header_status_pill.set_visible(True)
+            self.card.add_css_class('lexi-side-panel')
+            self.subtitle.set_text("Gemini Side Panel")
+            self.mode_toggle_btn.set_label("🗖 Card")
+            self.mode_toggle_btn.set_tooltip_text("Switch to Floating Center Card (Ctrl+B or drag left)")
+            self.clear_btn.set_label("🧹")
+            if hasattr(self, 'action_strip'):
+                self.action_strip.set_orientation(Gtk.Orientation.VERTICAL)
+            if hasattr(self, 'strip_sep'):
+                self.strip_sep.set_visible(False)
+
+            self.set_default_size(self.card_w, self.card_h)
+            self.set_size_request(self.card_w, self.card_h)
+            if xid:
+                X11Helper.get().move_resize_window(xid, pos_x, pos_y, self.card_w, self.card_h)
+                X11Helper.get().make_always_on_top_and_sticky(xid)
+            self.window_pos = (pos_x, pos_y)
+            self.saved_pos = (pos_x, pos_y)
+
+        else: # 'card'
+            self.card_w = 940
+            self.card_h = 385
+            pos_x = (self.screen_w - self.card_w) // 2
+            pos_y = 34
+
+            self.stage_box.set_visible(True)
+            self.header_mascot.set_visible(False)
+            self.header_status_pill.set_visible(False)
+            self.card.remove_css_class('lexi-side-panel')
+            self.subtitle.set_text("Cosmic Screen Copilot")
+            self.mode_toggle_btn.set_label("◨ Side Panel")
+            self.mode_toggle_btn.set_tooltip_text("Dock to Gemini-style Side Panel (Ctrl+B or drag to right edge)")
+            self.clear_btn.set_label("🧹 Clear")
+            if hasattr(self, 'action_strip'):
+                self.action_strip.set_orientation(Gtk.Orientation.HORIZONTAL)
+            if hasattr(self, 'strip_sep'):
+                self.strip_sep.set_visible(True)
+
+            self.set_default_size(self.card_w, self.card_h)
+            self.set_size_request(self.card_w, self.card_h)
+            if xid:
+                X11Helper.get().move_resize_window(xid, pos_x, pos_y, self.card_w, self.card_h)
+                X11Helper.get().make_always_on_top_and_sticky(xid)
+            self.window_pos = (pos_x, pos_y)
+            self.saved_pos = (pos_x, pos_y)
+
+        self.update_mascot_mood(getattr(self.mascot, 'mood', 'happy'))
+
+    def on_header_drag_begin(self, gesture, x, y):
+        self.is_dragging_win = True
+        pt = X11Helper.get().get_pointer()
+        if pt:
+            self.drag_start_ptr = pt
+        else:
+            self.drag_start_ptr = (960, 540)
+        self.drag_start_win = getattr(self, 'window_pos', (490, 34))
+
+    def on_header_drag_update(self, gesture, offset_x, offset_y):
+        surface = self.get_surface()
+        if not surface or not hasattr(surface, 'get_xid'):
+            return
+        xid = surface.get_xid()
+        new_x = int(self.drag_start_win[0] + offset_x)
+        new_y = int(self.drag_start_win[1] + offset_y)
+        new_y = max(10, min(self.screen_h - 100, new_y))
+
+        X11Helper.get().move_window(xid, new_x, new_y)
+        self.window_pos = (new_x, new_y)
+
+        if self.current_mode == 'card':
+            if new_x + self.card_w >= self.screen_w - 90 or offset_x > 220:
+                self.card.add_css_class('lexi-drag-snap-candidate')
+                self.subtitle.set_text("👉 Release to dock as Gemini Side Panel!")
+            else:
+                self.card.remove_css_class('lexi-drag-snap-candidate')
+                self.subtitle.set_text("Cosmic Screen Copilot")
+        else:
+            if offset_x < -90:
+                self.card.add_css_class('lexi-drag-snap-candidate')
+                self.subtitle.set_text("👈 Release to undock into Floating Card!")
+            else:
+                self.card.remove_css_class('lexi-drag-snap-candidate')
+                self.subtitle.set_text("Gemini Side Panel")
+
+    def on_header_drag_end(self, gesture, offset_x, offset_y):
+        self.is_dragging_win = False
+        self.card.remove_css_class('lexi-drag-snap-candidate')
+
+        if self.current_mode == 'card':
+            if self.window_pos[0] + self.card_w >= self.screen_w - 90 or offset_x > 220:
+                self.set_mode('side_panel')
+            else:
+                self.subtitle.set_text("Cosmic Screen Copilot")
+        else:
+            if offset_x < -100:
+                self.set_mode('card')
+            else:
+                pos_x = self.screen_w - self.card_w
+                pos_y = 35
+                surface = self.get_surface()
+                if surface and hasattr(surface, 'get_xid'):
+                    X11Helper.get().move_window(surface.get_xid(), pos_x, pos_y)
+                self.window_pos = (pos_x, pos_y)
+                self.subtitle.set_text("Gemini Side Panel")
 
     def build_ui(self):
         # Main Revealer Container (Slides down smoothly on open, slides up on close)
@@ -3366,25 +3577,64 @@ class LexiWindow(Adw.ApplicationWindow):
         self.content_col.set_hexpand(True)
         self.card.append(self.content_col)
 
-        # Header with draggable title and macOS window controls
-        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        # Header with draggable title and window controls
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.header = header
         self.content_col.append(header)
 
-        self.handle = Gtk.WindowHandle()
-        self.handle.set_hexpand(True)
+        # Title / Handle box (drags window and snaps to edges)
+        self.title_handle_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.title_handle_box.set_hexpand(True)
+        self.title_handle_box.set_valign(Gtk.Align.CENTER)
+        header.append(self.title_handle_box)
+
+        # Mini mascot in header (active in side panel mode)
+        self.header_mascot = LexiMascotWidget(width=28, height=28, is_mini=True)
+        self.header_mascot.add_css_class('lexi-header-mini-mascot')
+        self.header_mascot.set_visible(False)
+        self.title_handle_box.append(self.header_mascot)
+
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title = Gtk.Label(label="Lexi", xalign=0)
         title.add_css_class('lexi-title')
         self.subtitle = Gtk.Label(label="Cosmic Screen Copilot", xalign=0)
+        self.subtitle.set_ellipsize(Pango.EllipsizeMode.END)
         self.subtitle.add_css_class('lexi-subtitle')
         title_box.append(title)
         title_box.append(self.subtitle)
-        self.handle.set_child(title_box)
-        header.append(self.handle)
+        self.title_handle_box.append(title_box)
+
+        self.header_status_pill = Gtk.Label(label="✨ Ready")
+        self.header_status_pill.add_css_class('lexi-status-pill')
+        self.header_status_pill.set_visible(False)
+        self.title_handle_box.append(self.header_status_pill)
+
+        # Smooth zero-latency X11 dragging & edge snapping on header
+        header_drag = Gtk.GestureDrag()
+        header_drag.connect('drag-begin', self.on_header_drag_begin)
+        header_drag.connect('drag-update', self.on_header_drag_update)
+        header_drag.connect('drag-end', self.on_header_drag_end)
+        self.title_handle_box.add_controller(header_drag)
 
         ctrls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         ctrls_box.add_css_class('mac-traffic-lights')
         header.append(ctrls_box)
+
+        # Gemini Side Panel toggle button
+        self.mode_toggle_btn = Gtk.Button(label="◨ Side Panel")
+        self.mode_toggle_btn.set_focusable(False)
+        self.mode_toggle_btn.set_tooltip_text("Switch to Gemini-style Side Panel (Ctrl+B or drag to right edge)")
+        self.mode_toggle_btn.add_css_class('lexi-mode-btn')
+        self.mode_toggle_btn.connect('clicked', lambda _: self.toggle_mode())
+        ctrls_box.append(self.mode_toggle_btn)
+
+        # Detach pet button (in header)
+        self.detach_header_btn = Gtk.Button(label="🐾")
+        self.detach_header_btn.set_focusable(False)
+        self.detach_header_btn.set_tooltip_text("Detach Lexi to roam desktop (Ctrl+D)")
+        self.detach_header_btn.add_css_class('lexi-header-btn')
+        self.detach_header_btn.connect('clicked', lambda _: self.detach_to_desktop())
+        ctrls_box.append(self.detach_header_btn)
 
         self.clear_btn = Gtk.Button(label="🧹 Clear")
         self.clear_btn.set_focusable(False)
@@ -3397,7 +3647,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.min_dot.set_focusable(False)
         self.min_dot.set_valign(Gtk.Align.CENTER)
         self.min_dot.set_size_request(13, 13)
-        self.min_dot.set_tooltip_text("Collapse to Mac Notch (Esc / Ctrl+M)")
+        self.min_dot.set_tooltip_text("Collapse to Dynamic Island (Esc / Ctrl+M)")
         self.min_dot.add_css_class('mac-dot')
         self.min_dot.add_css_class('mac-dot-min')
         self.min_dot.connect('clicked', lambda _: self.collapse_to_notch())
@@ -3416,11 +3666,18 @@ class LexiWindow(Adw.ApplicationWindow):
         # Unified Wide Action Strip (Pages Tray + Quick Chips)
         action_strip = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         action_strip.add_css_class('lexi-action-strip')
+        self.action_strip = action_strip
         self.content_col.append(action_strip)
+
+        self.pages_tray_scroll = Gtk.ScrolledWindow()
+        self.pages_tray_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        self.pages_tray_scroll.set_propagate_natural_width(False)
+        self.pages_tray_scroll.set_hexpand(True)
+        action_strip.append(self.pages_tray_scroll)
 
         self.pages_tray = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.pages_tray.add_css_class('lexi-pages-tray')
-        action_strip.append(self.pages_tray)
+        self.pages_tray_scroll.set_child(self.pages_tray)
 
         tray_lbl = Gtk.Label(label="Pages:")
         tray_lbl.add_css_class('lexi-tray-label')
@@ -3430,7 +3687,7 @@ class LexiWindow(Adw.ApplicationWindow):
         pages_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
         pages_scroll.add_css_class('lexi-pages-scroll')
         pages_scroll.set_hexpand(False)
-        pages_scroll.set_propagate_natural_width(True)
+        pages_scroll.set_propagate_natural_width(False)
         self.pages_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         pages_scroll.set_child(self.pages_box)
         self.pages_tray.append(pages_scroll)
@@ -3465,13 +3722,15 @@ class LexiWindow(Adw.ApplicationWindow):
         self.pages_tray.append(self.recapture_btn)
 
         strip_sep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        self.strip_sep = strip_sep
         action_strip.append(strip_sep)
 
         chips_scroll = Gtk.ScrolledWindow()
         chips_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
         chips_scroll.add_css_class('lexi-chips-scroll')
         chips_scroll.set_hexpand(True)
-        chips_scroll.set_propagate_natural_width(True)
+        chips_scroll.set_propagate_natural_width(False)
+        self.chips_scroll = chips_scroll
         chips_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         chips_scroll.set_child(chips_box)
         action_strip.append(chips_scroll)
@@ -3559,7 +3818,8 @@ class LexiWindow(Adw.ApplicationWindow):
         bottom_spacer.set_hexpand(True)
         bottom_bar.append(bottom_spacer)
 
-        dismiss_hint = Gtk.Label(label="Esc to close • Ctrl+M to minimize • Super+C to add page")
+        dismiss_hint = Gtk.Label(label="Ctrl+B: Side Panel • Esc: Notch • Super+C: Add Page")
+        dismiss_hint.set_ellipsize(Pango.EllipsizeMode.END)
         dismiss_hint.add_css_class('lexi-subtitle')
         bottom_bar.append(dismiss_hint)
 
@@ -4039,6 +4299,9 @@ class LexiWindow(Adw.ApplicationWindow):
             elif lower_kv == Gdk.KEY_o:
                 self.on_feed_file_clicked(None)
                 return True
+            elif lower_kv == Gdk.KEY_b:
+                self.toggle_mode()
+                return True
             elif lower_kv == Gdk.KEY_l:
                 self.on_clear_chat(None)
                 return True
@@ -4064,8 +4327,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
         self.is_streaming = True
         self.send_btn.set_sensitive(False)
-        self.mascot.set_mood("working")
-        self.status_pill.set_text("⚡ Analyzing")
+        self.update_mascot_mood("working")
         self.thinking_label.set_text("✨ Lexi is analyzing your screen... ✦ ✧ ✧")
         self.thinking_box.set_visible(True)
         self.spinner.start()
@@ -4263,13 +4525,16 @@ class LexiWindow(Adw.ApplicationWindow):
 
         # Celebratory mascot reaction when answer completes
         if full_text and not full_text.startswith("\n⚠️ Error"):
-            self.mascot.set_mood("happy")
+            self.update_mascot_mood("happy")
             self.status_pill.set_text("🌟 Cosmic answer ready! ✨")
             def reset_celebration():
-                self.mascot.reset_mood()
+                self.update_mascot_mood("happy")
                 if not self.is_streaming:
                     count = len(self.captured_pages)
-                    self.status_pill.set_text(f"✨ {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages")
+                    st = f"✨ {count}/{self.max_pages} Pages" if count > 0 else "⚠️ No pages"
+                    self.status_pill.set_text(st)
+                    if hasattr(self, 'header_status_pill'):
+                        self.header_status_pill.set_text(st)
                 return GLib.SOURCE_REMOVE
             GLib.timeout_add(2500, reset_celebration)
 
@@ -4285,11 +4550,11 @@ class LexiWindow(Adw.ApplicationWindow):
             clipboard = display.get_clipboard()
             clipboard.set(text_to_copy)
             self.copy_btn.set_label("Copied! ✨🚀")
-            self.mascot.set_mood("happy")
+            self.update_mascot_mood("happy")
             def reset_copy():
                 self.copy_btn.set_label("📋 Copy Answer")
                 if not self.is_streaming:
-                    self.mascot.reset_mood()
+                    self.update_mascot_mood("happy")
                 return GLib.SOURCE_REMOVE
             GLib.timeout_add_seconds(2, reset_copy)
 
@@ -4346,7 +4611,7 @@ class LexiApp(Adw.Application):
 
         args = command_line.get_arguments()
         if '--help' in args or '-h' in args:
-            print("Lexi Copilot - Cosmic Screen Companion & Filee Converter\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip                 Interactive region snip\n  -i, --island, -n, --notch  Dock as Apple Dynamic Island at top of screen\n  -p, --pet                  Launch as floating Desktop Pet\n  -d, --donut [file]         Open circular Filee Donut converter at cursor\n  -f, --feed <file>          Feed a file to Lexi Copilot\n  --convert <file> --to <fmt> Convert file offline\n  -h, --help                 Show this help message")
+            print("Lexi Copilot - Cosmic Screen Companion & Filee Converter\nUsage:\n  lexi-copilot [options]\n\nOptions:\n  -s, --snip                 Interactive region snip\n  -i, --island, -n, --notch  Dock as Apple Dynamic Island at top of screen\n  -b, --sidepanel, --sidebar Dock as Gemini-style vertical Side Panel\n  -p, --pet                  Launch as floating Desktop Pet\n  -d, --donut [file]         Open circular Filee Donut converter at cursor\n  -f, --feed <file>          Feed a file to Lexi Copilot\n  --convert <file> --to <fmt> Convert file offline\n  -h, --help                 Show this help message")
             return finish_cmd(0)
 
         if '--convert' in args:
@@ -4387,6 +4652,7 @@ class LexiApp(Adw.Application):
         is_snip = ('--snip' in args) or ('-s' in args)
         is_notch = ('--notch' in args) or ('-n' in args) or ('--island' in args) or ('-i' in args)
         is_pet = ('--pet' in args) or ('-p' in args)
+        is_sidepanel = ('--sidepanel' in args) or ('--sidebar' in args) or ('-b' in args)
 
         feed_file = None
         for i, a in enumerate(args[1:], 1):
@@ -4408,6 +4674,9 @@ class LexiApp(Adw.Application):
                 win.collapse_to_notch()
             elif is_pet:
                 win.detach_to_desktop()
+            elif is_sidepanel:
+                win.set_mode('side_panel')
+                win.expand_from_notch()
             elif is_snip:
                 if len(win.captured_pages) < win.max_pages:
                     win.saved_pos = win.get_current_pos()
@@ -4427,7 +4696,10 @@ class LexiApp(Adw.Application):
             win = LexiWindow(self, self.config, is_snip=is_snip)
             self.active_window = win
             win.set_visible(False)
-            if is_notch:
+            if is_sidepanel:
+                win.set_mode('side_panel')
+                GLib.timeout_add(150, lambda: win.capture_screen_and_reveal(interactive=is_snip, append_mode=False))
+            elif is_notch:
                 nw = win.get_notch_window()
                 nw.set_visible(True)
                 nw.present()
