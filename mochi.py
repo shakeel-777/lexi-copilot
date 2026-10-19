@@ -2409,8 +2409,8 @@ class LexiDynamicIslandWindow(Gtk.Window):
             b.connect('clicked', lambda *_: cb())
             return b
 
-        actions_box.append(make_btn("💬 Copilot", "island-btn-primary", "Open full screen copilot", self.on_expand_copilot))
-        actions_box.append(make_btn("◨ Side", "island-btn-secondary", "Open Gemini-style side panel", self.on_expand_side_panel))
+        actions_box.append(make_btn("💬 Copilot", "island-btn-primary", "Open floating center copilot card", self.on_expand_copilot))
+        actions_box.append(make_btn("◨ Side Panel", "island-btn-secondary", "Open Gemini-style side panel", self.on_expand_side_panel))
         actions_box.append(make_btn("✂️ Snip", "island-btn-secondary", "Interactive region snip", self.on_trigger_snip))
         actions_box.append(make_btn("🐾 Pet", "island-btn-secondary", "Detach Lexi to roam desktop", self.on_detach_pet))
 
@@ -2455,7 +2455,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
             if mode == "convert":
                 rect = cairo.RectangleInt(40, 2, 600, 48)
             elif mode == "actions":
-                rect = cairo.RectangleInt(115, 2, 450, 48)
+                rect = cairo.RectangleInt(100, 2, 480, 48)
             else:
                 rect = cairo.RectangleInt(275, 2, 130, 48)
             region = cairo.Region(rect)
@@ -2491,6 +2491,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
     def on_expand_copilot(self):
         self.set_visible(False)
         if self.copilot_win:
+            self.copilot_win.set_mode('card')
             self.copilot_win.expand_from_notch()
 
     def on_expand_side_panel(self):
@@ -3383,7 +3384,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.screen_h = screen_h
 
         if getattr(self, 'current_mode', 'card') == 'side_panel':
-            self.card_w = 460
+            self.card_w = 440
             self.card_h = screen_h - 38
             pos_x = screen_x + screen_w - self.card_w
             pos_y = screen_y + 35
@@ -3441,6 +3442,8 @@ class LexiWindow(Adw.ApplicationWindow):
                 self.action_strip.set_orientation(Gtk.Orientation.VERTICAL)
             if hasattr(self, 'strip_sep'):
                 self.strip_sep.set_visible(False)
+            if hasattr(self, 'pages_tray_scroll'):
+                self.pages_tray_scroll.set_max_content_width(-1)
 
             self.set_default_size(self.card_w, self.card_h)
             self.set_size_request(self.card_w, self.card_h)
@@ -3480,6 +3483,8 @@ class LexiWindow(Adw.ApplicationWindow):
                 self.action_strip.set_orientation(Gtk.Orientation.HORIZONTAL)
             if hasattr(self, 'strip_sep'):
                 self.strip_sep.set_visible(True)
+            if hasattr(self, 'pages_tray_scroll'):
+                self.pages_tray_scroll.set_max_content_width(480)
 
             self.set_default_size(self.card_w, self.card_h)
             self.set_size_request(self.card_w, self.card_h)
@@ -3713,26 +3718,25 @@ class LexiWindow(Adw.ApplicationWindow):
 
         self.pages_tray_scroll = Gtk.ScrolledWindow()
         self.pages_tray_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-        self.pages_tray_scroll.set_propagate_natural_width(False)
+        self.pages_tray_scroll.set_propagate_natural_width(True)
         self.pages_tray_scroll.set_hexpand(True)
+        self.pages_tray_scroll.add_css_class('lexi-pages-tray-scroll')
         action_strip.append(self.pages_tray_scroll)
 
         self.pages_tray = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.pages_tray.add_css_class('lexi-pages-tray')
+        self.pages_tray.set_valign(Gtk.Align.CENTER)
         self.pages_tray_scroll.set_child(self.pages_tray)
 
-        tray_lbl = Gtk.Label(label="Pages:")
-        tray_lbl.add_css_class('lexi-tray-label')
-        self.pages_tray.append(tray_lbl)
+        self.tray_lbl = Gtk.Label(label="Pages (0/5):")
+        self.tray_lbl.add_css_class('lexi-tray-label')
+        self.pages_tray.append(self.tray_lbl)
 
-        pages_scroll = Gtk.ScrolledWindow()
-        pages_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
-        pages_scroll.add_css_class('lexi-pages-scroll')
-        pages_scroll.set_hexpand(False)
-        pages_scroll.set_propagate_natural_width(False)
+        # Direct box container for page cards (never squashed or clipped)
         self.pages_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        pages_scroll.set_child(self.pages_box)
-        self.pages_tray.append(pages_scroll)
+        self.pages_box.add_css_class('lexi-pages-box')
+        self.pages_box.set_valign(Gtk.Align.CENTER)
+        self.pages_tray.append(self.pages_box)
 
         self.add_snip_btn = Gtk.Button(label="✂️ Snip")
         self.add_snip_btn.set_focusable(False)
@@ -3873,9 +3877,11 @@ class LexiWindow(Adw.ApplicationWindow):
         for idx, page in enumerate(self.captured_pages, 1):
             card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             card.add_css_class('lexi-page-card')
+            card.set_valign(Gtk.Align.CENTER)
 
             img = Gtk.Image.new_from_paintable(page["texture"])
             img.add_css_class('lexi-page-img')
+            img.set_size_request(28, 20)
             card.append(img)
 
             if page.get("is_file"):
@@ -3888,11 +3894,15 @@ class LexiWindow(Adw.ApplicationWindow):
 
             lbl = Gtk.Label(label=title_txt)
             lbl.add_css_class('lexi-page-title')
+            lbl.set_valign(Gtk.Align.CENTER)
             card.append(lbl)
 
-            del_btn = Gtk.Button.new_from_icon_name('window-close-symbolic')
+            del_btn = Gtk.Button()
+            del_lbl = Gtk.Label(label="✕")
+            del_lbl.add_css_class('lexi-del-icon')
+            del_btn.set_child(del_lbl)
             del_btn.set_focusable(False)
-            del_btn.add_css_class('flat')
+            del_btn.set_valign(Gtk.Align.CENTER)
             del_btn.add_css_class('lexi-page-del-btn')
             del_btn.set_tooltip_text(f"Remove {page.get('name', f'Page {idx}')}")
             del_btn.connect('clicked', lambda _, p_idx=idx-1: self.remove_page(p_idx))
@@ -3907,25 +3917,25 @@ class LexiWindow(Adw.ApplicationWindow):
         if hasattr(self, 'add_feed_btn'):
             self.add_feed_btn.set_sensitive(can_add)
 
-        if can_add:
-            self.add_snip_btn.set_label(f"✂️ + Snip ({count}/5)")
-            self.add_full_btn.set_label("🖥️ + Screen")
-            if hasattr(self, 'add_feed_btn'):
-                self.add_feed_btn.set_label("📁 + Feed File")
-        else:
-            self.add_snip_btn.set_label("✂️ Max (5/5)")
-            self.add_full_btn.set_label("🖥️ Max (5/5)")
-            if hasattr(self, 'add_feed_btn'):
-                self.add_feed_btn.set_label("📁 Full")
+        if hasattr(self, 'tray_lbl'):
+            self.tray_lbl.set_text(f"Pages ({count}/5):")
+
+        self.add_snip_btn.set_label("✂️ Snip")
+        self.add_full_btn.set_label("🖥️ Screen")
+        if hasattr(self, 'add_feed_btn'):
+            self.add_feed_btn.set_label("📁 Feed")
+        self.recapture_btn.set_label("🔄 New")
 
         if count == 0:
             self.status_pill.set_text("⚠️ No pages")
             if hasattr(self, 'subtitle'):
-                self.subtitle.set_text("Cosmic Screen Copilot")
+                prefix = "Cosmic Screen Copilot" if getattr(self, 'current_mode', 'card') == 'card' else "Gemini Side Panel"
+                self.subtitle.set_text(prefix)
         else:
             self.status_pill.set_text(f"● {count}/5 Pages")
             if hasattr(self, 'subtitle'):
-                self.subtitle.set_text(f"Cosmic Screen Copilot • {count}/5 Pages ready")
+                prefix = "Cosmic Screen Copilot" if getattr(self, 'current_mode', 'card') == 'card' else "Gemini Side Panel"
+                self.subtitle.set_text(f"{prefix} • {count}/5 Pages ready")
 
     def remove_page(self, page_index):
         if 0 <= page_index < len(self.captured_pages):
@@ -3933,8 +3943,10 @@ class LexiWindow(Adw.ApplicationWindow):
             self.conversation = []  # Reset context when page set changes
             self.update_pages_tray_ui()
             count = len(self.captured_pages)
+            if hasattr(self, 'mascot'):
+                self.update_mascot_mood('happy')
             if count == 0:
-                self.text_buffer.set_text("⚠️ No pages attached. Click '✂️ + Snip', '🖥️ + Screen', or '📁 + Feed File' above to attach.")
+                self.text_buffer.set_text("⚠️ No pages attached. Click '✂️ Snip', '🖥️ Screen', or '📁 Feed' above to attach.")
             else:
                 self.text_buffer.set_text(f"📄 Page removed. {count} page(s) currently attached.")
 
@@ -4695,6 +4707,7 @@ class LexiApp(Adw.Application):
         is_notch = ('--notch' in args) or ('-n' in args) or ('--island' in args) or ('-i' in args)
         is_pet = ('--pet' in args) or ('-p' in args)
         is_sidepanel = ('--sidepanel' in args) or ('--sidebar' in args) or ('-b' in args)
+        is_card = ('--card' in args) or ('-c' in args)
 
         feed_file = None
         for i, a in enumerate(args[1:], 1):
@@ -4719,6 +4732,9 @@ class LexiApp(Adw.Application):
             elif is_sidepanel:
                 win.set_mode('side_panel')
                 win.expand_from_notch()
+            elif is_card:
+                win.set_mode('card')
+                win.expand_from_notch()
             elif is_snip:
                 if len(win.captured_pages) < win.max_pages:
                     win.saved_pos = win.get_current_pos()
@@ -4733,6 +4749,7 @@ class LexiApp(Adw.Application):
                 if win.get_visible():
                     win.collapse_to_notch()
                 else:
+                    win.set_mode('card')
                     win.expand_from_notch()
         else:
             win = LexiWindow(self, self.config, is_snip=is_snip)

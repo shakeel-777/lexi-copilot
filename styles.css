@@ -301,41 +301,49 @@ button.mac-dot, .mac-dot {
 
 /* Multi-Page Tray (Up to 5 pages) */
 .lexi-pages-tray, .mochi-pages-tray {
-    background: alpha(@window_fg_color, 0.04);
-    border-radius: 14px;
-    padding: 6px 12px;
-    border: 1px solid alpha(@window_fg_color, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    padding: 3px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .lexi-tray-label, .mochi-tray-label {
     font-size: 11px;
     font-weight: 700;
-    opacity: 0.7;
-    margin-right: 4px;
+    color: #c084fc;
+    margin-right: 2px;
+}
+
+.lexi-pages-box {
+    margin: 0;
+    padding: 0;
 }
 
 .lexi-page-card, .mochi-page-card {
-    background: alpha(@window_fg_color, 0.07);
-    border-radius: 10px;
-    padding: 4px 8px;
-    border: 1.5px solid alpha(@window_fg_color, 0.12);
-    transition: all 180ms ease;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 2px 6px 2px 4px;
+    border: 1.2px solid rgba(255, 255, 255, 0.16);
+    transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .lexi-page-card:hover, .mochi-page-card:hover {
     border-color: #a855f7;
-    background: alpha(#a855f7, 0.15);
+    background: rgba(168, 85, 247, 0.2);
+    box-shadow: 0 2px 10px rgba(168, 85, 247, 0.3);
 }
 
 .lexi-page-img, .mochi-page-img {
-    border-radius: 6px;
-    border: 1px solid alpha(@window_fg_color, 0.1);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .lexi-page-title, .mochi-page-title {
     font-size: 11px;
     font-weight: 600;
-    color: @window_fg_color;
+    color: #f3f4f6;
+    margin-left: 2px;
+    margin-right: 4px;
 }
 
 .lexi-page-del-btn, .mochi-page-del-btn {
@@ -343,23 +351,33 @@ button.mac-dot, .mac-dot {
     min-height: 20px;
     padding: 0;
     border-radius: 9999px;
-    opacity: 0.55;
-    background: transparent;
-    border: none;
-    transition: all 150ms ease;
+    background: rgba(255, 255, 255, 0.15);
+    color: #e5e7eb;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    transition: all 140ms ease;
 }
 
 .lexi-page-del-btn:hover, .mochi-page-del-btn:hover {
-    opacity: 1.0;
-    color: #f43f5e;
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #dc2626;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.7);
+    transform: scale(1.12);
+}
+
+.lexi-del-icon {
+    font-size: 10.5px;
+    font-weight: 900;
+    margin: 0;
+    padding: 0;
 }
 
 .lexi-tray-btn, .mochi-tray-btn {
     border-radius: 9999px;
-    font-size: 11px;
-    padding: 4px 12px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: 10.5px;
+    padding: 3px 9px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.14);
     color: #f3f4f6;
     font-weight: 600;
     transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -657,6 +675,15 @@ window.lexi-donut-win {
     font-size: 13.5px;
     line-height: 1.55;
     padding: 6px 4px;
+}
+
+.lexi-side-panel .lexi-page-card {
+    padding: 2px 5px 2px 4px;
+}
+
+.lexi-side-panel .lexi-page-del-btn {
+    min-width: 19px;
+    min-height: 19px;
 }
 
 
