@@ -2467,9 +2467,8 @@ class LexiWindow(Adw.ApplicationWindow):
         self.connect('notify::is-active', on_active_notify)
 
     def on_close_request(self, _):
-        if hasattr(self, 'app') and self.app:
-            self.app.active_window = None
-        return False
+        self.collapse_to_notch()
+        return True
 
     LEXI_PET_REACTIONS = [
         ("✨", "✨ *stardust!* ( ⸝⸝•ᴗ•⸝⸝ ) Navigating your screen!"),
