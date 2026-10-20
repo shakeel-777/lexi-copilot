@@ -7600,7 +7600,7 @@ class LexiWindow(Adw.ApplicationWindow):
                         "model": deepseek_model,
                         "messages": messages,
                         "stream": True,
-                        "max_tokens": max_tokens
+                        "max_tokens": max(max_tokens, 4096)
                     }
                     ds_headers = {
                         "Content-Type": "application/json",
@@ -7615,8 +7615,14 @@ class LexiWindow(Adw.ApplicationWindow):
                             if line.startswith('data: ') and line != 'data: [DONE]':
                                 try:
                                     chunk = json.loads(line[6:])
-                                    delta = chunk['choices'][0]['delta'].get('content', '')
+                                    delta_obj = chunk['choices'][0]['delta']
+                                    delta = delta_obj.get('content') or ''
+                                    reasoning = delta_obj.get('reasoning_content') or ''
+                                    if reasoning and not full_response:
+                                        GLib.idle_add(self.status_pill.set_text, f"🧠 {deepseek_model} (thinking...)")
                                     if delta:
+                                        if not full_response:
+                                            GLib.idle_add(self.status_pill.set_text, f"● {deepseek_model} (direct)")
                                         full_response.append(delta)
                                         GLib.idle_add(self.append_stream_token, delta)
                                 except Exception:
