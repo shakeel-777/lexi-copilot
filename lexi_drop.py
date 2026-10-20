@@ -17,6 +17,8 @@ import json
 import socket
 import asyncio
 import threading
+import subprocess
+import shutil
 import urllib.request
 from pathlib import Path
 from aiohttp import web, WSMsgType
@@ -268,6 +270,15 @@ class LexiDropServer:
 
     async def handle_icon_512(self, request):
         return web.FileResponse(DROP_WEB_DIR / "icon-512.png", headers={"Content-Type": "image/png"})
+
+    async def handle_apk(self, request):
+        apk_file = DROP_WEB_DIR / "lexi-connect.apk"
+        if not apk_file.exists():
+            return web.Response(status=404, text="APK not found")
+        return web.FileResponse(apk_file, headers={
+            "Content-Type": "application/vnd.android.package-archive",
+            "Content-Disposition": 'attachment; filename="lexi-connect.apk"'
+        })
 
     async def handle_ws(self, request):
         """Realtime WebSocket endpoint for peer synchronization and transfer notifications."""
@@ -614,6 +625,39 @@ class LexiDropServer:
         else:
             return web.json_response({"text": self.current_clipboard_text})
 
+    async def handle_mirror_api(self, request):
+        """Starts scrcpy screen mirroring on the laptop display."""
+        try:
+            stealth = request.query.get("stealth", "false").lower() == "true"
+            res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=3)
+            lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
+            attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
+            if not attached:
+                return web.json_response({"error": "No authorized phone connected via ADB"}, status=400)
+
+            device_id = attached[0]
+            cmd = [
+                'scrcpy',
+                '-s', device_id,
+                '--window-title=📱 Lexi Phone Mirror',
+                '--stay-awake',
+            ]
+            if stealth:
+                cmd.append('--turn-screen-off')
+
+            env = os.environ.copy()
+            if "DISPLAY" not in env:
+                env["DISPLAY"] = ":0"
+            if "WAYLAND_DISPLAY" not in env:
+                env["WAYLAND_DISPLAY"] = "wayland-0"
+            if "XDG_RUNTIME_DIR" not in env:
+                env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
+
+            subprocess.Popen(cmd, env=env, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return web.json_response({"success": True, "device": device_id, "stealth": stealth})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
     def broadcast_clipboard(self, text: str):
         """Broadcasts laptop clipboard text to all connected mobile clients."""
         self.current_clipboard_text = text
@@ -705,6 +749,7 @@ class LexiDropServer:
             self.app.router.add_get("/icon.png", self.handle_icon)
             self.app.router.add_get("/icon-192.png", self.handle_icon_192)
             self.app.router.add_get("/icon-512.png", self.handle_icon_512)
+            self.app.router.add_get("/lexi-connect.apk", self.handle_apk)
             self.app.router.add_get("/ws", self.handle_ws)
             self.app.router.add_post("/api/upload", self.handle_upload)
             self.app.router.add_get("/api/download/{token}", self.handle_download)
@@ -716,6 +761,7 @@ class LexiDropServer:
             self.app.router.add_post("/api/camera-snap", self.handle_camera_snap)
             self.app.router.add_get("/api/clipboard", self.handle_clipboard_api)
             self.app.router.add_post("/api/clipboard", self.handle_clipboard_api)
+            self.app.router.add_post("/api/mirror", self.handle_mirror_api)
 
             self.runner = web.AppRunner(self.app)
             self.loop.run_until_complete(self.runner.setup())

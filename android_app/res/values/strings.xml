@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lexi Connect</string>
+    <string name="host_default">10.93.59.11</string>
+    <string name="port_default">7890</string>
+    <string name="snap_title">📸 Snap to Lexi</string>
+    <string name="snap_desc">Optical scan into Lexi Vision Tray</string>
+    <string name="clip_title">📋 Universal Clipboard</string>
+    <string name="mirror_title">📱 Screen Mirroring</string>
+    <string name="files_title">⚡ AirDrop Dropzone</string>
+</resources>
