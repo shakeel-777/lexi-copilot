@@ -7519,10 +7519,12 @@ class LexiWindow(Adw.ApplicationWindow):
             success = False
             deepseek_key = self.config.get('deepseek_api_key', '').strip()
             deepseek_base = self.config.get('deepseek_api_base', 'https://api.deepseek.com').rstrip('/')
-            deepseek_model = self.config.get('deepseek_model', 'deepseek-chat')
+            deepseek_model = self.config.get('deepseek_model', 'deepseek-flash')
+            is_ds_multimodal = any(k in deepseek_model.lower() for k in ['flash', 'vl', 'vision', 'v4'])
+            can_ds_handle = (not has_images) or is_ds_multimodal
 
-            # 1. Primary: Direct DeepSeek API (if key is set and not a vision image query)
-            if deepseek_key and not has_images:
+            # 1. Primary: Direct DeepSeek API (if key is set and model can handle the payload)
+            if deepseek_key and can_ds_handle:
                 try:
                     ds_payload = {
                         "model": deepseek_model,
