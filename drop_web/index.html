@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Lexi Beam — Instant LAN Drop</title>
+  <meta name="description" content="Ultra-fast zero-copy local file sharing for nearby devices">
+  <meta name="theme-color" content="#0a0b0e">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="/icon-192.png">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="ambient-glow"></div>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div class="brand">
+        <img src="/icon.png" alt="Lexi" class="brand-icon">
+        <div class="brand-text">
+          <h1>Lexi Beam</h1>
+          <p id="network-addr">LAN Drop · Port 7890</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-pill" id="status-pill">
+          <div class="led-dot" id="led-dot"></div>
+          <span id="status-text">Connecting...</span>
+        </div>
+        <button class="btn-install" id="btn-install" title="Install Lexi Drop on your Windows desktop">
+          ⚡ Install App
+        </button>
+      </div>
+    </header>
+
+    <!-- Connected Peer Info -->
+    <div class="devices-card" id="devices-card">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:12px; color:var(--text-muted);">Active Host:</span>
+        <span class="device-chip" id="host-name">💻 Shakeel-Linux</span>
+      </div>
+      <div style="font-size:11px; color:var(--accent-emerald); font-family:'JetBrains Mono',monospace;">
+        ⚡ Kernel Zero-Copy Enabled
+      </div>
+    </div>
+
+    <!-- Drop Zone -->
+    <div class="dropzone" id="dropzone">
+      <div class="dropzone-inner">
+        <div class="drop-icon-wrap">
+          <span id="drop-glyph">⚡</span>
+        </div>
+        <div class="drop-title" id="drop-title">Drop files to send to Linux</div>
+        <div class="drop-desc">or click anywhere to browse files from your computer</div>
+        <div class="drop-badges">
+          <span class="badge">Large ZIPs</span>
+          <span class="badge">Videos</span>
+          <span class="badge">PDFs</span>
+          <span class="badge">Images</span>
+          <span class="badge">Max 10 GB</span>
+        </div>
+      </div>
+      <input type="file" id="file-input" multiple>
+    </div>
+
+    <!-- Active Transfers -->
+    <div class="transfers-container">
+      <div class="section-title">
+        <span>Transfers</span>
+        <span id="transfers-count" style="font-size:11px; font-weight:normal;">0 active</span>
+      </div>
+      <div class="transfer-list" id="transfer-list">
+        <!-- Transfer cards injected dynamically -->
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+      Direct Wi-Fi Transfer · Zero Cloud Storage · End-to-End Local
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

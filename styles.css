@@ -1,4 +1,4 @@
-/* Lexi Screen Copilot - Cosmic Stardust & Clean Glass Theme */
+/* Lexi Screen Copilot - Obsidian & Titanium Precision Theme */
 
 @keyframes pill-pulse {
     0% { opacity: 0.85; }
@@ -6,7 +6,7 @@
     100% { opacity: 0.85; }
 }
 
-window.lexi-window, window.mochi-window {
+window.lexi-window {
     background-color: transparent;
 }
 
@@ -14,24 +14,29 @@ windowhandle, revealer {
     background: transparent;
 }
 
-/* Card Container (macOS Frosted Acrylic Glassmorphism) */
-.lexi-card, .mochi-card {
-    background: linear-gradient(145deg, rgba(22, 19, 36, 0.95), rgba(15, 12, 26, 0.98));
+/* Card Container (Obsidian Glass Double-Bezel) */
+.lexi-card {
+    background: rgba(10, 11, 14, 0.96);
     border-radius: 24px;
-    box-shadow: 0 25px 65px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 0 30px rgba(121, 40, 202, 0.15);
-    border: 1px solid rgba(168, 85, 247, 0.35);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.85),
+                0 0 0 1px rgba(255, 255, 255, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.14),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 16px 20px;
     margin: 4px 10px 10px 10px;
-    transition: border-color 240ms ease, box-shadow 240ms ease;
+    transition: border-color 220ms ease, box-shadow 220ms ease;
 }
 
-.lexi-card:hover, .mochi-card:hover {
-    border-color: rgba(192, 132, 252, 0.6);
-    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(255, 255, 255, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 36px rgba(168, 85, 247, 0.25);
+.lexi-card:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 36px 90px rgba(0, 0, 0, 0.9),
+                0 0 0 1px rgba(255, 255, 255, 0.12),
+                inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 /* Header Mascot Interactive Widget */
-.lexi-mascot-btn, .lexi-avatar-btn, .mochi-avatar-btn {
+.lexi-mascot-btn, .lexi-avatar-btn {
     background: transparent;
     border: none;
     padding: 0;
@@ -40,36 +45,38 @@ windowhandle, revealer {
     transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.lexi-mascot-btn:hover, .lexi-avatar-btn:hover, .mochi-avatar-btn:hover {
+.lexi-mascot-btn:hover, .lexi-avatar-btn:hover {
     transform: scale(1.08);
 }
 
-.lexi-mascot-btn:active, .lexi-avatar-btn:active, .mochi-avatar-btn:active {
+.lexi-mascot-btn:active, .lexi-avatar-btn:active {
     transform: scale(0.92);
 }
 
-/* Left Mascot & Companion Stage (macOS Glass Pedestal) */
+/* Left Mascot & Companion Stage (Architectural Recessed Pedestal) */
 .lexi-companion-stage {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 20px;
-    padding: 10px 8px 12px 8px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 4px 16px rgba(0, 0, 0, 0.2);
+    padding: 12px 10px 14px 10px;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.06),
+                inset 0 -1px 2px rgba(0, 0, 0, 0.35),
+                0 6px 20px rgba(0, 0, 0, 0.35);
     transition: all 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Companion Eating & Hover Glow States */
 .lexi-companion-stage.lexi-stage-hover {
-    background: rgba(168, 85, 247, 0.16);
-    border-color: #c084fc;
-    box-shadow: 0 0 28px rgba(168, 85, 247, 0.45), inset 0 0 18px rgba(168, 85, 247, 0.25);
-    transform: scale(1.02);
+    background: rgba(255, 255, 255, 0.045);
+    border-color: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 24px rgba(255, 255, 255, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transform: scale(1.01);
 }
 
 .lexi-companion-stage.lexi-stage-eating {
-    background: rgba(236, 72, 153, 0.18);
-    border-color: #f472b6;
-    box-shadow: 0 0 32px rgba(236, 72, 153, 0.5), inset 0 0 20px rgba(236, 72, 153, 0.3);
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(52, 211, 153, 0.4);
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.2);
 }
 
 .lexi-mascot-area {
@@ -77,27 +84,29 @@ windowhandle, revealer {
     min-height: 140px;
 }
 
-.lexi-title, .mochi-title {
+.lexi-title {
     font-size: 16.5px;
-    font-weight: 800;
-    color: @window_fg_color;
-    letter-spacing: -0.2px;
+    font-weight: 700;
+    color: #fafafa;
+    letter-spacing: -0.3px;
 }
 
-.lexi-subtitle, .mochi-subtitle {
+.lexi-subtitle {
     font-size: 11.5px;
-    opacity: 0.65;
+    color: #71717a;
     font-weight: 500;
+    letter-spacing: -0.1px;
 }
 
-.lexi-status-pill, .mochi-status-pill {
-    background: alpha(#a855f7, 0.18);
-    color: #e9d5ff;
+.lexi-status-pill {
+    background: rgba(255, 255, 255, 0.04);
+    color: #34d399;
     border-radius: 9999px;
-    padding: 4px 10px;
+    padding: 4px 12px;
     font-size: 10.5px;
     font-weight: 600;
-    border: 1px solid alpha(#a855f7, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
     transition: all 180ms ease;
 }
 
@@ -114,135 +123,149 @@ windowhandle, revealer {
 }
 
 /* Quick Action Suggestion Pills */
-.lexi-pill-btn, .mochi-pill-btn {
+.lexi-pill-btn {
     border-radius: 9999px;
     font-size: 11.5px;
-    padding: 4px 11px;
-    background: alpha(@window_fg_color, 0.06);
-    border: 1px solid alpha(@window_fg_color, 0.12);
-    color: @window_fg_color;
-    font-weight: 600;
-    transition: all 180ms ease;
+    padding: 4px 12px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #d4d4d8;
+    font-weight: 500;
+    transition: all 150ms ease;
 }
 
-.lexi-pill-btn:hover, .mochi-pill-btn:hover {
-    background: alpha(#7928ca, 0.22);
-    border-color: #a855f7;
-    color: #e9d5ff;
-    box-shadow: 0 4px 12px alpha(#7928ca, 0.25);
+.lexi-pill-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transform: translateY(-1px);
 }
 
-/* Input Area (macOS Spotlight Glass Bar) */
-.lexi-entry-box, .mochi-entry-box {
-    background: rgba(255, 255, 255, 0.05);
+.lexi-pill-btn:active {
+    transform: scale(0.97);
+}
+
+/* Input Area (macOS Spotlight / Raycast Machined Capsule) */
+.lexi-entry-box {
+    background: rgba(18, 19, 22, 0.95);
     border-radius: 16px;
-    border: 1.2px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.09);
     padding: 4px 6px;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-    transition: border-color 200ms ease, box-shadow 200ms ease, background 200ms ease;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+    transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
-.lexi-entry-box:focus-within, .mochi-entry-box:focus-within {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: #a855f7;
-    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.25), inset 0 1px 2px rgba(0, 0, 0, 0.2);
+.lexi-entry-box:focus-within {
+    background: rgba(22, 24, 28, 0.98);
+    border-color: rgba(255, 255, 255, 0.28);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.12),
+                inset 0 1px 2px rgba(0, 0, 0, 0.3),
+                0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-.lexi-entry, .mochi-entry {
+.lexi-entry {
     background: transparent;
     border: none;
     box-shadow: none;
-    font-size: 14px;
-    padding: 8px 10px;
-    color: @window_fg_color;
+    font-size: 13.5px;
+    padding: 8px 12px;
+    color: #f4f4f5;
 }
 
-.lexi-entry:focus, .mochi-entry:focus {
+.lexi-entry:focus {
     box-shadow: none;
     border: none;
 }
 
-.lexi-send-btn, .mochi-send-btn {
-    background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
-    color: white;
+.lexi-send-btn {
+    background: linear-gradient(180deg, #ffffff 0%, #d4d4d8 100%);
+    color: #09090b;
     border-radius: 12px;
     min-width: 38px;
     min-height: 38px;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.4);
     font-weight: 700;
-    box-shadow: 0 2px 8px rgba(168, 85, 247, 0.35);
-    transition: filter 150ms ease, transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition: filter 150ms ease, transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.lexi-send-btn:hover, .mochi-send-btn:hover {
-    filter: brightness(1.15);
-    transform: scale(1.05);
+.lexi-send-btn:hover {
+    filter: brightness(1.08);
+    transform: scale(1.04);
 }
 
-.lexi-send-btn:active, .mochi-send-btn:active {
-    filter: brightness(0.9);
-    transform: scale(0.95);
+.lexi-send-btn:active {
+    filter: brightness(0.92);
+    transform: scale(0.96);
 }
 
 /* Response Area */
-.lexi-response-box, .mochi-response-box {
-    background: alpha(@window_fg_color, 0.03);
+.lexi-response-box {
+    background: rgba(14, 15, 18, 0.75);
     border-radius: 16px;
-    border: 1px solid alpha(@window_fg_color, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     padding: 14px 16px;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3);
 }
 
-.lexi-answer-text, .mochi-answer-text {
+.lexi-answer-text {
     font-size: 13.5px;
     line-height: 1.6;
+    color: #e4e4e7;
     background: transparent;
 }
 
-textview.lexi-answer-text, textview.mochi-answer-text {
+textview.lexi-answer-text {
     background: transparent;
 }
 
-textview.lexi-answer-text text, textview.mochi-answer-text text {
+textview.lexi-answer-text text {
     background: transparent;
 }
 
-.lexi-thinking, .mochi-thinking {
-    font-size: 13px;
+.lexi-thinking {
+    font-size: 12.5px;
     font-weight: 600;
-    color: #c084fc;
+    color: #a1a1aa;
     animation-name: pill-pulse;
     animation-duration: 1.8s;
     animation-iteration-count: infinite;
 }
 
-.lexi-action-btn, .mochi-action-btn {
-    border-radius: 10px;
-    font-size: 12px;
+.lexi-action-btn {
+    border-radius: 9999px;
+    font-size: 11.5px;
     padding: 4px 12px;
-    transition: all 180ms ease;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #d4d4d8;
+    transition: all 150ms ease;
 }
 
-.lexi-action-btn:hover, .mochi-action-btn:hover {
-    background: alpha(#a855f7, 0.2);
-    color: #e9d5ff;
+.lexi-action-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
 }
 
 /* Header Action Buttons (Snip, Full, Clear) */
-.lexi-header-btn, .mochi-header-btn {
+.lexi-header-btn {
     border-radius: 9999px;
     font-size: 11px;
     padding: 4px 12px;
-    background: alpha(@window_fg_color, 0.07);
-    border: 1px solid alpha(@window_fg_color, 0.12);
-    color: @window_fg_color;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #d4d4d8;
     font-weight: 600;
-    transition: all 180ms ease;
+    transition: all 150ms ease;
 }
 
-.lexi-header-btn:hover, .mochi-header-btn:hover {
-    background: alpha(#7928ca, 0.22);
-    border-color: #a855f7;
-    color: #e9d5ff;
+.lexi-header-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* macOS Traffic Light Control Buttons (Close, Minimize) */
@@ -281,7 +304,7 @@ button.mac-dot, .mac-dot {
 }
 
 /* Window Control Buttons (Minimize, Close) */
-.lexi-win-btn, .mochi-win-btn {
+.lexi-win-btn {
     border-radius: 9999px;
     min-width: 28px;
     min-height: 28px;
@@ -290,27 +313,27 @@ button.mac-dot, .mac-dot {
     transition: all 150ms ease;
 }
 
-.lexi-win-btn:hover, .mochi-win-btn:hover {
+.lexi-win-btn:hover {
     opacity: 1.0;
     background: alpha(@window_fg_color, 0.12);
 }
 
-.lexi-win-btn:active, .mochi-win-btn:active {
+.lexi-win-btn:active {
     opacity: 0.8;
 }
 
 /* Multi-Page Tray (Up to 5 pages) */
-.lexi-pages-tray, .mochi-pages-tray {
-    background: rgba(255, 255, 255, 0.04);
+.lexi-pages-tray {
+    background: rgba(255, 255, 255, 0.03);
     border-radius: 12px;
     padding: 3px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.lexi-tray-label, .mochi-tray-label {
+.lexi-tray-label {
     font-size: 11px;
-    font-weight: 700;
-    color: #c084fc;
+    font-weight: 600;
+    color: #71717a;
     margin-right: 2px;
 }
 
@@ -319,26 +342,26 @@ button.mac-dot, .mac-dot {
     padding: 0;
 }
 
-.lexi-page-card, .mochi-page-card {
-    background: rgba(255, 255, 255, 0.08);
+.lexi-page-card {
+    background: rgba(255, 255, 255, 0.06);
     border-radius: 8px;
     padding: 2px 6px 2px 4px;
-    border: 1.2px solid rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.lexi-page-card:hover, .mochi-page-card:hover {
-    border-color: #a855f7;
-    background: rgba(168, 85, 247, 0.2);
-    box-shadow: 0 2px 10px rgba(168, 85, 247, 0.3);
+.lexi-page-card:hover {
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
-.lexi-page-img, .mochi-page-img {
+.lexi-page-img {
     border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
-.lexi-page-title, .mochi-page-title {
+.lexi-page-title {
     font-size: 11px;
     font-weight: 600;
     color: #f3f4f6;
@@ -346,18 +369,18 @@ button.mac-dot, .mac-dot {
     margin-right: 4px;
 }
 
-.lexi-page-del-btn, .mochi-page-del-btn {
+.lexi-page-del-btn {
     min-width: 20px;
     min-height: 20px;
     padding: 0;
     border-radius: 9999px;
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.12);
     color: #e5e7eb;
-    border: 1px solid rgba(255, 255, 255, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     transition: all 140ms ease;
 }
 
-.lexi-page-del-btn:hover, .mochi-page-del-btn:hover {
+.lexi-page-del-btn:hover {
     background: #ef4444;
     color: #ffffff;
     border-color: #dc2626;
@@ -372,43 +395,43 @@ button.mac-dot, .mac-dot {
     padding: 0;
 }
 
-.lexi-tray-btn, .mochi-tray-btn {
+.lexi-tray-btn {
     border-radius: 9999px;
     font-size: 10.5px;
-    padding: 3px 9px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    color: #f3f4f6;
-    font-weight: 600;
-    transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 3px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #e4e4e7;
+    font-weight: 500;
+    transition: all 150ms ease;
 }
 
-.lexi-tray-btn:hover, .mochi-tray-btn:hover {
-    background: rgba(168, 85, 247, 0.25);
-    border-color: #a855f7;
+.lexi-tray-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.24);
     color: #ffffff;
-    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.28);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
     transform: translateY(-1px);
 }
 
-.lexi-tray-btn:active, .mochi-tray-btn:active {
+.lexi-tray-btn:active {
     transform: translateY(0);
 }
 
-.lexi-tray-btn-accent, .mochi-tray-btn-accent {
-    background: rgba(236, 72, 153, 0.16);
-    border-color: rgba(236, 72, 153, 0.38);
-    color: #f472b6;
+.lexi-tray-btn-accent {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
 }
 
-.lexi-tray-btn-accent:hover, .mochi-tray-btn-accent:hover {
-    background: rgba(236, 72, 153, 0.32);
-    border-color: #ec4899;
-    color: #fbcfe8;
-    box-shadow: 0 4px 14px rgba(236, 72, 153, 0.3);
+.lexi-tray-btn-accent:hover {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.32);
+    color: #ffffff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
-/* Authentic Apple Dynamic Island (Top Floating OLED Morphing Pill) */
+/* Authentic Lexi Dynamic Island (Top Floating OLED Morphing Pill) */
 window.lexi-notch-win, window.lexi-island-win, window.lexi-pet-win {
     background: transparent;
     background-color: transparent;
@@ -423,39 +446,125 @@ window.lexi-notch-win, window.lexi-island-win, window.lexi-pet-win {
 .dynamic-island-pill {
     background: #000000;
     border-radius: 9999px;
-    border: 1.2px solid rgba(255, 255, 255, 0.18);
-    padding: 3px 12px 3px 6px;
-    min-height: 32px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 14px rgba(168, 85, 247, 0.22);
+    border: 1.5px solid rgba(255, 255, 255, 0.28);
+    padding: 3px 14px 3px 8px;
+    min-height: 34px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.95), 0 0 18px rgba(168, 85, 247, 0.35);
     transition: all 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .dynamic-island-pill:hover, .dynamic-island-expanded {
     background: #000000;
-    border-color: rgba(192, 132, 252, 0.7);
-    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.95), 0 0 22px rgba(168, 85, 247, 0.45);
-    padding: 3px 12px 3px 6px;
+    border-color: rgba(192, 132, 252, 0.9);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.98), 0 0 26px rgba(168, 85, 247, 0.55);
+    padding: 3px 14px 3px 8px;
 }
 
 .dynamic-island-feeding {
-    background: linear-gradient(135deg, #180828 0%, #000000 100%);
-    border-color: #ec4899;
-    box-shadow: 0 0 28px rgba(236, 72, 153, 0.65);
+    background: #000000;
+    border-color: #10b981;
+    box-shadow: 0 0 28px rgba(16, 185, 129, 0.5);
     transform: scale(1.04);
 }
 
 .dynamic-island-label {
     font-size: 11.5px;
-    font-weight: 700;
-    color: #f3e8ff;
+    font-weight: 600;
+    color: #f4f4f5;
     letter-spacing: -0.2px;
 }
 
 .dynamic-island-dot {
     font-size: 7px;
-    color: #a855f7;
+    color: #10b981;
     margin-right: 2px;
 }
+
+/* Media Island Styling */
+.dynamic-island-media {
+    border-color: rgba(29, 185, 84, 0.45);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.85), 0 0 16px rgba(29, 185, 84, 0.28);
+}
+
+.dynamic-island-media:hover {
+    border-color: rgba(29, 185, 84, 0.85);
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.95), 0 0 24px rgba(29, 185, 84, 0.45);
+}
+
+.island-media-art {
+    border-radius: 6px;
+    margin-right: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.island-media-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
+.island-media-btn {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    padding: 2px 7px;
+    min-height: 22px;
+    font-size: 11px;
+    font-weight: 700;
+    margin: 0 1px;
+    transition: all 130ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.island-media-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.5);
+    transform: scale(1.08);
+}
+
+.island-media-btn:active {
+    transform: scale(0.95);
+}
+
+/* Dynamic Island System Alert Glow Styles */
+.dynamic-island-pill.island-alert-green {
+    border-color: #22c55e;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.9), 0 0 20px rgba(34, 197, 94, 0.6);
+}
+
+.dynamic-island-pill.island-alert-cyan {
+    border-color: #06b6d4;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.9), 0 0 20px rgba(6, 182, 212, 0.6);
+}
+
+.dynamic-island-pill.island-alert-amber {
+    border-color: #f59e0b;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.9), 0 0 20px rgba(245, 158, 11, 0.6);
+}
+
+.dynamic-island-pill.island-alert-purple {
+    border-color: #c084fc;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.9), 0 0 20px rgba(168, 85, 247, 0.6);
+}
+
+.dynamic-island-pill.island-alert-silver {
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.9), 0 0 16px rgba(255, 255, 255, 0.3);
+}
+
+.island-alert-icon {
+    font-size: 13px;
+    margin-right: 2px;
+}
+
+.island-alert-text {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
 
 .island-action-btn {
     border-radius: 9999px;
@@ -468,49 +577,49 @@ window.lexi-notch-win, window.lexi-island-win, window.lexi-pet-win {
 }
 
 .island-btn-primary {
-    background: linear-gradient(135deg, #9333ea 0%, #db2777 100%);
-    color: #ffffff;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 2px 10px rgba(168, 85, 247, 0.4);
+    background: #ffffff;
+    color: #09090b;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .island-btn-primary:hover {
-    background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+    background: #f4f4f5;
     transform: scale(1.05);
-    box-shadow: 0 4px 14px rgba(236, 72, 153, 0.6);
+    box-shadow: 0 4px 12px rgba(255, 255, 255, 0.15);
 }
 
 .island-btn-secondary {
     background: rgba(255, 255, 255, 0.08);
-    color: #e9d5ff;
-    border: 1px solid rgba(168, 85, 247, 0.35);
+    color: #e4e4e7;
+    border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .island-btn-secondary:hover {
-    background: rgba(168, 85, 247, 0.28);
+    background: rgba(255, 255, 255, 0.16);
     color: #ffffff;
-    border-color: rgba(192, 132, 252, 0.75);
+    border-color: rgba(255, 255, 255, 0.28);
     transform: scale(1.05);
 }
 
 /* Detach to Desktop Button */
 .lexi-detach-btn {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 9999px;
     padding: 3px 10px;
     font-size: 10.5px;
     font-weight: 600;
-    color: #d1d5db;
+    color: #a1a1aa;
     transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .lexi-detach-btn:hover {
-    background: rgba(168, 85, 247, 0.22);
-    border-color: #c084fc;
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
     color: #ffffff;
-    transform: scale(1.04);
-    box-shadow: 0 4px 12px rgba(168, 85, 247, 0.25);
+    transform: scale(1.02);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .lexi-detach-btn:active {
@@ -530,28 +639,51 @@ window.lexi-donut-win {
     font-size: 10.5px;
     font-weight: 700;
     margin: 0 1px;
-    background: rgba(168, 85, 247, 0.20);
-    border: 1px solid rgba(192, 132, 252, 0.45);
-    color: #f3e8ff;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #e4e4e7;
     transition: all 130ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .island-convert-btn:hover {
-    background: #a855f7;
-    border-color: #f3e8ff;
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.35);
     color: #ffffff;
-    box-shadow: 0 0 12px rgba(168, 85, 247, 0.7);
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.15);
     transform: scale(1.06);
 }
 
 .island-convert-special {
-    background: linear-gradient(135deg, rgba(236, 72, 153, 0.30) 0%, rgba(168, 85, 247, 0.30) 100%);
-    border-color: rgba(244, 114, 182, 0.55);
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(52, 211, 153, 0.4);
+    color: #34d399;
 }
 
 .island-convert-special:hover {
-    background: linear-gradient(135deg, #ec4899 0%, #a855f7 100%);
-    box-shadow: 0 0 14px rgba(236, 72, 153, 0.8);
+    background: rgba(16, 185, 129, 0.3);
+    border-color: rgba(52, 211, 153, 0.6);
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+    transform: scale(1.06);
+}
+
+.island-beam-btn {
+    border-radius: 9999px;
+    padding: 2px 9px;
+    min-height: 22px;
+    font-size: 10.5px;
+    font-weight: 700;
+    margin: 0 1px;
+    background: rgba(6, 182, 212, 0.15);
+    border: 1px solid rgba(34, 211, 238, 0.4);
+    color: #22d3ee;
+    transition: all 130ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.island-beam-btn:hover {
+    background: rgba(6, 182, 212, 0.3);
+    border-color: rgba(34, 211, 238, 0.7);
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.35);
     transform: scale(1.06);
 }
 
@@ -582,45 +714,45 @@ window.lexi-donut-win {
 }
 
 .dynamic-island-convert {
-    border-color: rgba(168, 85, 247, 0.75);
-    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.95), 0 0 20px rgba(168, 85, 247, 0.4);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.95), 0 0 14px rgba(255, 255, 255, 0.08);
 }
 
-/* Gemini Side Panel Bar Chat Mode */
+/* Lexi Side Panel Bar Chat Mode */
 .lexi-card.lexi-side-panel {
     border-radius: 24px 0 0 24px;
     margin: 0;
     border-right-width: 0;
-    border-top: 1px solid rgba(168, 85, 247, 0.3);
-    border-bottom: 1px solid rgba(168, 85, 247, 0.3);
-    border-left: 2px solid rgba(192, 132, 252, 0.65);
-    box-shadow: -15px 0 45px rgba(0, 0, 0, 0.9), 0 0 25px rgba(168, 85, 247, 0.18);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: -20px 0 50px rgba(0, 0, 0, 0.85);
     padding: 12px 14px;
-    background: #090712;
+    background: rgba(10, 11, 14, 0.97);
 }
 
 .lexi-drag-snap-candidate {
-    border-color: #ec4899;
-    box-shadow: 0 0 35px rgba(236, 72, 153, 0.85), -10px 0 30px rgba(168, 85, 247, 0.6);
+    border-color: #38bdf8;
+    box-shadow: 0 0 35px rgba(56, 189, 248, 0.4), -10px 0 30px rgba(56, 189, 248, 0.2);
 }
 
 .lexi-mode-btn {
-    background: rgba(168, 85, 247, 0.18);
-    border: 1px solid rgba(192, 132, 252, 0.35);
-    color: #e9d5ff;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #d4d4d8;
     border-radius: 9999px;
     padding: 3px 10px;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     transition: all 140ms ease;
 }
 
 .lexi-mode-btn:hover {
-    background: #a855f7;
-    border-color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.22);
     color: #ffffff;
-    box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
-    transform: scale(1.04);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transform: scale(1.02);
 }
 
 .lexi-header-mini-mascot {
@@ -686,5 +818,235 @@ window.lexi-donut-win {
     min-height: 19px;
 }
 
+/* Character Studio & Avatar Dialog */
+window.lexi-avatar-win,
+.lexi-avatar-win {
+    background-color: #0a0b0e;
+    color: #f8fafc;
+}
 
+.lexi-avatar-win contents,
+.lexi-avatar-root {
+    background-color: #0a0b0e;
+    color: #f8fafc;
+}
 
+.lexi-studio-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
+.lexi-studio-subtitle {
+    font-size: 11.5px;
+    color: #71717a;
+    line-height: 1.4;
+}
+
+.lexi-avatar-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 12px 14px;
+    transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lexi-avatar-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.lexi-avatar-card-active {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.35);
+    box-shadow: 0 0 16px rgba(255, 255, 255, 0.08);
+}
+
+.lexi-card-emoji {
+    font-size: 26px;
+    margin-right: 4px;
+}
+
+.lexi-card-heading {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #f8fafc;
+}
+
+.lexi-card-desc {
+    font-size: 11px;
+    color: #71717a;
+    line-height: 1.4;
+}
+
+.lexi-card-select-btn {
+    border-radius: 9999px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    color: #09090b;
+    transition: all 120ms ease;
+}
+
+.lexi-card-select-btn:hover {
+    background: #f4f4f5;
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+}
+
+.lexi-character-btn {
+    border-radius: 9999px;
+    padding: 3px 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #d4d4d8;
+    transition: all 130ms ease;
+}
+
+.lexi-character-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    transform: scale(1.04);
+}
+
+.lexi-stunt-btn {
+    border-radius: 9999px;
+    padding: 3px 8px;
+    font-size: 10.5px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    color: #d4d4d8;
+    transition: all 130ms ease;
+}
+
+.lexi-stunt-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    transform: scale(1.04);
+}
+
+.lexi-stunt-chip {
+    border-radius: 9999px;
+    padding: 4px 9px;
+    font-size: 10.5px;
+    font-weight: 600;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e2e8f0;
+    transition: all 120ms ease;
+}
+
+.lexi-stunt-chip:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.24);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    transform: scale(1.05);
+}
+
+/* Pet Right-Click Popover */
+.lexi-pet-popover contents {
+    background: #0a0b0e;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.95), 0 0 18px rgba(0, 0, 0, 0.5);
+    padding: 6px;
+}
+
+.lexi-pet-menu-title {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #a1a1aa;
+    padding: 4px 8px;
+    letter-spacing: 0.2px;
+}
+
+.lexi-pet-menu-item {
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #f1f5f9;
+    background: transparent;
+    border: none;
+    transition: all 100ms ease;
+}
+
+.lexi-pet-menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.lexi-pet-menu-sep {
+    margin: 4px 6px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Lexi Beam QR Popover (Android Scan) */
+window.lexi-qr-win,
+.lexi-qr-win {
+    background-color: #0a0b0e;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
+}
+
+.lexi-qr-box {
+    background-color: #0a0b0e;
+}
+
+.lexi-qr-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
+.lexi-qr-sub {
+    font-size: 11px;
+    color: #9ca3af;
+}
+
+.lexi-qr-img-wrap {
+    background: #0a0b0e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 10px;
+}
+
+.lexi-qr-url-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: #38bdf8;
+    transition: all 120ms ease;
+}
+
+.lexi-qr-url-pill:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #ffffff;
+}
+
+.lexi-qr-status {
+    font-size: 11px;
+    color: #71717a;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lexi-qr-connected {
+    color: #10b981;
+    font-weight: 600;
+}

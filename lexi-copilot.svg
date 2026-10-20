@@ -5,7 +5,7 @@
       <stop offset="50%" stop-color="#ff7eb3"/>
       <stop offset="100%" stop-color="#7928ca"/>
     </linearGradient>
-    <linearGradient id="mochiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+    <linearGradient id="lexiGrad" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#ffffff"/>
       <stop offset="100%" stop-color="#ffeef2"/>
     </linearGradient>
@@ -20,8 +20,8 @@
   <!-- Subtle glow ring -->
   <circle cx="64" cy="64" r="42" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
 
-  <!-- Main Mochi Body (Cute plump mochi dango) -->
-  <ellipse cx="64" cy="70" rx="34" ry="28" fill="url(#mochiGrad)"/>
+  <!-- Main Lexi Mascot Body -->
+  <ellipse cx="64" cy="70" rx="34" ry="28" fill="url(#lexiGrad)"/>
 
   <!-- Cheeks blush -->
   <ellipse cx="44" cy="74" rx="5" ry="3" fill="#ff758c" opacity="0.6"/>

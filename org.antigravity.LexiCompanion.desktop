@@ -1,0 +1,16 @@
+[Desktop Entry]
+Name=Lexi Copilot
+Comment=Cosmic AI Screen Companion for Arch Linux
+Exec=/home/shakeel/.local/bin/lexi-copilot
+Icon=lexi-copilot
+Terminal=false
+Type=Application
+Categories=Utility;AI;
+Keywords=AI;Copilot;Screen;Lexi;
+StartupNotify=true
+X-GNOME-UsesNotifications=true
+Actions=Snip;
+
+[Desktop Action Snip]
+Name=Snip Region
+Exec=/home/shakeel/.local/bin/lexi-copilot --snip

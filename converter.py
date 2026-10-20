@@ -100,7 +100,7 @@ FORMAT_CATEGORIES = {
         "presets": [
             {"id": "mp3", "label": "MP3", "desc": "Universal 320kbps MP3", "ext": "mp3"},
             {"id": "wav", "label": "WAV", "desc": "Lossless uncompressed PCM", "ext": "wav"},
-            {"id": "aac", "label": "AAC", "desc": "Apple standard AAC/M4A", "ext": "m4a"},
+            {"id": "aac", "label": "AAC", "desc": "High-fidelity AAC/M4A audio", "ext": "m4a"},
             {"id": "flac", "label": "FLAC", "desc": "Lossless compressed audio", "ext": "flac"},
             {"id": "ogg", "label": "OGG", "desc": "Open OGG Vorbis audio", "ext": "ogg"},
         ]
