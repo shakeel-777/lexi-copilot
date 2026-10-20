@@ -4338,6 +4338,9 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 self.drop_server.on_camera_snap_received = lambda fp: GLib.idle_add(
                     self.on_camera_snap_from_mobile, fp
                 )
+                self.drop_server.on_peer_accepted_download = lambda fname, peer: GLib.idle_add(
+                    self.trigger_island_alert, "⚡", f"{peer} accepted {fname[:14]}!", "green", 4.0
+                )
                 self.drop_server.start_background()
             except Exception as e:
                 log(f"Failed to start Lexi Drop server: {e}")
@@ -4890,17 +4893,9 @@ class LexiDynamicIslandWindow(Gtk.Window):
         return GLib.SOURCE_REMOVE
 
     def on_show_beam_info(self):
-        if not getattr(self, 'drop_server', None):
-            self.trigger_island_alert("⚡", "Lexi Beam Starting...", "cyan", 3.0)
-            return
-        peers = self.drop_server.get_all_peers()
-        if peers:
-            p_name = peers[0].get("device", "Laptop")
-            self.trigger_island_alert("⚡", f"Online: {p_name} ({len(peers)} peer)", "green", 4.0)
-        else:
-            ip = self.drop_server.local_ip
-            port = self.drop_server.port
-            self.trigger_island_alert("⚡", f"Beam LAN: http://{ip}:{port}", "cyan", 4.5)
+        self.collapse_to_notch()
+        beam_win = LexiBeamWindow()
+        beam_win.present()
 
     def on_show_qr_for_file(self, file_path=None):
         target_url = None
@@ -4908,8 +4903,8 @@ class LexiDynamicIslandWindow(Gtk.Window):
             info = self.drop_server.share_file(file_path)
             target_url = info.get("url")
         self.hide_converter_bar()
-        qr_win = LexiQrPopoverWindow(target_url=target_url)
-        qr_win.present()
+        beam_win = LexiBeamWindow(target_url=target_url, file_path=file_path)
+        beam_win.present()
 
     def on_send_direct_to_peer(self, peer_ip, file_path):
         if self.dismiss_timer_id:
@@ -5622,31 +5617,36 @@ class LexiPetWindow(Gtk.Window):
             d.present()
 
 
-class LexiQrPopoverWindow(Gtk.Window):
+class LexiBeamWindow(Gtk.Window):
     """
-    Sleek Obsidian & Titanium QR popover for Android phone camera scanning.
-    Renders high-contrast QR code pointing to http://{local_ip}:7890.
-    Auto-detects when the phone connects and auto-closes.
+    Sleek Obsidian & Titanium Lexi Beam Hub.
+    - Scans and displays all available Lexi devices on the Wi-Fi LAN.
+    - Sends files with direct P2P transfer and recipient Accept/Decline verification.
+    - Offers instant file chooser and QR code fallback for non-Lexi devices.
     """
-    def __init__(self, target_url=None, title="⚡ Lexi Beam · Android Scan"):
-        super().__init__(title="Lexi Beam QR")
+    def __init__(self, target_url=None, title="⚡ Lexi Beam · Nearby Devices", file_path=None):
+        super().__init__(title="Lexi Beam")
         self.set_decorated(False)
         self.set_resizable(False)
-        self.set_default_size(300, 360)
-        self.add_css_class('lexi-qr-win')
+        self.set_default_size(360, 480)
+        self.add_css_class('lexi-beam-win')
+
+        self.file_path = file_path
+        self.target_url = target_url
+        self.poll_timer_id = None
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         root.set_margin_top(16)
         root.set_margin_bottom(16)
         root.set_margin_start(18)
         root.set_margin_end(18)
-        root.add_css_class('lexi-qr-box')
+        root.add_css_class('lexi-beam-box')
         self.set_child(root)
 
         # Header
         head_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         title_lbl = Gtk.Label(label=title, xalign=0, hexpand=True)
-        title_lbl.add_css_class('lexi-qr-title')
+        title_lbl.add_css_class('lexi-beam-title')
         head_box.append(title_lbl)
 
         close_btn = Gtk.Button(label="✕")
@@ -5656,32 +5656,65 @@ class LexiQrPopoverWindow(Gtk.Window):
         head_box.append(close_btn)
         root.append(head_box)
 
-        sub_lbl = Gtk.Label(label="Point your Android camera to download directly", xalign=0)
-        sub_lbl.add_css_class('lexi-qr-sub')
-        root.append(sub_lbl)
+        # Active File Preview Tray or File Selector
+        self.file_tray = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.file_tray.add_css_class('lexi-beam-file-tray')
+        self.file_lbl = Gtk.Label(label="", xalign=0, hexpand=True)
+        self.file_lbl.add_css_class('lexi-beam-file-name')
+        self.file_tray.append(self.file_lbl)
 
-        # Generate QR code
+        self.pick_file_btn = Gtk.Button(label="📁 Choose File")
+        self.pick_file_btn.set_focusable(False)
+        self.pick_file_btn.add_css_class('island-action-btn')
+        self.pick_file_btn.connect('clicked', lambda *_: self._on_pick_file())
+        self.file_tray.append(self.pick_file_btn)
+        root.append(self.file_tray)
+
+        self._update_file_preview()
+
+        # Section Label: Nearby Devices
+        sec_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        pulse_dot = Gtk.Label(label="●")
+        pulse_dot.add_css_class('lexi-beam-pulse-dot')
+        sec_box.append(pulse_dot)
+        sec_lbl = Gtk.Label(label="AVAILABLE DEVICES", xalign=0)
+        sec_lbl.add_css_class('lexi-beam-sec-title')
+        sec_box.append(sec_lbl)
+        root.append(sec_box)
+
+        # Peers Scroll Area / Box
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_min_content_height(160)
+        scroller.set_max_content_height(200)
+
+        self.peers_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        scroller.set_child(self.peers_box)
+        root.append(scroller)
+
+        # Web / QR fallback toggle & container
+        self.qr_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.qr_box.set_visible(False)
+
+        # QR Code setup
         qr_path = "/tmp/lexi_beam_qr.png"
-        if lexi_drop:
-            server = lexi_drop.get_lexi_drop_instance()
+        server = lexi_drop.get_lexi_drop_instance() if lexi_drop else None
+        if server:
             server.generate_qr_code(target_url, save_path=qr_path)
             self.qr_url = target_url or server.get_server_url()
         else:
             self.qr_url = target_url or "http://127.0.0.1:7890"
 
-        # Picture widget
         pic_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         pic_box.set_halign(Gtk.Align.CENTER)
         pic_box.add_css_class('lexi-qr-img-wrap')
-
         if os.path.exists(qr_path):
             gfile = Gio.File.new_for_path(qr_path)
             pic = Gtk.Picture.new_for_file(gfile)
-            pic.set_size_request(200, 200)
+            pic.set_size_request(160, 160)
             pic_box.append(pic)
-        root.append(pic_box)
+        self.qr_box.append(pic_box)
 
-        # Bottom URL pill
         url_btn = Gtk.Button(label=f"🌐 {self.qr_url}")
         url_btn.set_focusable(False)
         url_btn.add_css_class('lexi-qr-url-pill')
@@ -5690,27 +5723,165 @@ class LexiQrPopoverWindow(Gtk.Window):
             clipboard.set(self.qr_url)
             url_btn.set_label("✓ Copied Link!")
         url_btn.connect('clicked', _copy_url)
-        root.append(url_btn)
+        self.qr_box.append(url_btn)
+
+        root.append(self.qr_box)
+
+        # Toggle Button: "📱 Show QR / Web Receiver"
+        self.toggle_qr_btn = Gtk.Button(label="📱 Non-Lexi Devices (Show QR / Web)")
+        self.toggle_qr_btn.set_focusable(False)
+        self.toggle_qr_btn.add_css_class('lexi-beam-tab-btn')
+        def _toggle_qr(*_):
+            vis = not self.qr_box.get_visible()
+            self.qr_box.set_visible(vis)
+            self.toggle_qr_btn.set_label("📱 Hide QR / Web" if vis else "📱 Non-Lexi Devices (Show QR / Web)")
+            if vis:
+                self.set_default_size(360, 600)
+            else:
+                self.set_default_size(360, 480)
+        self.toggle_qr_btn.connect('clicked', _toggle_qr)
+        root.append(self.toggle_qr_btn)
 
         # Status text
-        self.status_lbl = Gtk.Label(label="📡 Waiting for scan...", xalign=0.5)
+        self.status_lbl = Gtk.Label(label="📡 Scanning LAN for nearby Lexi peers...", xalign=0.5)
         self.status_lbl.add_css_class('lexi-qr-status')
         root.append(self.status_lbl)
 
-        # Listen for phone connection to auto-close
-        if lexi_drop:
-            server = lexi_drop.get_lexi_drop_instance()
-            orig_cb = server.on_peer_joined
-            def _on_peer(dev, ip):
-                if orig_cb:
-                    orig_cb(dev, ip)
-                GLib.idle_add(self._on_phone_connected, dev)
-            server.on_peer_joined = _on_peer
+        # Refresh peers immediately & on timer
+        self._refresh_peers()
+        self.poll_timer_id = GLib.timeout_add_seconds(2, self._refresh_peers)
+        self.connect('destroy', self._on_destroy)
 
-    def _on_phone_connected(self, dev):
-        self.status_lbl.set_label(f"✨ Connected to {dev}!")
-        self.status_lbl.add_css_class('lexi-qr-connected')
-        GLib.timeout_add_seconds(2, self.close)
+    def _on_destroy(self, *_):
+        if self.poll_timer_id:
+            GLib.source_remove(self.poll_timer_id)
+            self.poll_timer_id = None
+
+    def _update_file_preview(self):
+        if self.file_path and os.path.exists(self.file_path):
+            fname = os.path.basename(self.file_path)
+            short_name = (fname[:18] + '…') if len(fname) > 19 else fname
+            sz = os.path.getsize(self.file_path)
+            sz_str = converter.format_size(sz) if hasattr(converter, 'format_size') else f"{sz}B"
+            self.file_lbl.set_label(f"📄 {short_name} ({sz_str})")
+            self.pick_file_btn.set_label("Change")
+        else:
+            self.file_lbl.set_label("No file selected yet")
+            self.pick_file_btn.set_label("📁 Choose File")
+
+    def _on_pick_file(self, on_chosen_cb=None):
+        dialog = Gtk.FileChooserNative.new(
+            "Select File to Beam",
+            self,
+            Gtk.FileChooserAction.OPEN,
+            "⚡ Select",
+            "Cancel"
+        )
+        def _response(d, response_id):
+            if response_id == Gtk.ResponseType.ACCEPT:
+                gfile = d.get_file()
+                if gfile:
+                    self.file_path = gfile.get_path()
+                    self._update_file_preview()
+                    if callable(on_chosen_cb):
+                        on_chosen_cb(self.file_path)
+            d.destroy()
+        dialog.connect('response', _response)
+        dialog.show()
+
+    def _refresh_peers(self):
+        server = lexi_drop.get_lexi_drop_instance() if lexi_drop else None
+        if not server:
+            return GLib.SOURCE_CONTINUE
+
+        peers = server.get_all_peers()
+
+        while child := self.peers_box.get_first_child():
+            self.peers_box.remove(child)
+
+        if not peers:
+            empty_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            empty_box.set_margin_top(12)
+            empty_box.set_margin_bottom(12)
+            empty_lbl = Gtk.Label(label="📡 Scanning Wi-Fi for nearby Lexi devices...")
+            empty_lbl.add_css_class('lexi-beam-empty')
+            hint_lbl = Gtk.Label(label="Open Lexi on another laptop or Lexi Companion on Android")
+            hint_lbl.add_css_class('lexi-beam-empty-hint')
+            empty_box.append(empty_lbl)
+            empty_box.append(hint_lbl)
+            self.peers_box.append(empty_box)
+            self.status_lbl.set_label("📡 Ready to beam · 0 nearby devices")
+            return GLib.SOURCE_CONTINUE
+
+        self.status_lbl.set_label(f"✨ Found {len(peers)} nearby device{'s' if len(peers) > 1 else ''}")
+
+        for peer in peers:
+            pip = peer.get("ip")
+            dev_name = peer.get("device", "Lexi Peer")
+            dev_type = peer.get("type", "laptop")
+            is_phone = dev_type == "phone" or "phone" in dev_name.lower() or "android" in dev_name.lower()
+
+            card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            card.add_css_class('lexi-beam-device-card')
+
+            icon_lbl = Gtk.Label(label="📱" if is_phone else "💻")
+            icon_lbl.add_css_class('lexi-beam-device-icon')
+            card.append(icon_lbl)
+
+            info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            info_box.set_hexpand(True)
+            name_lbl = Gtk.Label(label=dev_name, xalign=0)
+            name_lbl.add_css_class('lexi-beam-device-name')
+            info_box.append(name_lbl)
+
+            ip_lbl = Gtk.Label(label=f"● Online · {pip}", xalign=0)
+            ip_lbl.add_css_class('lexi-beam-device-ip')
+            info_box.append(ip_lbl)
+            card.append(info_box)
+
+            beam_btn = Gtk.Button(label="⚡ Beam")
+            beam_btn.set_focusable(False)
+            beam_btn.add_css_class('lexi-beam-device-btn')
+            beam_btn.connect('clicked', lambda _, p_ip=pip, d_name=dev_name, b_btn=beam_btn: self._on_beam_to_peer(p_ip, d_name, b_btn))
+            card.append(beam_btn)
+
+            self.peers_box.append(card)
+
+        return GLib.SOURCE_CONTINUE
+
+    def _on_beam_to_peer(self, peer_ip, dev_name, beam_btn):
+        if not self.file_path or not os.path.exists(self.file_path):
+            self._on_pick_file(lambda chosen: self._beam_file_to_peer(chosen, peer_ip, dev_name, beam_btn))
+            return
+        self._beam_file_to_peer(self.file_path, peer_ip, dev_name, beam_btn)
+
+    def _beam_file_to_peer(self, file_path, peer_ip, dev_name, beam_btn):
+        beam_btn.set_label("⏳ Sending...")
+        beam_btn.set_sensitive(False)
+        self.status_lbl.set_label(f"⚡ Proposing transfer to {dev_name}...")
+
+        def _send():
+            server = lexi_drop.get_lexi_drop_instance() if lexi_drop else None
+            if not server:
+                return {"error": "Lexi drop server not available"}
+            return server.send_p2p_to_peer(peer_ip, file_path)
+
+        def _on_done(res):
+            if not res or res.get("error"):
+                err = res.get("error", "Failed") if res else "Error"
+                beam_btn.set_label("⚠️ Failed")
+                self.status_lbl.set_label(f"⚠️ {err[:35]}")
+                GLib.timeout_add_seconds(3, lambda: (beam_btn.set_label("⚡ Beam"), beam_btn.set_sensitive(True)))
+            else:
+                beam_btn.set_label("✓ Sent")
+                self.status_lbl.set_label(f"✨ Sent to {dev_name}! Waiting for accept...")
+                GLib.timeout_add_seconds(4, lambda: (beam_btn.set_label("⚡ Beam"), beam_btn.set_sensitive(True)))
+
+        threading.Thread(target=lambda: GLib.idle_add(_on_done, _send()), daemon=True).start()
+
+# Backward compatibility alias
+LexiQrPopoverWindow = LexiBeamWindow
+
 
 
 class LexiAvatarDialog(Gtk.Window):

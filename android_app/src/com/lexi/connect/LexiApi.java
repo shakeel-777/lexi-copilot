@@ -217,6 +217,65 @@ public class LexiApi {
         }
     }
 
+    /**
+     * Announces companion device presence to Lexi server (/api/peer/register).
+     */
+    public static boolean registerCompanion(Context ctx) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(getBaseUrl(ctx) + "/api/peer/register");
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+
+            String deviceModel = android.os.Build.MODEL != null ? android.os.Build.MODEL : "Android Device";
+            String json = "{\"device\":\"" + escapeJsonRaw(deviceModel + " (Phone)") + "\",\"type\":\"phone\",\"os\":\"android\"}";
+            OutputStream out = conn.getOutputStream();
+            out.write(json.getBytes("UTF-8"));
+            out.flush();
+            out.close();
+            return conn.getResponseCode() == 200;
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    /**
+     * Fetches list of all discovered Lexi peers from the local host (/api/peers).
+     */
+    public static String fetchPeersJson(Context ctx) {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(getBaseUrl(ctx) + "/api/peers");
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+            if (conn.getResponseCode() == 200) {
+                BufferedReader r = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null) sb.append(line);
+                r.close();
+                return sb.toString();
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+        return null;
+    }
+
+    private static String escapeJsonRaw(String s) {
+        if (s == null) return "";
+        return s.replace("\"", "\\\"");
+    }
+
     private static String escapeJson(String s) {
         if (s == null) return "\"\"";
         StringBuilder sb = new StringBuilder("\"");

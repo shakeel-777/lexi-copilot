@@ -6,9 +6,11 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -16,6 +18,7 @@ import android.os.Vibrator;
 import android.os.VibrationEffect;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.provider.Settings;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -43,8 +46,10 @@ public class MainActivity extends Activity {
     private Button btnSendPhoneClip;
     private Button btnLaunchMirror;
     private Switch swStealthMode;
+    private Switch swDynamicIsland;
     private Button btnPickFiles;
     private View btnEditHost;
+    private TextView tvBeamTelemetry;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String latestLaptopClip = "";
@@ -63,8 +68,10 @@ public class MainActivity extends Activity {
         btnSendPhoneClip = findViewById(R.id.btn_send_phone_clip);
         btnLaunchMirror = findViewById(R.id.btn_launch_mirror);
         swStealthMode = findViewById(R.id.sw_stealth_mode);
+        swDynamicIsland = findViewById(R.id.sw_dynamic_island);
         btnPickFiles = findViewById(R.id.btn_pick_files);
         btnEditHost = findViewById(R.id.btn_edit_host);
+        tvBeamTelemetry = findViewById(R.id.tv_beam_telemetry);
 
         initListeners();
     }
@@ -74,10 +81,55 @@ public class MainActivity extends Activity {
         super.onResume();
         refreshTelemetry();
         refreshClipboardPreview();
+
+        Intent intent = getIntent();
+        if (intent != null && intent.getStringExtra("action") != null) {
+            String act = intent.getStringExtra("action");
+            intent.removeExtra("action");
+            if ("snap".equals(act)) {
+                handler.postDelayed(() -> btnSnapCamera.performClick(), 250);
+            } else if ("beam".equals(act)) {
+                handler.postDelayed(() -> btnPickFiles.performClick(), 250);
+            }
+        }
     }
 
     private void initListeners() {
         btnEditHost.setOnClickListener(v -> showEditHostDialog());
+
+        // Dynamic Island Overlay Toggle
+        if (swDynamicIsland != null) {
+            SharedPreferences prefs = getSharedPreferences("lexi_island_prefs", MODE_PRIVATE);
+            boolean islandEnabled = prefs.getBoolean("island_enabled", false);
+            swDynamicIsland.setChecked(islandEnabled);
+
+            swDynamicIsland.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                vibrate(20);
+                if (isChecked) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                        Toast.makeText(this, "Enable 'Display over other apps' for Lexi Island", Toast.LENGTH_LONG).show();
+                        Intent overlayIntent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                Uri.parse("package:" + getPackageName()));
+                        startActivity(overlayIntent);
+                        swDynamicIsland.setChecked(false);
+                        return;
+                    }
+                    prefs.edit().putBoolean("island_enabled", true).apply();
+                    startService(new Intent(this, DynamicIslandService.class));
+                    Toast.makeText(this, "🏝️ Lexi Dynamic Island activated!", Toast.LENGTH_SHORT).show();
+                } else {
+                    prefs.edit().putBoolean("island_enabled", false).apply();
+                    stopService(new Intent(this, DynamicIslandService.class));
+                    Toast.makeText(this, "Dynamic Island deactivated", Toast.LENGTH_SHORT).show();
+                }
+            });
+
+            if (islandEnabled) {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+                    startService(new Intent(this, DynamicIslandService.class));
+                }
+            }
+        }
 
         // 1. Continuity Camera Snap (Tap = Camera, Long-press = Gallery / Screenshot)
         btnSnapCamera.setOnClickListener(v -> {
@@ -178,6 +230,13 @@ public class MainActivity extends Activity {
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
             startActivityForResult(Intent.createChooser(intent, "Select files to beam to Lexi"), REQ_PICK_FILES);
         });
+
+        if (tvBeamTelemetry != null) {
+            tvBeamTelemetry.setOnClickListener(v -> {
+                vibrate(20);
+                showDeviceSelectDialog();
+            });
+        }
     }
 
     private void refreshTelemetry() {
@@ -190,11 +249,65 @@ public class MainActivity extends Activity {
                     if (viewStatusDot != null) viewStatusDot.setVisibility(View.VISIBLE);
                     tvHostStatus.setText("CONNECTED · ARCH LINUX (" + ping + "ms LAN)");
                     tvHostStatus.setTextColor(getResources().getColor(R.color.accent_emerald));
+                    if (tvBeamTelemetry != null) {
+                        tvBeamTelemetry.setText("⚡ Target: 💻 " + host + ":" + port + " · Tap to Switch");
+                        tvBeamTelemetry.setTextColor(getResources().getColor(R.color.accent_cyan));
+                    }
                 } else {
                     if (viewStatusDot != null) viewStatusDot.setVisibility(View.GONE);
                     tvHostStatus.setText("OFFLINE · " + host + ":" + port);
                     tvHostStatus.setTextColor(getResources().getColor(R.color.text_dim));
+                    if (tvBeamTelemetry != null) {
+                        tvBeamTelemetry.setText("⚠️ Offline · Tap to Configure Target");
+                        tvBeamTelemetry.setTextColor(getResources().getColor(R.color.text_muted));
+                    }
                 }
+            });
+        }).start();
+    }
+
+    private void showDeviceSelectDialog() {
+        new Thread(() -> {
+            String peersJson = LexiApi.fetchPeersJson(this);
+            final ArrayList<String> deviceLabels = new ArrayList<>();
+            final ArrayList<String> deviceIps = new ArrayList<>();
+
+            String currentHost = LexiApi.getHost(this);
+            deviceLabels.add("💻 Arch Linux (" + currentHost + ") [Active]");
+            deviceIps.add(currentHost);
+
+            if (peersJson != null && peersJson.contains("\"peers\"")) {
+                try {
+                    org.json.JSONObject obj = new org.json.JSONObject(peersJson);
+                    org.json.JSONArray arr = obj.optJSONArray("peers");
+                    if (arr != null) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            org.json.JSONObject p = arr.getJSONObject(i);
+                            String ip = p.optString("ip");
+                            String dev = p.optString("device", "Lexi Peer");
+                            String type = p.optString("type", "laptop");
+                            String icon = "phone".equals(type) ? "📱" : "💻";
+                            if (!ip.isEmpty() && !deviceIps.contains(ip)) {
+                                deviceLabels.add(icon + " " + dev + " (" + ip + ")");
+                                deviceIps.add(ip);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            runOnUiThread(() -> {
+                AlertDialog.Builder b = new AlertDialog.Builder(this);
+                b.setTitle("⚡ Select Lexi Target Device");
+                String[] items = deviceLabels.toArray(new String[0]);
+                b.setItems(items, (dialog, which) -> {
+                    String selectedIp = deviceIps.get(which);
+                    LexiApi.setHost(this, selectedIp);
+                    Toast.makeText(this, "Target set to " + selectedIp, Toast.LENGTH_SHORT).show();
+                    refreshTelemetry();
+                });
+                b.setNegativeButton("Manual IP...", (dialog, which) -> showEditHostDialog());
+                b.show();
             });
         }).start();
     }

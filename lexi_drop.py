@@ -32,6 +32,22 @@ DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 def get_local_ip():
     """Dynamically determine the primary local Wi-Fi / LAN IP address."""
+    # 1. Prefer Wi-Fi interface (wl*)
+    try:
+        out = subprocess.check_output(['ip', '-4', '-brief', 'addr', 'show'], text=True, timeout=1)
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and parts[0].startswith('wl') and parts[1] == 'UP':
+                return parts[2].split('/')[0]
+        # 2. Prefer standard ethernet (en* / eth*)
+        for line in out.splitlines():
+            parts = line.split()
+            if len(parts) >= 3 and not parts[0].startswith('docker') and parts[1] == 'UP':
+                return parts[2].split('/')[0]
+    except Exception:
+        pass
+
+    # 3. Fallback to UDP socket query
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(('10.255.255.255', 1))
@@ -134,7 +150,8 @@ class LexiPeerBeacon:
             "hostname": self.hostname,
             "ip": self.local_ip,
             "port": self.port,
-            "os": "linux"
+            "os": "linux",
+            "device_type": "laptop"
         }).encode('utf-8')
 
         while self.running:
@@ -180,7 +197,8 @@ class LexiPeerBeacon:
                             "ip": peer_ip,
                             "port": msg.get("port", PORT),
                             "last_seen": now,
-                            "type": "linux_p2p"
+                            "type": msg.get("device_type", "laptop"),
+                            "os": msg.get("os", "linux")
                         }
                     if is_new and self.server.on_peer_joined:
                         self.server.on_peer_joined(peer_host, peer_ip)
@@ -218,6 +236,7 @@ class LexiDropServer:
 
         # Beacon for True P2P Discovery
         self.beacon = LexiPeerBeacon(self)
+        self.registered_peers = {}  # ip -> {device, ip, type, os, port, last_seen}
 
         # Callbacks for GTK / Dynamic Island integration
         self.on_peer_joined = None
@@ -227,38 +246,83 @@ class LexiDropServer:
         self.on_transfer_progress = None
         self.on_clipboard_received = None
         self.on_camera_snap_received = None
+        self.on_peer_accepted_download = None
         self.current_clipboard_text = ""
 
     def get_server_url(self):
         return f"http://{self.local_ip}:{self.port}"
 
     def get_all_peers(self) -> list:
-        """Returns unified list of active peers (both Linux P2P and Web/PWA clients)."""
+        """Returns unified list of active peers (Linux P2P, Android App, Web/PWA clients)."""
         seen_ips = set()
         result = []
+        now = time.time()
 
         # 1. Linux P2P peers discovered via UDP beacon
         with self.beacon.lock:
             for ip, info in self.beacon.lan_peers.items():
+                if ip == self.local_ip or ip == "127.0.0.1" or info.get("hostname") == self.beacon.hostname:
+                    continue
                 seen_ips.add(ip)
                 result.append({
                     "device": info["hostname"],
                     "ip": ip,
-                    "type": "linux_p2p",
+                    "type": info.get("type", "laptop"),
+                    "os": info.get("os", "linux"),
                     "port": info.get("port", PORT)
                 })
 
-        # 2. Web / PWA connected peers (e.g. Windows PC, Android Phone)
-        for info in self.connected_peers.values():
-            ip = info.get("ip")
-            if ip not in seen_ips:
+        # 2. Registered peers (e.g. Android Lexi app via HTTP registration)
+        stale_reg = []
+        for ip, info in list(self.registered_peers.items()):
+            if now - info.get("last_seen", 0) > 60.0:
+                stale_reg.append(ip)
+                continue
+            if ip not in seen_ips and ip != self.local_ip and ip != "127.0.0.1":
                 seen_ips.add(ip)
                 result.append({
-                    "device": info.get("device", "Device"),
+                    "device": info.get("device", "Phone"),
+                    "ip": ip,
+                    "type": info.get("type", "phone"),
+                    "os": info.get("os", "android"),
+                    "port": info.get("port", PORT)
+                })
+        for ip in stale_reg:
+            self.registered_peers.pop(ip, None)
+
+        # 3. Web / PWA connected peers (e.g. Windows PC, Browser)
+        for info in self.connected_peers.values():
+            ip = info.get("ip")
+            if ip and ip not in seen_ips and ip != self.local_ip and ip != "127.0.0.1":
+                seen_ips.add(ip)
+                result.append({
+                    "device": info.get("device", "Web Device"),
                     "ip": ip,
                     "type": "web_pwa",
+                    "os": "web",
                     "port": PORT
                 })
+
+        # 4. Connected ADB phone if present
+        try:
+            res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=1)
+            lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
+            for line in lines:
+                if 'device' in line and 'offline' not in line:
+                    dev_id = line.split()[0]
+                    if ':' in dev_id:
+                        pip = dev_id.split(':')[0]
+                        if pip not in seen_ips and pip != self.local_ip:
+                            seen_ips.add(pip)
+                            result.append({
+                                "device": "Android Phone (Companion)",
+                                "ip": pip,
+                                "type": "phone",
+                                "os": "android",
+                                "port": PORT
+                            })
+        except Exception:
+            pass
 
         return result
 
@@ -422,6 +486,12 @@ class LexiDropServer:
         filepath = file_record["path"]
         filename = file_record["name"]
 
+        if self.on_peer_accepted_download:
+            try:
+                self.on_peer_accepted_download(filename, request.remote or "Peer")
+            except Exception:
+                pass
+
         response = web.FileResponse(
             filepath,
             chunk_size=4 * 1024 * 1024,
@@ -564,6 +634,39 @@ class LexiDropServer:
             "connected_peers": self.get_all_peers(),
             "active_shares": len(self.active_shared_files)
         })
+
+    async def handle_peers_list(self, request):
+        """Returns real-time list of all discovered LAN and registered peers."""
+        return web.json_response({
+            "peers": self.get_all_peers(),
+            "local_host": socket.gethostname(),
+            "local_ip": self.local_ip,
+            "port": self.port
+        })
+
+    async def handle_peer_register(self, request):
+        """Allows phone or external clients to register as an active peer."""
+        try:
+            data = await request.json()
+            client_ip = request.remote or data.get("ip") or "Unknown"
+            device_name = data.get("device", "Lexi Companion")
+            dev_type = data.get("type", "phone")
+            os_name = data.get("os", "android")
+            now = time.time()
+            is_new = client_ip not in self.registered_peers
+            self.registered_peers[client_ip] = {
+                "device": device_name,
+                "ip": client_ip,
+                "type": dev_type,
+                "os": os_name,
+                "port": data.get("port", self.port),
+                "last_seen": now
+            }
+            if is_new and self.on_peer_joined:
+                self.on_peer_joined(device_name, client_ip)
+            return web.json_response({"success": True, "registered": client_ip})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=400)
 
     async def handle_share_target(self, request):
         """Handles native Android Web Share Target POST submissions (files, text, urls)."""
@@ -812,6 +915,8 @@ class LexiDropServer:
             self.app.router.add_post("/api/peer/incoming", self.handle_peer_incoming)
             self.app.router.add_post("/api/peer/respond", self.handle_peer_respond)
             self.app.router.add_get("/api/status", self.handle_status)
+            self.app.router.add_get("/api/peers", self.handle_peers_list)
+            self.app.router.add_post("/api/peer/register", self.handle_peer_register)
             self.app.router.add_post("/api/share-target", self.handle_share_target)
             self.app.router.add_post("/api/camera-snap", self.handle_camera_snap)
             self.app.router.add_get("/api/clipboard", self.handle_clipboard_api)

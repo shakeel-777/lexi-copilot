@@ -1050,3 +1050,120 @@ window.lexi-qr-win,
     color: #10b981;
     font-weight: 600;
 }
+
+/* Lexi Beam Hub Window */
+window.lexi-beam-win,
+.lexi-beam-win {
+    background-color: #080a0f;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+}
+
+.lexi-beam-box {
+    background-color: #080a0f;
+}
+
+.lexi-beam-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.2px;
+}
+
+.lexi-beam-file-tray {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 6px 10px;
+}
+
+.lexi-beam-file-name {
+    font-size: 11.5px;
+    color: #38bdf8;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lexi-beam-sec-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: #94a3b8;
+}
+
+.lexi-beam-pulse-dot {
+    color: #10b981;
+    font-size: 9px;
+}
+
+.lexi-beam-device-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 8px 12px;
+    transition: all 140ms ease;
+}
+
+.lexi-beam-device-card:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(56, 189, 248, 0.35);
+}
+
+.lexi-beam-device-icon {
+    font-size: 20px;
+}
+
+.lexi-beam-device-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #f8fafc;
+}
+
+.lexi-beam-device-ip {
+    font-size: 10.5px;
+    color: #64748b;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lexi-beam-device-btn {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #34d399;
+    font-weight: 600;
+    font-size: 11px;
+    border-radius: 10px;
+    padding: 4px 12px;
+    transition: all 120ms ease;
+}
+
+.lexi-beam-device-btn:hover {
+    background: #10b981;
+    color: #050508;
+}
+
+.lexi-beam-tab-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    font-size: 11px;
+    border-radius: 10px;
+    padding: 5px 10px;
+    transition: all 120ms ease;
+}
+
+.lexi-beam-tab-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.lexi-beam-empty {
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 500;
+}
+
+.lexi-beam-empty-hint {
+    font-size: 10.5px;
+    color: #64748b;
+}
+
