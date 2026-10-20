@@ -424,9 +424,9 @@ DEFAULT_CONFIG = {
         "google/gemini-2.5-flash-lite",
         "nvidia/nemotron-3.5-super-vl:free"
     ],
-    "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion and assistant on Arch Linux with FULL SYSTEM ACCESS.\\nYou can directly control the computer, run terminal commands, open applications/files/URLs, control media & hardware, send WhatsApp messages, and analyze screens and documents.\\n\\nCRITICAL ACTION SAFETY RULE:\\n- ONLY emit executable <action> tags when the user gives you a direct, imperative command to perform an action on their system right now (e.g. 'open spotify', 'send hi to mom on whatsapp', 'turn volume up').\\n- If the user is having a casual conversation, discussing features, asking questions, reflecting on past actions, or asking 'why' / 'how' (e.g. 'can you see the last activity', 'we did a great job', 'what do you think?'), you MUST NOT emit any <action> tags. Simply reply in conversational text.\\n- Never emit actions when talking ABOUT an app or topic hypothetically.\\n\\nWhen an action is explicitly commanded, use these <action> tags:\\n1. Shell commands:\\n   <action type=\"command\">ls -la /home/shakeel</action>\\n2. Opening apps, URLs, or files:\\n   <action type=\"open\">google-chrome</action>\\n   <action type=\"open\">https://youtube.com</action>\\n   <action type=\"open\">/home/shakeel/Downloads</action>\\n3. Music & Media Playback:\\n   To play a specific song on Spotify (auto-plays first match):\\n   <action type=\"open\">spotify:search:Artist Song Name</action>\\n   To play a specific song on YouTube:\\n   <action type=\"open\">https://www.youtube.com/results?search_query=Artist+Song+Name</action>\\n   Controls (play/pause/skip current track):\\n   <action type=\"media\" command=\"play\"></action>\\n   <action type=\"media\" command=\"pause\"></action>\\n   <action type=\"media\" command=\"next\"></action>\\n   <action type=\"media\" command=\"previous\"></action>\\n4. WhatsApp automation (only when explicitly asked to send a message):\\n   <action type=\"whatsapp\" contact=\"Mom\">Hi Mom! Hope you are having a wonderful day.</action>\\n   <action type=\"whatsapp\" phone=\"+1234567890\">Hello!</action>\\n   <action type=\"whatsapp\">Hi!</action>\\n5. Volume & Audio:\\n   <action type=\"volume\" level=\"70%\"></action>\\n   <action type=\"volume\" level=\"mute\"></action>\\n6. Screen Brightness:\\n   <action type=\"brightness\" level=\"60%\"></action>\\n7. Keystrokes & Typing:\\n   <action type=\"key\" key=\"Return\"></action>\\n   <action type=\"type\" text=\"hello world\"></action>\\n8. Lock Screen:\\n   <action type=\"lock\"></action>\\n\\nMULTI-STEP / CHAIN COMMANDS:\\nWhen the user explicitly commands multiple actions in one sentence (e.g. 'open spotify and play believer', 'open whatsapp and send hi to John', 'mute volume and lock screen'), emit all requested action tags in order. The desktop engine synchronizes and executes them in sequence.\\n\\nAlways accompany actions with a polite, enthusiastic, concise response explaining what you did. If the user asks a question or asks to analyze attached pages, answer clearly with markdown formatting.",
-    "max_image_dimension": 800,
-    "image_quality": 65,
+    "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion and assistant on Arch Linux with FULL SYSTEM ACCESS.\\nYou can directly control the computer, run terminal commands, open applications/files/URLs, control media & hardware, send WhatsApp messages, and analyze screens and documents.\\n\\nCRITICAL ACTION SAFETY RULE:\\n- ONLY emit executable <action> tags when the user gives you a direct, imperative command to perform an action on their system right now (e.g. 'open spotify', 'send hi to mom on whatsapp', 'turn volume up').\\n- If the user is having a casual conversation, discussing features, asking questions, reflecting on past actions, or asking 'why' / 'how' (e.g. 'can you see the last activity', 'we did a great job', 'what do you think?'), you MUST NOT emit any <action> tags. Simply reply in conversational text.\\n- Never emit actions when talking ABOUT an app or topic hypothetically.\\n\\nWhen an action is explicitly commanded, use these <action> tags:\\n1. Shell commands:\\n   <action type=\"command\">ls -la /home/shakeel</action>\\n2. Opening apps, URLs, or files:\\n   <action type=\"open\">google-chrome</action>\\n   <action type=\"open\">https://youtube.com</action>\\n   <action type=\"open\">/home/shakeel/Downloads</action>\\n3. Music & Media Playback:\\n   To play a specific song on Spotify (auto-plays first match):\\n   <action type=\"open\">spotify:search:Artist Song Name</action>\\n   To play a specific song on YouTube:\\n   <action type=\"open\">https://www.youtube.com/results?search_query=Artist+Song+Name</action>\\n   Controls (play/pause/skip current track):\\n   <action type=\"media\" command=\"play\"></action>\\n   <action type=\"media\" command=\"pause\"></action>\\n   <action type=\"media\" command=\"next\"></action>\\n   <action type=\"media\" command=\"previous\"></action>\\n4. WhatsApp automation (only when explicitly asked to send a message):\\n   <action type=\"whatsapp\" contact=\"Mom\">Hi Mom! Hope you are having a wonderful day.</action>\\n   <action type=\"whatsapp\" phone=\"+1234567890\">Hello!</action>\\n   <action type=\"whatsapp\">Hi!</action>\\n5. Volume & Audio:\\n   <action type=\"volume\" level=\"70%\"></action>\\n   <action type=\"volume\" level=\"mute\"></action>\\n6. Screen Brightness:\\n   <action type=\"brightness\" level=\"60%\"></action>\\n7. Keystrokes & Typing:\\n   <action type=\"key\" key=\"Return\"></action>\\n   <action type=\"type\" text=\"hello world\"></action>\\n8. Lock Screen:\\n   <action type=\"lock\"></action>\\n\\nMULTI-STEP / CHAIN COMMANDS:\\nWhen the user explicitly commands multiple actions in one sentence (e.g. 'open spotify and play believer', 'open whatsapp and send hi to John', 'mute volume and lock screen'), emit all requested action tags in order. The desktop engine synchronizes and executes them in sequence.\\n\\nMULTI-PAGE & MULTI-IMAGE ANALYSIS PROTOCOL:\\nWhen the user attaches multiple pages, snips, or documents (Page 1, Page 2, etc.):\\n1. You MUST examine, synthesize, and address ALL attached pages systematically in your response.\\n2. Clearly delineate your analysis by page (e.g. '### 📄 Page 1: ...', '### 📄 Page 2: ...').\\n3. When asked to compare or debug across multiple screenshots, highlight differences, correlations, or workflows across all pages.\\n4. Never ignore an attached page or answer for only one.\\n\\nAlways accompany actions with a polite, enthusiastic, concise response explaining what you did. If the user asks a question or asks to analyze attached pages, answer clearly with markdown formatting.",
+    "max_image_dimension": 1280,
+    "image_quality": 85,
     "max_tokens": 2048,
     "request_timeout": 35,
     "character_type": "cat",
@@ -6829,9 +6829,17 @@ class LexiWindow(Adw.ApplicationWindow):
             if ext in ('.png', '.jpg', '.jpeg', '.webp', '.svg', '.bmp', '.gif'):
                 try:
                     texture = Gdk.Texture.new_from_filename(filepath)
-                    # Convert to base64 for LLM
-                    with open(filepath, 'rb') as f:
-                        b64 = base64.b64encode(f.read()).decode('utf-8')
+                    # Convert & compress with PIL for crisp LLM vision
+                    with Image.open(filepath) as img:
+                        im_rgb = img.convert('RGB')
+                        max_dim = max(1280, self.config.get('max_image_dimension', 1280))
+                        quality = max(80, self.config.get('image_quality', 80))
+                        w, h = im_rgb.size
+                        if max(w, h) > max_dim:
+                            im_rgb.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                        buf = io.BytesIO()
+                        im_rgb.save(buf, format='JPEG', quality=quality)
+                        b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
                     page_data = {
                         "path": filepath,
                         "b64": b64,
@@ -7095,9 +7103,9 @@ class LexiWindow(Adw.ApplicationWindow):
                 gbytes = GLib.Bytes.new(thumb_bytes.getvalue())
                 texture = Gdk.Texture.new_from_bytes(gbytes)
 
-                # 2. Scale image for LLM payload (max 800px, JPEG 65)
-                max_dim = self.config.get('max_image_dimension', 800)
-                quality = self.config.get('image_quality', 65)
+                # 2. Scale image for LLM payload (max 1280px, JPEG 80)
+                max_dim = max(1280, self.config.get('max_image_dimension', 1280))
+                quality = max(80, self.config.get('image_quality', 80))
                 w, h = im.size
                 if max(w, h) > max_dim:
                     im.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
@@ -7404,47 +7412,94 @@ class LexiWindow(Adw.ApplicationWindow):
         if self.config.get('system_prompt'):
             msgs.append({"role": "system", "content": self.config.get('system_prompt')})
 
-        # Keep history bounded (turn 0 + last 14 messages)
-        conv = list(self.conversation)
-        if len(conv) > 16:
-            conv = conv[:2] + conv[-14:]
+        # Sanitize past turns from self.conversation:
+        # Keep conversational text context, but strip bulky past base64 images so we don't blow token limits
+        conv = []
+        for m in self.conversation:
+            if m.get('role') == 'user' and isinstance(m.get('content'), list):
+                text_parts = [item['text'] for item in m['content'] if item.get('type') == 'text']
+                img_count = sum(1 for item in m['content'] if item.get('type') == 'image_url')
+                combined = "\n".join(text_parts)
+                if img_count:
+                    combined = f"[Previous turn with {img_count} attached page(s)]:\n{combined}"
+                conv.append({"role": "user", "content": combined})
+            else:
+                conv.append(m)
+
+        # Keep last 14 turns of history
+        if len(conv) > 14:
+            conv = conv[-14:]
         msgs.extend(conv)
 
-        # Turn 0 includes all attached pages and fed documents
-        if not self.conversation:
-            if self.captured_pages:
-                content = [{"type": "text", "text": current_user_question}]
-                num_pages = len(self.captured_pages)
-                for idx, page in enumerate(self.captured_pages, 1):
-                    if page.get("text_content"):
-                        content.append({
-                            "type": "text",
-                            "text": f"--- [Attached Document {idx}: {page.get('name', 'file')}] ---\n{page['text_content']}\n--- [End of Document] ---"
-                        })
-                    if page.get("b64"):
-                        if num_pages > 1 and not page.get("text_content"):
-                            content.append({
-                                "type": "text",
-                                "text": f"--- [Page {idx} of {num_pages}] ---"
-                            })
-                        content.append({
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{page['b64']}"}
-                        })
-                user_turn = {
-                    "role": "user",
-                    "content": content
-                }
+        # Build current user turn with ALL currently active captured pages
+        if self.captured_pages:
+            num_pages = len(self.captured_pages)
+
+            manifest_lines = []
+            for idx, page in enumerate(self.captured_pages, 1):
+                if page.get("text_content"):
+                    name = page.get("name") or f"Document {idx}"
+                    manifest_lines.append(f"• Page {idx} ({name}): Text/Document")
+                elif page.get("is_snip"):
+                    manifest_lines.append(f"• Page {idx}: Screen Snip (Selected Region)")
+                elif page.get("is_file"):
+                    name = page.get("name") or f"Image {idx}"
+                    manifest_lines.append(f"• Page {idx} ({name}): Image File")
+                else:
+                    manifest_lines.append(f"• Page {idx}: Full Screen Capture")
+            manifest_block = "\n".join(manifest_lines)
+
+            if num_pages > 1:
+                instruction = (
+                    f"📁 **Attached Materials ({num_pages} Pages total)**:\n"
+                    f"{manifest_block}\n\n"
+                    f"**User Request**: {current_user_question}\n\n"
+                    f"⚠️ **CRITICAL MULTI-PAGE ANALYSIS INSTRUCTION**:\n"
+                    f"There are {num_pages} distinct pages/images attached. You MUST examine, synthesize, and address ALL {num_pages} pages.\n"
+                    f"- In your answer, structure your findings clearly by page (e.g. '### 📄 Page 1: ...', '### 📄 Page 2: ...').\n"
+                    f"- If comparing or debugging across pages, explicitly explain the differences, relations, or progression from Page 1 to Page {num_pages}.\n"
+                    f"- Do NOT focus on only one page and ignore the others. Cover all {num_pages} pages."
+                )
             else:
-                user_turn = {
-                    "role": "user",
-                    "content": current_user_question
-                }
+                instruction = (
+                    f"📁 **Attached**: {manifest_lines[0]}\n\n"
+                    f"**User Request**: {current_user_question}"
+                )
+
+            content = [{"type": "text", "text": instruction}]
+
+            # Attach each document and image
+            for idx, page in enumerate(self.captured_pages, 1):
+                if page.get("text_content"):
+                    p_name = page.get("name", f"Document {idx}")
+                    content.append({
+                        "type": "text",
+                        "text": f"--- [Document {idx}: {p_name}] ---\n{page['text_content']}\n--- [End of Document {idx}] ---"
+                    })
+                if page.get("b64"):
+                    p_label = page.get("name") or ("Snip" if page.get("is_snip") else "Full Screen")
+                    content.append({
+                        "type": "text",
+                        "text": f"📸 [PAGE {idx} OF {num_pages}: {p_label}]"
+                    })
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{page['b64']}",
+                            "detail": "high"
+                        }
+                    })
+
+            user_turn = {
+                "role": "user",
+                "content": content
+            }
         else:
             user_turn = {
                 "role": "user",
                 "content": current_user_question
             }
+
         msgs.append(user_turn)
         return msgs, user_turn
 
