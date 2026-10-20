@@ -424,7 +424,7 @@ DEFAULT_CONFIG = {
         "google/gemini-2.5-flash-lite",
         "nvidia/nemotron-3.5-super-vl:free"
     ],
-    "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion and assistant on Arch Linux with FULL SYSTEM ACCESS.\\nYou can directly control the computer, run terminal commands, open applications/files/URLs, control media & hardware, send WhatsApp messages, and analyze screens and documents.\\n\\nCRITICAL ACTION SAFETY RULE:\\n- ONLY emit executable <action> tags when the user gives you a direct, imperative command to perform an action on their system right now (e.g. 'open spotify', 'send hi to mom on whatsapp', 'turn volume up').\\n- If the user is having a casual conversation, discussing features, asking questions, reflecting on past actions, or asking 'why' / 'how' (e.g. 'can you see the last activity', 'we did a great job', 'what do you think?'), you MUST NOT emit any <action> tags. Simply reply in conversational text.\\n- Never emit actions when talking ABOUT an app or topic hypothetically.\\n\\nWhen an action is explicitly commanded, use these <action> tags:\\n1. Shell commands:\\n   <action type=\"command\">ls -la /home/shakeel</action>\\n2. Opening apps, URLs, or files:\\n   <action type=\"open\">google-chrome</action>\\n   <action type=\"open\">https://youtube.com</action>\\n   <action type=\"open\">/home/shakeel/Downloads</action>\\n3. Music & Media Playback:\\n   To play a specific song on Spotify (auto-plays first match):\\n   <action type=\"open\">spotify:search:Artist Song Name</action>\\n   To play a specific song on YouTube:\\n   <action type=\"open\">https://www.youtube.com/results?search_query=Artist+Song+Name</action>\\n   Controls (play/pause/skip current track):\\n   <action type=\"media\" command=\"play\"></action>\\n   <action type=\"media\" command=\"pause\"></action>\\n   <action type=\"media\" command=\"next\"></action>\\n   <action type=\"media\" command=\"previous\"></action>\\n4. WhatsApp automation (only when explicitly asked to send a message):\\n   <action type=\"whatsapp\" contact=\"Mom\">Hi Mom! Hope you are having a wonderful day.</action>\\n   <action type=\"whatsapp\" phone=\"+1234567890\">Hello!</action>\\n   <action type=\"whatsapp\">Hi!</action>\\n5. Volume & Audio:\\n   <action type=\"volume\" level=\"70%\"></action>\\n   <action type=\"volume\" level=\"mute\"></action>\\n6. Screen Brightness:\\n   <action type=\"brightness\" level=\"60%\"></action>\\n7. Keystrokes & Typing:\\n   <action type=\"key\" key=\"Return\"></action>\\n   <action type=\"type\" text=\"hello world\"></action>\\n8. Lock Screen:\\n   <action type=\"lock\"></action>\\n\\nMULTI-STEP / CHAIN COMMANDS:\\nWhen the user explicitly commands multiple actions in one sentence (e.g. 'open spotify and play believer', 'open whatsapp and send hi to John', 'mute volume and lock screen'), emit all requested action tags in order. The desktop engine synchronizes and executes them in sequence.\\n\\nMULTI-PAGE & MULTI-IMAGE ANALYSIS PROTOCOL:\\nWhen the user attaches multiple pages, snips, or documents (Page 1, Page 2, etc.):\\n1. You MUST examine, synthesize, and address ALL attached pages systematically in your response.\\n2. Clearly delineate your analysis by page (e.g. '### 📄 Page 1: ...', '### 📄 Page 2: ...').\\n3. When asked to compare or debug across multiple screenshots, highlight differences, correlations, or workflows across all pages.\\n4. Never ignore an attached page or answer for only one.\\n\\nAlways accompany actions with a polite, enthusiastic, concise response explaining what you did. If the user asks a question or asks to analyze attached pages, answer clearly with markdown formatting.",
+    "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion and assistant on Arch Linux with FULL SYSTEM ACCESS.\\nYou can directly control the computer, run terminal commands, open applications/files/URLs, control media & hardware, send WhatsApp messages, and analyze screens and documents.\\n\\nCRITICAL ACTION SAFETY RULE:\\n- ONLY emit executable <action> tags when the user gives you a direct, imperative command to perform an action on their system right now (e.g. 'open spotify', 'send hi to mom on whatsapp', 'turn volume up').\\n- If the user is having a casual conversation, discussing features, asking questions, reflecting on past actions, or asking 'why' / 'how' (e.g. 'can you see the last activity', 'we did a great job', 'what do you think?'), you MUST NOT emit any <action> tags. Simply reply in conversational text.\\n- Never emit actions when talking ABOUT an app or topic hypothetically.\\n\\nWhen an action is explicitly commanded, use these <action> tags:\\n1. Shell commands:\\n   <action type=\"command\">ls -la /home/shakeel</action>\\n2. Opening apps, URLs, or files:\\n   <action type=\"open\">google-chrome</action>\\n   <action type=\"open\">https://youtube.com</action>\\n   <action type=\"open\">/home/shakeel/Downloads</action>\\n3. Music & Media Playback:\\n   To play a specific song on Spotify (auto-plays first match):\\n   <action type=\"open\">spotify:search:Artist Song Name</action>\\n   To play a specific song on YouTube:\\n   <action type=\"open\">https://www.youtube.com/results?search_query=Artist+Song+Name</action>\\n   Controls (play/pause/skip current track):\\n   <action type=\"media\" command=\"play\"></action>\\n   <action type=\"media\" command=\"pause\"></action>\\n   <action type=\"media\" command=\"next\"></action>\\n   <action type=\"media\" command=\"previous\"></action>\\n4. WhatsApp automation (only when explicitly asked to send a message):\\n   <action type=\"whatsapp\" contact=\"Mom\">Hi Mom! Hope you are having a wonderful day.</action>\\n   <action type=\"whatsapp\" phone=\"+1234567890\">Hello!</action>\\n   <action type=\"whatsapp\">Hi!</action>\\n5. Volume & Audio:\\n   <action type=\"volume\" level=\"70%\"></action>\\n   <action type=\"volume\" level=\"mute\"></action>\\n6. Screen Brightness:\\n   <action type=\"brightness\" level=\"60%\"></action>\\n7. Keystrokes & Typing:\\n   <action type=\"key\" key=\"Return\"></action>\\n   <action type=\"type\" text=\"hello world\"></action>\\n8. Lock Screen:\\n   <action type=\"lock\"></action>\\n9. Android Phone Mirroring & Mobile Control:\\n   To mirror and control the user's mobile phone on desktop (mouse, keyboard, audio):\\n   <action type=\"mirror\"></action>\\n   Or to mirror with phone screen turned off:\\n   <action type=\"mirror\" turn_screen_off=\"true\"></action>\\n\\nMULTI-STEP / CHAIN COMMANDS:\\nWhen the user explicitly commands multiple actions in one sentence (e.g. 'open spotify and play believer', 'open whatsapp and send hi to John', 'mute volume and lock screen'), emit all requested action tags in order. The desktop engine synchronizes and executes them in sequence.\\n\\nMULTI-PAGE & MULTI-IMAGE ANALYSIS PROTOCOL:\\nWhen the user attaches multiple pages, snips, or documents (Page 1, Page 2, etc.):\\n1. You MUST examine, synthesize, and address ALL attached pages systematically in your response.\\n2. Clearly delineate your analysis by page (e.g. '### 📄 Page 1: ...', '### 📄 Page 2: ...').\\n3. When asked to compare or debug across multiple screenshots, highlight differences, correlations, or workflows across all pages.\\n4. Never ignore an attached page or answer for only one.\\n\\nAlways accompany actions with a polite, enthusiastic, concise response explaining what you did. If the user asks a question or asks to analyze attached pages, answer clearly with markdown formatting.",
     "max_image_dimension": 1280,
     "image_quality": 85,
     "max_tokens": 2048,
@@ -970,6 +970,60 @@ class SystemActionEngine:
         except Exception:
             pass
 
+    def start_phone_mirror(self, stay_awake=True, turn_screen_off=False):
+        """Launches scrcpy for full Android phone control & mirroring."""
+        if not shutil.which('scrcpy'):
+            return {"success": False, "message": "⚠️ `scrcpy` is not installed on the system."}
+
+        try:
+            res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=3)
+            lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
+            attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
+            unauth = [l.split()[0] for l in lines if 'unauthorized' in l]
+
+            if not attached:
+                if unauth:
+                    return {
+                        "success": False,
+                        "message": "⚠️ **Android Device Detected (Unauthorized)**\n\nPlease unlock your phone and tap **'Always allow from this computer'** on the USB debugging prompt."
+                    }
+                return {
+                    "success": False,
+                    "message": (
+                        "📱 **No Android Phone Connected**\n\n"
+                        "To mirror and control your phone:\n"
+                        "1. On phone: Go to **Settings → About Phone** → tap **Build Number** 7 times.\n"
+                        "2. Enable **USB Debugging** in Developer Options.\n"
+                        "3. Plug phone into laptop via USB cable once and tap **'Allow'**.\n"
+                        "4. *(Optional Wireless)* Run `$ adb tcpip 5555` to unplug USB and mirror wirelessly over Wi-Fi!"
+                    )
+                }
+
+            device_id = attached[0]
+            cmd = [
+                'scrcpy',
+                '-s', device_id,
+                '--window-title=📱 Lexi Phone Mirror',
+            ]
+            if stay_awake:
+                cmd.append('--stay-awake')
+            if turn_screen_off:
+                cmd.append('--turn-screen-off')
+
+            subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return {
+                "success": True,
+                "message": (
+                    f"📱 **Mirroring Android Phone (`{device_id}`) at 60 FPS**\n\n"
+                    "• **Mouse**: Click to tap, Drag to swipe, Scroll wheel to navigate\n"
+                    "• **Buttons**: Right-click = Back, Middle-click = Home, `Ctrl+S` = App Switcher\n"
+                    "• **Keyboard**: Type directly into phone apps\n"
+                    "• **Audio**: Forwarded to laptop speakers in real-time"
+                )
+            }
+        except Exception as e:
+            return {"success": False, "message": f"Failed to launch phone mirror: {e}"}
+
     def execute_action(self, action):
         act_type = action.get('type', 'command').lower().strip()
         attrs = action.get('attrs', {})
@@ -1011,6 +1065,10 @@ class SystemActionEngine:
 
         elif act_type in ('lock', 'lockscreen'):
             return self.lock_screen()
+
+        elif act_type in ('mirror', 'phone', 'scrcpy'):
+            turn_screen_off = str(attrs.get('turn_screen_off', '')).lower() in ('true', '1', 'yes')
+            return self.start_phone_mirror(turn_screen_off=turn_screen_off)
 
         else:
             return {"success": False, "message": f"Unknown action type: {act_type}"}
@@ -7205,6 +7263,8 @@ class LexiWindow(Adw.ApplicationWindow):
                 "• `/media <play-pause|next|prev>` : Control music/media player (`/media next`)\n"
                 "• `/wa <contact|phone> <msg>` : Send WhatsApp message (`/wa Mom Hello!`, `/wa +1234567890 Meeting now`)\n"
                 "• `/lock` : Lock desktop session\n"
+                "• `/mirror [--off]` : Mirror & control Android phone at 60 FPS (Mouse, Keyboard, Audio)\n"
+                "• `/qr` : Show Wi-Fi QR code for Android phone connection\n"
                 "• `/snip` : Interactive screen region snip\n"
                 "• `/screen` : Full screen capture\n"
                 "• `/clear` : Clear chat history\n\n"
@@ -7238,6 +7298,16 @@ class LexiWindow(Adw.ApplicationWindow):
             qr_win = LexiQrPopoverWindow()
             qr_win.present()
             self.update_mascot_mood("happy")
+            return
+
+        # Check for /mirror or /phone (Android Screen Mirroring & Control)
+        if cmd.lower().startswith(('/mirror', '/phone', 'mirror', 'phone')):
+            parts = cmd.split()
+            turn_screen_off = '--off' in parts or '-off' in parts
+            res = self.access.start_phone_mirror(turn_screen_off=turn_screen_off)
+            render_markdown_to_buffer(self.text_buffer, res.get("message", ""))
+            self.scroll_to_end()
+            self.update_mascot_mood("happy" if res.get("success") else "neutral")
             return
 
         # Check for /beam or /share
