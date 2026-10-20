@@ -24,10 +24,11 @@
             android:layout_marginBottom="20dp">
 
             <View
-                android:layout_width="8dp"
-                android:layout_height="8dp"
+                android:id="@+id/view_status_dot"
+                android:layout_width="7dp"
+                android:layout_height="7dp"
                 android:background="@drawable/bg_btn_emerald_pill"
-                android:layout_marginEnd="8dp" />
+                android:layout_marginEnd="9dp" />
 
             <TextView
                 android:id="@+id/tv_host_status"
@@ -37,20 +38,20 @@
                 android:text="CONNECTED · ARCH LINUX (7ms LAN)"
                 android:textColor="@color/accent_emerald"
                 android:textSize="11sp"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.04"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.06"
                 android:singleLine="true"
                 android:ellipsize="end" />
 
-            <TextView
+            <ImageView
                 android:id="@+id/btn_edit_host"
                 android:layout_width="36dp"
                 android:layout_height="36dp"
-                android:gravity="center"
+                android:scaleType="centerInside"
+                android:padding="8dp"
                 android:background="@drawable/bg_btn_titanium_pill"
-                android:text="⚙"
-                android:textColor="@color/text_muted"
-                android:textSize="16sp" />
+                android:src="@drawable/ic_settings_gear"
+                android:contentDescription="Configure Host" />
         </LinearLayout>
 
         <!-- 2. Hero Card: Continuity Camera (Mechanical Iris) -->

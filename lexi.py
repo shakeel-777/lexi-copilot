@@ -1018,6 +1018,8 @@ class SystemActionEngine:
                 'scrcpy',
                 '-s', device_id,
                 '--window-title=📱 Lexi Phone Mirror',
+                '--mouse-bind=++++:bhsn',
+                '--no-mouse-hover',
             ]
             if stay_awake:
                 cmd.append('--stay-awake')
@@ -1025,14 +1027,21 @@ class SystemActionEngine:
                 cmd.append('--turn-screen-off')
 
             subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                from lexi_drop import auto_unlock_phone
+                threading.Thread(target=auto_unlock_phone, args=(device_id,), daemon=True).start()
+            except Exception:
+                pass
+
             return {
                 "success": True,
                 "message": (
                     f"📱 **Mirroring Android Phone (`{device_id}`) at 60 FPS**\n\n"
-                    "• **Mouse**: Click to tap, Drag to swipe, Scroll wheel to navigate\n"
-                    "• **Buttons**: Right-click = Back, Middle-click = Home, `Ctrl+S` = App Switcher\n"
-                    "• **Keyboard**: Type directly into phone apps\n"
-                    "• **Audio**: Forwarded to laptop speakers in real-time"
+                    "• **Touchpad & Mouse**: Tap to click, two-finger drag to scroll (smooth & natural)\n"
+                    "• **Navigation Shortcuts**: `Alt+B` = Back, `Alt+H` = Home, `Alt+S` = App Switcher\n"
+                    "• **Zero-Touch Unlock**: Automatically unlocked phone using configured credentials\n"
+                    "• **Keyboard**: Full physical keyboard pass-through\n"
+                    "• **Audio**: Ultra-low latency stereo audio forwarded to laptop speakers"
                 )
             }
         except Exception as e:
@@ -7386,7 +7395,7 @@ class LexiWindow(Adw.ApplicationWindow):
         if cmd.lower().startswith(('/mirror', '/phone', 'mirror', 'phone')):
             parts = cmd.split()
             turn_screen_off = '--off' in parts or '-off' in parts
-            res = self.access.start_phone_mirror(turn_screen_off=turn_screen_off)
+            res = SystemActionEngine.get().start_phone_mirror(turn_screen_off=turn_screen_off)
             render_markdown_to_buffer(self.text_buffer, res.get("message", ""))
             self.scroll_to_end()
             self.update_mascot_mood("happy" if res.get("success") else "neutral")

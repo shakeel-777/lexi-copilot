@@ -16,6 +16,7 @@ import android.os.Vibrator;
 import android.os.VibrationEffect;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -34,6 +35,7 @@ public class MainActivity extends Activity {
     private static final int REQ_PICK_PHOTO = 103;
 
     private TextView tvHostStatus;
+    private View viewStatusDot;
     private TextView tvLaptopClipPreview;
     private ImageView ivCameraIris;
     private Button btnSnapCamera;
@@ -42,7 +44,7 @@ public class MainActivity extends Activity {
     private Button btnLaunchMirror;
     private Switch swStealthMode;
     private Button btnPickFiles;
-    private TextView btnEditHost;
+    private View btnEditHost;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String latestLaptopClip = "";
@@ -53,6 +55,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         tvHostStatus = findViewById(R.id.tv_host_status);
+        viewStatusDot = findViewById(R.id.view_status_dot);
         tvLaptopClipPreview = findViewById(R.id.tv_laptop_clip_preview);
         ivCameraIris = findViewById(R.id.iv_camera_iris);
         btnSnapCamera = findViewById(R.id.btn_snap_camera);
@@ -184,10 +187,12 @@ public class MainActivity extends Activity {
                 String host = LexiApi.getHost(this);
                 int port = LexiApi.getPort(this);
                 if (ping >= 0) {
-                    tvHostStatus.setText("● CONNECTED · ARCH LINUX (" + ping + "ms LAN)");
+                    if (viewStatusDot != null) viewStatusDot.setVisibility(View.VISIBLE);
+                    tvHostStatus.setText("CONNECTED · ARCH LINUX (" + ping + "ms LAN)");
                     tvHostStatus.setTextColor(getResources().getColor(R.color.accent_emerald));
                 } else {
-                    tvHostStatus.setText("○ OFFLINE · " + host + ":" + port);
+                    if (viewStatusDot != null) viewStatusDot.setVisibility(View.GONE);
+                    tvHostStatus.setText("OFFLINE · " + host + ":" + port);
                     tvHostStatus.setTextColor(getResources().getColor(R.color.text_dim));
                 }
             });

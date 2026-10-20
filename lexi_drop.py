@@ -51,6 +51,43 @@ def get_broadcast_ip(local_ip: str) -> str:
     return "255.255.255.255"
 
 
+def auto_unlock_phone(device_id: str):
+    """
+    Zero-touch automated unlock sequence for Android device over ADB.
+    Loads password from config.json ('phone_password') and handles wake + swipe + PIN.
+    """
+    try:
+        time.sleep(0.5)  # Wait for scrcpy video stream initialization
+        app_dir = Path(__file__).parent
+        cfg_file = app_dir / "config.json"
+        password = None
+        if cfg_file.exists():
+            with open(cfg_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                password = data.get("phone_password")
+
+        # Check keyguard / sleep state
+        check = subprocess.run(
+            ['adb', '-s', device_id, 'shell', 'dumpsys window | grep isKeyguardShowing; dumpsys power | grep mWakefulness='],
+            capture_output=True, text=True, timeout=3
+        )
+        out = check.stdout.lower()
+        if 'iskeyguardshowing=true' in out or 'asleep' in out or 'dozing' in out:
+            # 1. Wake screen up
+            subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'keyevent', '224'], timeout=2)
+            time.sleep(0.7)
+            # 2. Swipe up to reveal lockscreen PIN/password input
+            subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'swipe', '540', '1800', '540', '500', '250'], timeout=2)
+            time.sleep(0.5)
+            # 3. Enter password if configured
+            if password:
+                subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'text', str(password)], timeout=3)
+                time.sleep(0.3)
+                subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'keyevent', '66'], timeout=2)
+    except Exception as e:
+        print(f"[LexiDrop] Auto-unlock error: {e}", file=sys.stderr)
+
+
 def get_unique_destination_path(directory: Path, filename: str) -> Path:
     """Avoid overwriting existing files by appending incremental counters."""
     stem = Path(filename).stem
@@ -656,6 +693,8 @@ class LexiDropServer:
                 '-s', device_id,
                 '--window-title=📱 Lexi Phone Mirror',
                 '--stay-awake',
+                '--mouse-bind=++++:bhsn',
+                '--no-mouse-hover',
             ]
             if stealth:
                 cmd.append('--turn-screen-off')
@@ -669,6 +708,7 @@ class LexiDropServer:
                 env["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
 
             subprocess.Popen(cmd, env=env, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            threading.Thread(target=auto_unlock_phone, args=(device_id,), daemon=True).start()
             return web.json_response({"success": True, "device": device_id, "stealth": stealth})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
