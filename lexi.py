@@ -982,6 +982,20 @@ class SystemActionEngine:
             unauth = [l.split()[0] for l in lines if 'unauthorized' in l]
 
             if not attached:
+                try:
+                    from lexi_drop import get_lexi_drop_instance
+                    drop = get_lexi_drop_instance()
+                    for peer in drop.get_all_peers():
+                        peer_ip = peer.get("ip")
+                        if peer_ip and peer_ip != "127.0.0.1":
+                            subprocess.run(['adb', 'connect', f'{peer_ip}:5555'], capture_output=True, timeout=2)
+                    res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=2)
+                    lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
+                    attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
+                except Exception:
+                    pass
+
+            if not attached:
                 if unauth:
                     return {
                         "success": False,

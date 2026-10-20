@@ -18,6 +18,8 @@ import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
@@ -33,11 +35,12 @@ public class MainActivity extends Activity {
 
     private TextView tvHostStatus;
     private TextView tvLaptopClipPreview;
+    private ImageView ivCameraIris;
     private Button btnSnapCamera;
     private Button btnCopyLaptopClip;
     private Button btnSendPhoneClip;
     private Button btnLaunchMirror;
-    private Button btnLaunchStealth;
+    private Switch swStealthMode;
     private Button btnPickFiles;
     private TextView btnEditHost;
 
@@ -50,12 +53,13 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         tvHostStatus = findViewById(R.id.tv_host_status);
-        tvLaptopClipPreview = findViewById(R.id.tv_laptop_clipboard_preview);
+        tvLaptopClipPreview = findViewById(R.id.tv_laptop_clip_preview);
+        ivCameraIris = findViewById(R.id.iv_camera_iris);
         btnSnapCamera = findViewById(R.id.btn_snap_camera);
         btnCopyLaptopClip = findViewById(R.id.btn_copy_laptop_clip);
         btnSendPhoneClip = findViewById(R.id.btn_send_phone_clip);
         btnLaunchMirror = findViewById(R.id.btn_launch_mirror);
-        btnLaunchStealth = findViewById(R.id.btn_launch_stealth);
+        swStealthMode = findViewById(R.id.sw_stealth_mode);
         btnPickFiles = findViewById(R.id.btn_pick_files);
         btnEditHost = findViewById(R.id.btn_edit_host);
 
@@ -138,34 +142,26 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Phone clipboard is empty", Toast.LENGTH_SHORT).show();
         });
 
-        // 3. Screen Mirroring Triggers
+        // Tap on Camera Iris
+        if (ivCameraIris != null) {
+            ivCameraIris.setOnClickListener(v -> btnSnapCamera.performClick());
+        }
+
+        // 3. Screen Mirroring Trigger with Stealth Switch
         btnLaunchMirror.setOnClickListener(v -> {
-            vibrate(20);
-            Toast.makeText(this, "🚀 Starting 60 FPS mirror on laptop display...", Toast.LENGTH_SHORT).show();
+            vibrate(25);
+            boolean stealth = swStealthMode != null && swStealthMode.isChecked();
+            String msg = stealth ? "🌙 Starting stealth mirror (Screen Off)..." : "🚀 Starting 60 FPS mirror on laptop display...";
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
             new Thread(() -> {
-                boolean ok = LexiApi.triggerMirror(this, false);
+                boolean ok = LexiApi.triggerMirror(this, stealth);
                 runOnUiThread(() -> {
                     if (ok) {
                         vibrate(40);
-                        Toast.makeText(this, "📱 60 FPS Mirror active on laptop!", Toast.LENGTH_SHORT).show();
+                        String activeMsg = stealth ? "🌙 Stealth mirror active on laptop!" : "📱 60 FPS Mirror active on laptop!";
+                        Toast.makeText(this, activeMsg, Toast.LENGTH_SHORT).show();
                     } else {
                         Toast.makeText(this, "⚠️ Failed to trigger mirror on laptop", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }).start();
-        });
-
-        btnLaunchStealth.setOnClickListener(v -> {
-            vibrate(20);
-            Toast.makeText(this, "🌙 Starting stealth mirror (Screen Off)...", Toast.LENGTH_SHORT).show();
-            new Thread(() -> {
-                boolean ok = LexiApi.triggerMirror(this, true);
-                runOnUiThread(() -> {
-                    if (ok) {
-                        vibrate(40);
-                        Toast.makeText(this, "🌙 Stealth mirror active on laptop!", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(this, "⚠️ Failed to trigger stealth mirror", Toast.LENGTH_SHORT).show();
                     }
                 });
             }).start();
@@ -188,10 +184,10 @@ public class MainActivity extends Activity {
                 String host = LexiApi.getHost(this);
                 int port = LexiApi.getPort(this);
                 if (ping >= 0) {
-                    tvHostStatus.setText("● Connected to " + host + ":" + port + " (" + ping + "ms LAN)");
+                    tvHostStatus.setText("● CONNECTED · ARCH LINUX (" + ping + "ms LAN)");
                     tvHostStatus.setTextColor(getResources().getColor(R.color.accent_emerald));
                 } else {
-                    tvHostStatus.setText("○ Offline · " + host + ":" + port);
+                    tvHostStatus.setText("○ OFFLINE · " + host + ":" + port);
                     tvHostStatus.setTextColor(getResources().getColor(R.color.text_dim));
                 }
             });

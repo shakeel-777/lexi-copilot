@@ -10,332 +10,292 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="28dp"
+        android:paddingBottom="28dp">
 
-        <!-- Top Telemetry Header -->
+        <!-- 1. Top Hardware Telemetry Bar -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingBottom="16dp">
+            android:layout_marginBottom="20dp">
 
-            <ImageView
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:src="@drawable/ic_launcher"
-                android:contentDescription="Lexi Logo" />
+            <View
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/bg_btn_emerald_pill"
+                android:layout_marginEnd="8dp" />
 
-            <LinearLayout
+            <TextView
+                android:id="@+id/tv_host_status"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="LEXI CONNECT"
-                    android:textColor="@color/text_main"
-                    android:textSize="17sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.05" />
-
-                <TextView
-                    android:id="@+id/tv_host_status"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="● Connecting to 10.93.59.11:7890..."
-                    android:textColor="@color/accent_emerald"
-                    android:textSize="11sp"
-                    android:fontFamily="monospace" />
-            </LinearLayout>
+                android:text="CONNECTED · ARCH LINUX (7ms LAN)"
+                android:textColor="@color/accent_emerald"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.04"
+                android:singleLine="true"
+                android:ellipsize="end" />
 
             <TextView
                 android:id="@+id/btn_edit_host"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_button_dark"
-                android:paddingStart="10dp"
-                android:paddingEnd="10dp"
-                android:paddingTop="6dp"
-                android:paddingBottom="6dp"
-                android:text="⚙️ IP"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:gravity="center"
+                android:background="@drawable/bg_btn_titanium_pill"
+                android:text="⚙"
                 android:textColor="@color/text_muted"
-                android:textSize="11sp"
-                android:clickable="true"
-                android:focusable="true" />
+                android:textSize="16sp" />
         </LinearLayout>
 
-        <!-- 1. Hero Card: Continuity Camera ("Snap to Lexi") -->
+        <!-- 2. Hero Card: Continuity Camera (Mechanical Iris) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card_rounded"
+            android:background="@drawable/bg_bento_card"
             android:orientation="vertical"
-            android:padding="16dp"
-            android:layout_marginBottom="14dp">
+            android:gravity="center_horizontal"
+            android:paddingTop="26dp"
+            android:paddingBottom="24dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:layout_marginBottom="16dp">
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="📸 CONTINUITY CAMERA"
-                    android:textColor="@color/text_main"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.04" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="VISION TRAY"
-                    android:textColor="@color/accent_emerald"
-                    android:textSize="10sp"
-                    android:fontFamily="monospace" />
-            </LinearLayout>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="12dp"
-                android:text="Capture paper, whiteboard, or code. Drops directly into Lexi AI vision."
-                android:textColor="@color/text_muted"
-                android:textSize="12sp" />
+            <ImageView
+                android:id="@+id/iv_camera_iris"
+                android:layout_width="128dp"
+                android:layout_height="128dp"
+                android:src="@drawable/ic_lens_iris"
+                android:contentDescription="Camera Lens"
+                android:layout_marginBottom="22dp" />
 
             <Button
                 android:id="@+id/btn_snap_camera"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
-                android:background="@drawable/bg_button_emerald"
-                android:text="📸 Snap Photo to Lexi"
-                android:textColor="#052E1E"
-                android:textSize="14sp"
-                android:textStyle="bold" />
+                android:background="@drawable/bg_btn_emerald_pill"
+                android:text="Capture to Vision Tray"
+                android:textColor="#042F24"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.02" />
         </LinearLayout>
 
-        <!-- 2. Universal Clipboard Card -->
+        <!-- 3. Split Bento Grid (Mirroring + Clipboard) -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card_rounded"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:layout_marginBottom="14dp">
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
 
+            <!-- Left Bento: 60 FPS Screen Mirroring -->
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="📋 UNIVERSAL CLIPBOARD"
-                    android:textColor="@color/text_main"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.04" />
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_bento_card"
+                android:orientation="vertical"
+                android:padding="18dp">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="TWO-WAY SYNC"
-                    android:textColor="@color/accent_cyan"
-                    android:textSize="10sp"
-                    android:fontFamily="monospace" />
-            </LinearLayout>
-
-            <!-- Latest Laptop Clipboard Preview Box -->
-            <TextView
-                android:id="@+id/tv_laptop_clipboard_preview"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="12dp"
-                android:background="@drawable/bg_button_dark"
-                android:padding="10dp"
-                android:text="No clipboard received from laptop yet"
-                android:textColor="@color/text_muted"
-                android:textSize="12sp"
-                android:fontFamily="monospace"
-                android:maxLines="3"
-                android:ellipsize="end" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <Button
-                    android:id="@+id/btn_copy_laptop_clip"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
-                    android:background="@drawable/bg_button_dark"
-                    android:text="📋 Copy to Phone"
-                    android:textColor="@color/accent_cyan"
-                    android:textSize="12sp" />
-
-                <Button
-                    android:id="@+id/btn_send_phone_clip"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="6dp"
-                    android:background="@drawable/bg_button_dark"
-                    android:text="⚡ Send to Laptop"
-                    android:textColor="@color/accent_emerald"
-                    android:textSize="12sp" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- 3. Screen Mirroring & Control -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_card_rounded"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:layout_marginBottom="14dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="📱 SCREEN MIRRORING"
-                    android:textColor="@color/text_main"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.04" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="60 FPS · SCRCPY"
+                    android:text="60 FPS"
                     android:textColor="@color/text_dim"
                     android:textSize="10sp"
-                    android:fontFamily="monospace" />
-            </LinearLayout>
+                    android:fontFamily="monospace"
+                    android:letterSpacing="0.04" />
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="12dp"
-                android:text="Control phone from laptop keyboard &amp; mouse at wire speed."
-                android:textColor="@color/text_muted"
-                android:textSize="12sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Screen Mirroring"
+                    android:textColor="@color/text_main"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="16dp" />
 
                 <Button
                     android:id="@+id/btn_launch_mirror"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="6dp"
-                    android:background="@drawable/bg_button_dark"
-                    android:text="▶ Start Mirror"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:background="@drawable/bg_btn_titanium_pill"
+                    android:text="start mirroring"
                     android:textColor="@color/text_main"
-                    android:textSize="12sp" />
+                    android:textSize="12sp"
+                    android:layout_marginBottom="14dp" />
 
-                <Button
-                    android:id="@+id/btn_launch_stealth"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="6dp"
-                    android:background="@drawable/bg_button_dark"
-                    android:text="🌙 Screen Off"
-                    android:textColor="@color/text_main"
-                    android:textSize="12sp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="screen-off"
+                        android:textColor="@color/text_muted"
+                        android:textSize="11sp" />
+
+                    <Switch
+                        android:id="@+id/sw_stealth_mode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false" />
+                </LinearLayout>
             </LinearLayout>
-        </LinearLayout>
 
-        <!-- 4. Zero-Copy AirDrop File Dropzone -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="@drawable/bg_card_rounded"
-            android:orientation="vertical"
-            android:padding="16dp">
-
+            <!-- Right Bento: Universal Clipboard -->
             <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_bento_card"
+                android:orientation="vertical"
+                android:padding="18dp">
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="⚡ ZERO-COPY AIRDROP"
-                    android:textColor="@color/text_main"
-                    android:textSize="13sp"
-                    android:textStyle="bold"
+                    android:text="TWO-WAY"
+                    android:textColor="@color/text_dim"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace"
                     android:letterSpacing="0.04" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="KERNEL STREAM"
-                    android:textColor="@color/text_dim"
-                    android:textSize="10sp"
-                    android:fontFamily="monospace" />
+                    android:text="Universal Clipboard"
+                    android:textColor="@color/text_main"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Text Preview Pill -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_preview_pill"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="8dp"
+                    android:paddingBottom="8dp"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/tv_laptop_clip_preview"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Ready to sync..."
+                        android:textColor="@color/text_muted"
+                        android:textSize="10sp"
+                        android:fontFamily="monospace"
+                        android:maxLines="2"
+                        android:ellipsize="end" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/btn_copy_laptop_clip"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_btn_titanium_pill"
+                        android:text="Copy"
+                        android:textColor="@color/text_main"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/btn_send_phone_clip"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:background="@drawable/bg_btn_titanium_pill"
+                        android:text="Paste"
+                        android:textColor="@color/text_main"
+                        android:textSize="11sp" />
+                </LinearLayout>
             </LinearLayout>
+        </LinearLayout>
+
+        <!-- 4. Anchor Base: Zero-Copy Beam Dropzone -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_dropzone_dashed"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingTop="22dp"
+            android:paddingBottom="22dp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="12dp"
-                android:text="Send large video, APK, or document directly to ~/Downloads."
+                android:text="··→"
+                android:textColor="@color/text_dim"
+                android:textSize="14sp"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Zero-Copy Beam"
+                android:textColor="@color/text_main"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tv_beam_telemetry"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="26.00 MB/s · ↑ 6.12 MB/s  📶"
                 android:textColor="@color/text_muted"
-                android:textSize="12sp" />
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="14dp" />
 
             <Button
                 android:id="@+id/btn_pick_files"
                 android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:background="@drawable/bg_button_dark"
-                android:text="📁 Choose Files to Send"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_btn_titanium_pill"
+                android:text="Choose Files to Beam"
                 android:textColor="@color/text_main"
-                android:textSize="13sp" />
+                android:textSize="12sp" />
         </LinearLayout>
 
-        <!-- Footer status -->
+        <!-- Subtle Footer Branding -->
         <TextView
-            android:id="@+id/tv_footer_info"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
             android:gravity="center"
+            android:layout_marginTop="22dp"
             android:text="Local Wi-Fi Peer-to-Peer · Zero Cloud · Proprietary Protocol"
             android:textColor="@color/text_dim"
-            android:textSize="11sp"
-            android:fontFamily="monospace" />
+            android:textSize="9sp"
+            android:letterSpacing="0.02" />
 
     </LinearLayout>
 </ScrollView>

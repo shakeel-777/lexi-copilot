@@ -1,0 +1,69 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="120dp"
+    android:height="120dp"
+    android:viewportWidth="120"
+    android:viewportHeight="120">
+
+    <!-- Outer Outer Bezel Ring -->
+    <path
+        android:fillColor="#151A22"
+        android:strokeColor="#242D3D"
+        android:strokeWidth="1.5"
+        android:pathData="M60,60m-58,0a58,58 0,1 1,116 0a58,58 0,1 1,-116 0" />
+
+    <!-- Knurled Titanium Grip Ring -->
+    <path
+        android:fillColor="#19202A"
+        android:strokeColor="#2E384C"
+        android:strokeWidth="1"
+        android:pathData="M60,60m-50,0a50,50 0,1 1,100 0a50,50 0,1 1,-100 0" />
+
+    <!-- Stepped Bezel Wall -->
+    <path
+        android:fillColor="#0D1117"
+        android:strokeColor="#1E2430"
+        android:strokeWidth="2"
+        android:pathData="M60,60m-42,0a42,42 0,1 1,84 0a42,42 0,1 1,-84 0" />
+
+    <!-- Aperture Blade 1 -->
+    <path
+        android:fillColor="#1D2430"
+        android:pathData="M60,22 C70,22 88,38 88,52 L60,42 Z" />
+    <!-- Aperture Blade 2 -->
+    <path
+        android:fillColor="#222B3A"
+        android:pathData="M88,52 C88,65 80,85 68,90 L60,62 Z" />
+    <!-- Aperture Blade 3 -->
+    <path
+        android:fillColor="#1D2430"
+        android:pathData="M68,90 C55,95 35,88 30,75 L52,60 Z" />
+    <!-- Aperture Blade 4 -->
+    <path
+        android:fillColor="#222B3A"
+        android:pathData="M30,75 C25,62 30,40 42,32 L58,52 Z" />
+    <!-- Aperture Blade 5 -->
+    <path
+        android:fillColor="#283244"
+        android:pathData="M42,32 C52,24 68,26 78,35 L58,48 Z" />
+
+    <!-- Central Lens Element / Pupil Reflection -->
+    <path
+        android:fillColor="#090C10"
+        android:strokeColor="#10B981"
+        android:strokeWidth="1.5"
+        android:pathData="M60,60m-14,0a14,14 0,1 1,28 0a14,14 0,1 1,-28 0" />
+
+    <!-- Deep Emerald Optical Core Glass -->
+    <path
+        android:fillColor="#0D3B2E"
+        android:pathData="M60,60m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
+
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M60,60m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+
+    <!-- Specular Highlight / Lens Flare -->
+    <path
+        android:fillColor="#80FFFFFF"
+        android:pathData="M55,54 A3,3 0 1,1 58,57 A3,3 0 0,1 55,54" />
+</vector>

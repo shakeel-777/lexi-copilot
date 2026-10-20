@@ -633,7 +633,22 @@ class LexiDropServer:
             lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
             attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
             if not attached:
-                return web.json_response({"error": "No authorized phone connected via ADB"}, status=400)
+                # Try auto-connecting over Wi-Fi
+                candidate_ips = []
+                if request.remote and request.remote != '127.0.0.1':
+                    candidate_ips.append(request.remote)
+                for p in self.get_all_peers():
+                    pip = p.get('ip')
+                    if pip and pip not in candidate_ips and pip != '127.0.0.1':
+                        candidate_ips.append(pip)
+                for cip in candidate_ips:
+                    subprocess.run(['adb', 'connect', f'{cip}:5555'], capture_output=True, timeout=2)
+                res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=2)
+                lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
+                attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
+
+            if not attached:
+                return web.json_response({"error": "No authorized phone connected via USB or Wi-Fi (Run 'adb tcpip 5555' once)"}, status=400)
 
             device_id = attached[0]
             cmd = [
