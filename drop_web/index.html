@@ -46,6 +46,29 @@
       </div>
     </div>
 
+    <!-- Continuity Action Bar (Apple-style Camera Snap & Universal Clipboard) -->
+    <div class="continuity-bar">
+      <button class="continuity-btn primary" id="btn-camera-snap" title="Take a photo with your mobile camera and send it to Lexi vision tray">
+        <span>📸</span>
+        <span>Snap to Lexi</span>
+      </button>
+      <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;">
+
+      <button class="continuity-btn" id="btn-sync-clipboard" title="Sync phone clipboard to Linux laptop">
+        <span>📋</span>
+        <span>Send Clipboard</span>
+      </button>
+    </div>
+
+    <!-- Live Universal Clipboard Banner -->
+    <div class="clipboard-banner" id="clipboard-banner" style="display:none;" title="Click to copy to phone clipboard">
+      <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+        <span style="font-size:14px;">📋</span>
+        <span id="clipboard-preview" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Copied from Laptop</span>
+      </div>
+      <span class="badge" style="background:rgba(6,182,212,0.2); color:var(--accent-cyan);">Tap to Copy</span>
+    </div>
+
     <!-- Drop Zone -->
     <div class="dropzone" id="dropzone">
       <div class="dropzone-inner">

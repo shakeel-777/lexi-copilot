@@ -11,6 +11,12 @@ const ledDot = document.getElementById('led-dot');
 const btnInstall = document.getElementById('btn-install');
 const hostName = document.getElementById('host-name');
 const networkAddr = document.getElementById('network-addr');
+const btnCameraSnap = document.getElementById('btn-camera-snap');
+const cameraInput = document.getElementById('camera-input');
+const btnSyncClipboard = document.getElementById('btn-sync-clipboard');
+const clipboardBanner = document.getElementById('clipboard-banner');
+const clipboardPreview = document.getElementById('clipboard-preview');
+let latestLaptopClipboard = '';
 
 // 1. Service Worker Registration
 if ('serviceWorker' in navigator) {
@@ -110,8 +116,149 @@ function handleServerMessage(msg) {
     if (msg.host_name && hostName) {
       hostName.innerText = `💻 ${msg.host_name}`;
     }
+  } else if (msg.type === 'clipboard_sync') {
+    if (msg.text && msg.source !== 'mobile') {
+      latestLaptopClipboard = msg.text;
+      if (clipboardBanner && clipboardPreview) {
+        clipboardBanner.style.display = 'flex';
+        clipboardPreview.innerText = msg.text.replace(/\n/g, ' ');
+      }
+    }
+  } else if (msg.type === 'request_camera_snap') {
+    if (cameraInput) {
+      cameraInput.click();
+    }
   }
 }
+
+// Continuity Controls (Camera Snap & Universal Clipboard)
+if (btnCameraSnap && cameraInput) {
+  btnCameraSnap.addEventListener('click', () => {
+    cameraInput.click();
+  });
+
+  cameraInput.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const cardId = 'snap-' + Date.now();
+    const card = document.createElement('div');
+    card.className = 'transfer-card';
+    card.id = cardId;
+    card.innerHTML = `
+      <div class="file-icon">📸</div>
+      <div class="transfer-info">
+        <div class="transfer-header">
+          <span class="file-name">Continuity Snap</span>
+          <span class="transfer-status uploading" id="${cardId}-status">Beaming to Lexi Vision...</span>
+        </div>
+        <div class="transfer-meta">
+          <span>${formatSize(file.size)} · Camera Capture</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="${cardId}-prog" style="width: 50%;"></div>
+        </div>
+      </div>
+    `;
+    transferList.prepend(card);
+    updateTransfersCount();
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name || 'camera_snap.jpg');
+      const resp = await fetch('/api/camera-snap', {
+        method: 'POST',
+        body: formData
+      });
+      const res = await resp.json();
+      if (res.success) {
+        document.getElementById(`${cardId}-status`).innerText = '✓ Attached to Lexi Vision Tray!';
+        document.getElementById(`${cardId}-status`).className = 'transfer-status completed';
+        document.getElementById(`${cardId}-prog`).style.width = '100%';
+        playReceiveChime();
+      } else {
+        throw new Error(res.error || 'Upload failed');
+      }
+    } catch (err) {
+      document.getElementById(`${cardId}-status`).innerText = '⚠️ Failed to send snap';
+      document.getElementById(`${cardId}-status`).className = 'transfer-status error';
+    }
+    cameraInput.value = '';
+  });
+}
+
+if (btnSyncClipboard) {
+  btnSyncClipboard.addEventListener('click', async () => {
+    let textToSend = '';
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      try {
+        textToSend = await navigator.clipboard.readText();
+      } catch (e) {
+        // Fallback to prompt if clipboard read permission denied
+      }
+    }
+    if (!textToSend) {
+      textToSend = prompt('Paste or enter text to send to Linux laptop:');
+    }
+    if (textToSend && textToSend.trim()) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'clipboard_sync',
+          text: textToSend.trim()
+        }));
+      } else {
+        await fetch('/api/clipboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: textToSend.trim() })
+        });
+      }
+      btnSyncClipboard.innerHTML = '<span>✓</span> <span>Sent to Laptop!</span>';
+      setTimeout(() => {
+        btnSyncClipboard.innerHTML = '<span>📋</span> <span>Send Clipboard</span>';
+      }, 2000);
+    }
+  });
+}
+
+if (clipboardBanner) {
+  clipboardBanner.addEventListener('click', async () => {
+    if (latestLaptopClipboard) {
+      try {
+        await navigator.clipboard.writeText(latestLaptopClipboard);
+        const originalText = clipboardPreview.innerText;
+        clipboardPreview.innerText = '✓ Copied to Phone Clipboard!';
+        setTimeout(() => {
+          clipboardPreview.innerText = originalText;
+        }, 2000);
+      } catch (e) {
+        prompt('Copy text from laptop:', latestLaptopClipboard);
+      }
+    }
+  });
+}
+
+// Check action parameter on PWA launch (e.g. from app shortcuts or share sheet)
+window.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('action') === 'snap' && cameraInput) {
+    setTimeout(() => cameraInput.click(), 500);
+  } else if (urlParams.get('shared') === 'success') {
+    const card = document.createElement('div');
+    card.className = 'transfer-card';
+    card.innerHTML = `
+      <div class="file-icon">⚡</div>
+      <div class="transfer-info">
+        <div class="transfer-header">
+          <span class="file-name">Share Sheet Drop</span>
+          <span class="transfer-status completed">✓ Beamed to Linux Downloads!</span>
+        </div>
+      </div>
+    `;
+    transferList.prepend(card);
+    updateTransfersCount();
+  }
+});
 
 // 4. Drag and Drop Setup
 dropzone.addEventListener('click', () => fileInput.click());

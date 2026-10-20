@@ -186,6 +186,9 @@ class LexiDropServer:
         self.on_file_received = None
         self.on_p2p_incoming_request = None
         self.on_transfer_progress = None
+        self.on_clipboard_received = None
+        self.on_camera_snap_received = None
+        self.current_clipboard_text = ""
 
     def get_server_url(self):
         return f"http://{self.local_ip}:{self.port}"
@@ -298,6 +301,25 @@ class LexiDropServer:
                             self.connected_peers[ws]["device"] = device_label
                             if self.on_peer_joined:
                                 self.on_peer_joined(device_label, client_ip)
+                        elif msg_type == "clipboard_sync":
+                            text = data.get("text", "")
+                            if text:
+                                self.current_clipboard_text = text
+                                if self.on_clipboard_received:
+                                    self.on_clipboard_received(text)
+                                # Broadcast to other connected clients
+                                self.broadcast_message({"type": "clipboard_sync", "text": text, "source": "mobile"})
+                        elif msg_type == "camera_snap":
+                            b64_data = data.get("b64", "")
+                            if b64_data:
+                                import base64
+                                raw_bytes = base64.b64decode(b64_data)
+                                snap_filename = f"camera_snap_{int(time.time())}.jpg"
+                                snap_path = Path("/tmp") / snap_filename
+                                with open(snap_path, "wb") as f:
+                                    f.write(raw_bytes)
+                                if self.on_camera_snap_received:
+                                    self.on_camera_snap_received(str(snap_path))
                     except Exception as e:
                         print(f"[LexiDrop WS] Error parsing message: {e}")
                 elif msg.type == WSMsgType.ERROR:
@@ -495,6 +517,118 @@ class LexiDropServer:
             "active_shares": len(self.active_shared_files)
         })
 
+    async def handle_share_target(self, request):
+        """Handles native Android Web Share Target POST submissions (files, text, urls)."""
+        try:
+            reader = await request.multipart()
+            saved_files = []
+            text_parts = []
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                if part.filename:
+                    filename = part.filename
+                    import urllib.parse
+                    filename = urllib.parse.unquote(filename)
+                    dest_path = get_unique_destination_path(DOWNLOADS_DIR, filename)
+                    total_bytes = 0
+                    t0 = time.time()
+                    with open(dest_path, "wb") as f:
+                        while True:
+                            chunk = await part.read_chunk(4 * 1024 * 1024)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            total_bytes += len(chunk)
+                    elapsed = max(time.time() - t0, 0.001)
+                    speed_mbps = (total_bytes / (1024 * 1024)) / elapsed
+                    saved_files.append(str(dest_path))
+                    if self.on_file_received:
+                        self.on_file_received(str(dest_path), total_bytes, speed_mbps)
+                else:
+                    val = await part.text()
+                    if val.strip():
+                        text_parts.append(val.strip())
+
+            if text_parts and not saved_files:
+                combined_text = "\n".join(text_parts)
+                if self.on_clipboard_received:
+                    self.on_clipboard_received(combined_text)
+
+            raise web.HTTPFound("/?shared=success")
+        except web.HTTPFound:
+            raise
+        except Exception as e:
+            print(f"[LexiDrop] Share target error: {e}")
+            raise web.HTTPFound("/?shared=error")
+
+    async def handle_camera_snap(self, request):
+        """Handles Continuity Camera snap from mobile and attaches to Lexi's vision tray."""
+        try:
+            ct = request.content_type
+            snap_filename = f"camera_snap_{int(time.time())}.jpg"
+            snap_path = Path("/tmp") / snap_filename
+
+            if "multipart" in ct:
+                reader = await request.multipart()
+                part = await reader.next()
+                if part and part.filename:
+                    with open(snap_path, "wb") as f:
+                        while True:
+                            chunk = await part.read_chunk(1024 * 1024)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+            else:
+                body = await request.read()
+                with open(snap_path, "wb") as f:
+                    f.write(body)
+
+            if os.path.exists(snap_path) and os.path.getsize(snap_path) > 0:
+                if self.on_camera_snap_received:
+                    self.on_camera_snap_received(str(snap_path))
+                return web.json_response({
+                    "success": True,
+                    "path": str(snap_path),
+                    "size": os.path.getsize(snap_path)
+                })
+            return web.json_response({"error": "Empty capture"}, status=400)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def handle_clipboard_api(self, request):
+        """Receives or returns synced clipboard."""
+        if request.method == "POST":
+            try:
+                data = await request.json()
+                text = data.get("text", "")
+                if text:
+                    self.current_clipboard_text = text
+                    if self.on_clipboard_received:
+                        self.on_clipboard_received(text)
+                    self.broadcast_message({"type": "clipboard_sync", "text": text, "source": "mobile"})
+                return web.json_response({"success": True})
+            except Exception as e:
+                return web.json_response({"error": str(e)}, status=400)
+        else:
+            return web.json_response({"text": self.current_clipboard_text})
+
+    def broadcast_clipboard(self, text: str):
+        """Broadcasts laptop clipboard text to all connected mobile clients."""
+        self.current_clipboard_text = text
+        self.broadcast_message({
+            "type": "clipboard_sync",
+            "text": text,
+            "source": "laptop"
+        })
+
+    def broadcast_camera_request(self):
+        """Requests connected mobile phone to open camera and take a snap."""
+        self.broadcast_message({
+            "type": "request_camera_snap"
+        })
+
     def share_file(self, filepath: str) -> dict:
         """Registers a local file for fast sharing and notifies all connected peers via WebSocket."""
         if not os.path.exists(filepath):
@@ -578,6 +712,10 @@ class LexiDropServer:
             self.app.router.add_post("/api/peer/incoming", self.handle_peer_incoming)
             self.app.router.add_post("/api/peer/respond", self.handle_peer_respond)
             self.app.router.add_get("/api/status", self.handle_status)
+            self.app.router.add_post("/api/share-target", self.handle_share_target)
+            self.app.router.add_post("/api/camera-snap", self.handle_camera_snap)
+            self.app.router.add_get("/api/clipboard", self.handle_clipboard_api)
+            self.app.router.add_post("/api/clipboard", self.handle_clipboard_api)
 
             self.runner = web.AppRunner(self.app)
             self.loop.run_until_complete(self.runner.setup())

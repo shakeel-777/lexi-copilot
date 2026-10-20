@@ -4185,6 +4185,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
 
         actions_box.append(make_btn("💬 Copilot", "island-action-btn island-btn-primary", "Open floating center copilot card", self.on_expand_copilot))
         actions_box.append(make_btn("⚡ Beam", "island-action-btn island-btn-secondary", "Local Wi-Fi file sharing & PWA status", self.on_show_beam_info))
+        actions_box.append(make_btn("📱 Phone", "island-action-btn island-btn-secondary", "Mirror & control Android phone", self.on_trigger_phone_mirror))
         actions_box.append(make_btn("◨ Side Panel", "island-action-btn island-btn-secondary", "Open vertical Side Panel", self.on_expand_side_panel))
         actions_box.append(make_btn("✂️ Snip", "island-action-btn island-btn-secondary", "Interactive region snip", self.on_trigger_snip))
         actions_box.append(make_btn("🐾 Pet", "island-action-btn island-btn-secondary", "Detach Lexi to roam desktop", self.on_detach_pet))
@@ -4308,10 +4309,17 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 self.drop_server.on_transfer_progress = lambda tok, d, cur, tot, spd, pct: GLib.idle_add(
                     self.on_transfer_progress_update, tok, d, spd, pct
                 )
+                self.drop_server.on_clipboard_received = lambda txt: GLib.idle_add(
+                    self.on_clipboard_from_mobile, txt
+                )
+                self.drop_server.on_camera_snap_received = lambda fp: GLib.idle_add(
+                    self.on_camera_snap_from_mobile, fp
+                )
                 self.drop_server.start_background()
             except Exception as e:
                 log(f"Failed to start Lexi Drop server: {e}")
 
+        self._last_synced_clipboard = ""
         self.connect('realize', self.on_realize)
 
     def update_input_region(self, mode="compact"):
@@ -4528,7 +4536,67 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 surface.set_skip_taskbar_hint(True)
             if hasattr(surface, 'set_skip_pager_hint'):
                 surface.set_skip_pager_hint(True)
+        try:
+            clipboard = Gdk.Display.get_default().get_clipboard()
+            clipboard.connect('changed', self.on_desktop_clipboard_changed)
+        except Exception:
+            pass
         GLib.timeout_add(50, self.position_at_top)
+
+    def on_trigger_phone_mirror(self, *_):
+        res = SystemActionEngine.get().start_phone_mirror()
+        if not res.get("success"):
+            self.trigger_island_alert("📱", "Plug phone via USB or turn on USB Debugging", "amber", 3.5)
+            qr_win = LexiQrPopoverWindow(title="📱 Connect Android Phone")
+            qr_win.present()
+        else:
+            self.trigger_island_alert("📱", "Mirroring Phone @ 60 FPS", "green", 3.0)
+
+    def on_clipboard_from_mobile(self, text):
+        if not text:
+            return
+        self._last_synced_clipboard = text
+        try:
+            clipboard = Gdk.Display.get_default().get_clipboard()
+            clipboard.set(text)
+        except Exception:
+            pass
+        if shutil.which('wl-copy'):
+            try:
+                subprocess.Popen(['wl-copy'], stdin=subprocess.PIPE).communicate(input=text.encode('utf-8'))
+            except Exception:
+                pass
+        elif shutil.which('xclip'):
+            try:
+                subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE).communicate(input=text.encode('utf-8'))
+            except Exception:
+                pass
+        preview = text[:24].replace('\n', ' ') + ('…' if len(text) > 24 else '')
+        self.trigger_island_alert("📋", f"Synced: {preview}", "cyan", 3.0)
+
+    def on_camera_snap_from_mobile(self, file_path):
+        if not file_path or not os.path.exists(file_path):
+            return
+        if self.copilot_win:
+            self.copilot_win.add_feed_file(file_path)
+            self.on_expand_copilot()
+        self.trigger_island_alert("📸", "Continuity Camera Snap Added!", "green", 3.5)
+
+    def on_desktop_clipboard_changed(self, clipboard):
+        try:
+            clipboard.read_text_async(None, self._on_desktop_clip_read)
+        except Exception:
+            pass
+
+    def _on_desktop_clip_read(self, clip, res):
+        try:
+            text = clip.read_text_finish(res)
+            if text and text != getattr(self, '_last_synced_clipboard', ''):
+                self._last_synced_clipboard = text
+                if self.drop_server:
+                    self.drop_server.broadcast_clipboard(text)
+        except Exception:
+            pass
 
     def position_at_top(self):
         surface = self.get_surface()
