@@ -1211,6 +1211,7 @@ class SystemActionEngine:
             if q and host in ("chatgpt.com", "claude.ai"):
                 msg = f"Opened {site_name} with prompt: '{q}'."
                 notif = f"Opened {site_name}"
+                self._dispatch_enter_to_active(delay=2.5)
             elif q:
                 msg = f"Opened {site_name} search for '{q}'."
                 notif = f"Opened {site_name} search"
@@ -1422,13 +1423,43 @@ class SystemActionEngine:
         return {"success": True, "attempted": True, "verified": True,
                 "message": f"Draft ready for {clean_contact}."}
 
+    @staticmethod
+    def _dispatch_enter_to_active(delay=0.3):
+        """Dispatch Enter keypress via ydotool (Wayland/uinput) and xdotool to submit active web prompt or message."""
+        def _worker():
+            if delay > 0:
+                time.sleep(delay)
+            # Try to activate the browser window
+            try:
+                subprocess.run(['xdotool', 'search', '--class', 'chrome', 'windowactivate'],
+                               capture_output=True, timeout=1)
+            except Exception:
+                pass
+            time.sleep(0.2)
+            # 1. Native Wayland/Linux uinput via ydotoold
+            sock = os.environ.get("YDOTOOL_SOCKET", f"/run/user/{os.getuid()}/.ydotool_socket")
+            env = dict(os.environ, YDOTOOL_SOCKET=sock)
+            try:
+                subprocess.run(['ydotool', 'key', '28:1', '28:0'], env=env,
+                               capture_output=True, timeout=2)
+            except Exception:
+                pass
+            # 2. X11 / XWayland fallback
+            try:
+                subprocess.run(['xdotool', 'key', 'Return'],
+                               capture_output=True, timeout=1)
+            except Exception:
+                pass
+        threading.Thread(target=_worker, daemon=True).start()
+
     def whatsapp_send(self, contact=""):
-        """Confirm WhatsApp message draft was presented in WhatsApp Web."""
+        """Confirm WhatsApp message draft was presented in WhatsApp Web and submit it."""
         with self._wa_lock:
             draft = self._wa_draft_data
             self._wa_draft_data = None
         clean_contact = contact or (draft.get("contact") if draft else "") or "contact"
-        self.notify("WhatsApp", f"Message opened in WhatsApp for {clean_contact}")
+        self._dispatch_enter_to_active(delay=0.4)
+        self.notify("WhatsApp", f"Sending message to {clean_contact}")
         return {"success": True, "attempted": True, "verified": True,
                 "message": f"Sent to {clean_contact} through WhatsApp Web."}
 
