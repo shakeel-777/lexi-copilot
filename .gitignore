@@ -12,3 +12,4 @@ android_app/*.zip
 android_app/*.apk
 android_app/*.idsig
 android_app/debug.keystore
+backups/

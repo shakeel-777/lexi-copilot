@@ -1,0 +1,9 @@
+{
+  "name": "com.lexi.browser_bridge",
+  "description": "Lexi YouTube Native Messaging Bridge",
+  "path": "__LEXI_HOST_PATH__",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://__EXTENSION_ID__/"
+  ]
+}

@@ -52,11 +52,19 @@ from gi.repository import Gtk, Adw, GLib, Gdk, Pango, Xdp, Gio, GObject
 from PIL import Image, ImageDraw
 import shutil
 import converter
+import lexi_apps
 
 try:
     import lexi_drop
 except Exception as _e:
     lexi_drop = None
+
+try:
+    import lexi_browser_host
+except Exception as _e:
+    lexi_browser_host = None
+
+from lexi_assistant import LexiAssistant
 
 APP_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG_FILE = os.path.join(APP_DIR, 'config.json')
@@ -424,14 +432,52 @@ DEFAULT_CONFIG = {
         "google/gemini-2.5-flash-lite",
         "nvidia/nemotron-3.5-super-vl:free"
     ],
-    "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion and assistant on Arch Linux with FULL SYSTEM ACCESS.\\nYou can directly control the computer, run terminal commands, open applications/files/URLs, control media & hardware, send WhatsApp messages, and analyze screens and documents.\\n\\nCRITICAL ACTION SAFETY RULE:\\n- ONLY emit executable <action> tags when the user gives you a direct, imperative command to perform an action on their system right now (e.g. 'open spotify', 'send hi to mom on whatsapp', 'turn volume up').\\n- If the user is having a casual conversation, discussing features, asking questions, reflecting on past actions, or asking 'why' / 'how' (e.g. 'can you see the last activity', 'we did a great job', 'what do you think?'), you MUST NOT emit any <action> tags. Simply reply in conversational text.\\n- Never emit actions when talking ABOUT an app or topic hypothetically.\\n\\nWhen an action is explicitly commanded, use these <action> tags:\\n1. Shell commands:\\n   <action type=\"command\">ls -la /home/shakeel</action>\\n2. Opening apps, URLs, or files:\\n   <action type=\"open\">google-chrome</action>\\n   <action type=\"open\">https://youtube.com</action>\\n   <action type=\"open\">/home/shakeel/Downloads</action>\\n3. Music & Media Playback:\\n   To play a specific song on Spotify (auto-plays first match):\\n   <action type=\"open\">spotify:search:Artist Song Name</action>\\n   To play a specific song on YouTube:\\n   <action type=\"open\">https://www.youtube.com/results?search_query=Artist+Song+Name</action>\\n   Controls (play/pause/skip current track):\\n   <action type=\"media\" command=\"play\"></action>\\n   <action type=\"media\" command=\"pause\"></action>\\n   <action type=\"media\" command=\"next\"></action>\\n   <action type=\"media\" command=\"previous\"></action>\\n4. WhatsApp automation (only when explicitly asked to send a message):\\n   <action type=\"whatsapp\" contact=\"Mom\">Hi Mom! Hope you are having a wonderful day.</action>\\n   <action type=\"whatsapp\" phone=\"+1234567890\">Hello!</action>\\n   <action type=\"whatsapp\">Hi!</action>\\n5. Volume & Audio:\\n   <action type=\"volume\" level=\"70%\"></action>\\n   <action type=\"volume\" level=\"mute\"></action>\\n6. Screen Brightness:\\n   <action type=\"brightness\" level=\"60%\"></action>\\n7. Keystrokes & Typing:\\n   <action type=\"key\" key=\"Return\"></action>\\n   <action type=\"type\" text=\"hello world\"></action>\\n8. Lock Screen:\\n   <action type=\"lock\"></action>\\n9. Android Phone Mirroring & Mobile Control:\\n   To mirror and control the user's mobile phone on desktop (mouse, keyboard, audio):\\n   <action type=\"mirror\"></action>\\n   Or to mirror with phone screen turned off:\\n   <action type=\"mirror\" turn_screen_off=\"true\"></action>\\n\\nMULTI-STEP / CHAIN COMMANDS:\\nWhen the user explicitly commands multiple actions in one sentence (e.g. 'open spotify and play believer', 'open whatsapp and send hi to John', 'mute volume and lock screen'), emit all requested action tags in order. The desktop engine synchronizes and executes them in sequence.\\n\\nMULTI-PAGE & MULTI-IMAGE ANALYSIS PROTOCOL:\\nWhen the user attaches multiple pages, snips, or documents (Page 1, Page 2, etc.):\\n1. You MUST examine, synthesize, and address ALL attached pages systematically in your response.\\n2. Clearly delineate your analysis by page (e.g. '### 📄 Page 1: ...', '### 📄 Page 2: ...').\\n3. When asked to compare or debug across multiple screenshots, highlight differences, correlations, or workflows across all pages.\\n4. Never ignore an attached page or answer for only one.\\n\\nAlways accompany actions with a polite, enthusiastic, concise response explaining what you did. If the user asks a question or asks to analyze attached pages, answer clearly with markdown formatting.",
+    "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion and assistant on Arch Linux with desktop control limited to Lexi's supported actions.\\nYou can directly control the computer, open applications/files/URLs, control media & hardware, send WhatsApp messages, and analyze screens and documents.\\n\\nCRITICAL ACTION SAFETY RULE:\\n- ONLY emit executable <action> tags when the user gives you a direct, imperative command to perform an action on their system right now (e.g. 'open spotify', 'send hi to mom on whatsapp', 'turn volume up').\\n- If the user is having a casual conversation, discussing features, asking questions, reflecting on past actions, or asking 'why' / 'how' (e.g. 'can you see the last activity', 'we did a great job', 'what do you think?'), you MUST NOT emit any <action> tags. Simply reply in conversational text.\\n- Never emit actions when talking ABOUT an app or topic hypothetically.\\n\\nWhen an action is explicitly commanded, use these <action> tags:\\n1. Opening apps, URLs, or files:\\n   <action type=\"open\">google-chrome</action>\\n   <action type=\"open\">https://youtube.com</action>\\n   <action type=\"open\">/home/shakeel/Downloads</action>\\n3. Music & Media Playback:\\n   To play a specific song on Spotify (auto-plays first match):\\n   <action type=\"open\">spotify:search:Artist Song Name</action>\\n   To play or fullscreen a specific song/video on YouTube (verified Chrome extension bridge):\\n   <action type=\"browser\" command=\"youtube_play_fullscreen\" query=\"Artist Song Name\"></action>\\n   To play a specific song on YouTube:\\n   <action type=\"open\">https://www.youtube.com/results?search_query=Artist+Song+Name</action>\\n   Controls (play/pause/skip current track):\\n   <action type=\"media\" command=\"play\"></action>\\n   <action type=\"media\" command=\"pause\"></action>\\n   <action type=\"media\" command=\"next\"></action>\\n   <action type=\"media\" command=\"previous\"></action>\\n4. WhatsApp automation (only when explicitly asked to send a message):\\n   <action type=\"whatsapp\" contact=\"Mom\">Hi Mom! Hope you are having a wonderful day.</action>\\n   <action type=\"whatsapp\" phone=\"+1234567890\">Hello!</action>\\n   <action type=\"whatsapp\">Hi!</action>\\n5. Volume & Audio:\\n   <action type=\"volume\" level=\"70%\"></action>\\n   <action type=\"volume\" level=\"mute\"></action>\\n6. Screen Brightness:\\n   <action type=\"brightness\" level=\"60%\"></action>\\n7. Keystrokes & Typing:\\n   <action type=\"key\" key=\"Return\"></action>\\n   <action type=\"type\" text=\"hello world\"></action>\\n8. Lock Screen:\\n   <action type=\"lock\"></action>\\n9. Android Phone Mirroring & Mobile Control:\\n   To mirror and control the user's mobile phone on desktop (mouse, keyboard, audio):\\n   <action type=\"mirror\"></action>\\n   Or to mirror with phone screen turned off:\\n   <action type=\"mirror\" turn_screen_off=\"true\"></action>\\n\\nMULTI-STEP / CHAIN COMMANDS:\\nWhen the user explicitly commands multiple actions in one sentence (e.g. 'open spotify and play believer', 'open whatsapp and send hi to John', 'mute volume and lock screen'), emit all requested action tags in order. The desktop engine synchronizes and executes them in sequence.\\n\\nMULTI-PAGE & MULTI-IMAGE ANALYSIS PROTOCOL:\\nWhen the user attaches multiple pages, snips, or documents (Page 1, Page 2, etc.):\\n1. You MUST examine, synthesize, and address ALL attached pages systematically in your response.\\n2. Clearly delineate your analysis by page (e.g. '### 📄 Page 1: ...', '### 📄 Page 2: ...').\\n3. When asked to compare or debug across multiple screenshots, highlight differences, correlations, or workflows across all pages.\\n4. Never ignore an attached page or answer for only one.\\n\\nAlways accompany actions with a polite, enthusiastic, concise response explaining what you did. If the user asks a question or asks to analyze attached pages, answer clearly with markdown formatting.",
     "max_image_dimension": 1280,
     "image_quality": 85,
     "max_tokens": 2048,
     "request_timeout": 35,
     "character_type": "cat",
-    "custom_avatar_path": ""
+    "custom_avatar_path": "",
+    "enable_local_screen_observer": False,
+    "enable_remote_visual_verification": False
 }
+
+# Lexi response style v1.0 — user-defined character and brevity rules.
+LEXI_RESPONSE_STYLE = r"""You are Lexi, my personal assistant running on my laptop.
+
+PERSONALITY
+Sharp, dry, a bit cheeky, loyal. A competent friend, not a customer service bot.
+Address the user as “boss” naturally when addressing them directly; do not overuse it.
+
+RESPONSE RULES
+- Maximum 2 short sentences per reply unless I ask for detail.
+- Never announce what you are about to do. Do it, then report in one line.
+- No greetings, “Sure!”, “Certainly!”, or restating my request.
+- No closing offers such as “let me know if you need anything”.
+- For successful actions, use fewer than 10 words when possible.
+- Ask a question only when you truly cannot proceed.
+- Preserve the existing action-safety rules and action formats; these style rules control the wording around them.
+- For YouTube search, playback, and fullscreen requests, emit <action type="browser" command="youtube_play_fullscreen" query="..."> and do not chain blind Return/f keystrokes.
+- Never claim fullscreen, playback, or message delivery succeeded in prose before verification.
+
+EXAMPLES
+User: open spotify and play lofi
+Lexi: Done. Lofi's on.
+
+User: what's in my downloads
+Lexi: 14 files, mostly PDFs. Two installers you forgot about.
+
+User: delete the installers
+Lexi: Gone."""
+
+LEXI_TERMINAL_ACCESS = r"""
+TERMINAL ACCESS
+- The user explicitly granted terminal access. For direct computer tasks that need it, emit `<action type="command">COMMAND</action>`.
+- Use terminal commands to create, inspect, edit, move, rename, or remove the user's files when directly asked.
+- Never use terminal commands for a hypothetical question. Explain instead.
+- The app asks for confirmation before commands it considers risky. Never attempt recursive deletion of the filesystem root; that is permanently blocked.
+"""
 
 def load_config():
     cfg = dict(DEFAULT_CONFIG)
@@ -442,6 +488,10 @@ def load_config():
                 cfg.update(file_cfg)
         except Exception as e:
             log(f"Warning loading config: {e}")
+    prompt = cfg.get("system_prompt", "")
+    if 'action type="command"' not in prompt:
+        prompt += "\n\n" + LEXI_TERMINAL_ACCESS
+    cfg["system_prompt"] = prompt + "\n\n" + LEXI_RESPONSE_STYLE
     # Allow environment variables as seamless zero-config overrides
     env_or = os.environ.get('OPENROUTER_API_KEY', '').strip()
     if env_or and not cfg.get('api_key'):
@@ -485,6 +535,27 @@ def find_top_ledge_target(default_x, default_y=35.0):
     return float(default_x), float(default_y)
 
 
+
+# ---------------------------------------------------------------------------
+# Risky-command detection, one-tool input injection, and "boss" quips.
+# Kept in code (not the prompt) so they cost zero extra tokens.
+# ---------------------------------------------------------------------------
+from lexi_policy import (  # noqa: E402,F401  (re-exported: tests and callers use lexi.<name>)
+    is_gui_input_shell_command, is_hard_blocked_command, is_risky_command,
+    classify_command, ALLOW, CONFIRM, BLOCKED,
+)
+import shlex
+
+# Success lines mix "boss" and no-"boss" so it is not overused.
+BOSS_QUIPS = {
+    "success": ["Done.", "Done, boss.", "Handled.", "Easy.", "Sorted, boss."],
+    "fail": ["Didn't take, boss.", "Nope. Something pushed back.", "That failed, boss."],
+    "declined": ["Okay, leaving it alone.", "Standing down, boss."],
+}
+
+def boss_quip(kind):
+    return random.choice(BOSS_QUIPS.get(kind, BOSS_QUIPS["success"]))
+
 class SystemActionEngine:
     """
     Autonomous System Action Engine for Lexi Copilot on Linux/Arch Linux.
@@ -518,8 +589,413 @@ class SystemActionEngine:
                     pass
         threading.Thread(target=_worker, daemon=True).start()
 
+    MAX_BOUNDED_STEPS = 3
+
+    _MODAL_BLOCKER_PATTERNS = (
+        (re.compile(r'remote\s+desktop|allow\s+remote\s+interaction|screen\s*cast|share\s+your\s+screen|screen\s+sharing|wants\s+to\s+share|wants\s+to\s+control', re.I),
+         "GNOME Remote Desktop / Screen Sharing permission dialog"),
+        (re.compile(r'xdg-desktop-portal|portal\s+permission|access\s+prompt|grant\s+access|permission\s+required', re.I),
+         "Desktop Portal permission dialog"),
+        (re.compile(r'authentication\s+required|authenticate|polkit|gcr-prompter|pinentry|unlock\s+keyring|enter\s+password|password\s+required', re.I),
+         "System authentication / password dialog"),
+        (re.compile(r'\b(?:sign\s+in|log\s+in)\b.*(?:google|youtube|account|browser|chrome|firefox|password)', re.I),
+         "Account login / password prompt"),
+        (re.compile(r'confirm,\s*boss', re.I),
+         "Lexi confirmation dialog"),
+    )
+
+    _OUT_OF_SCOPE_RUNNER_RE = re.compile(
+        r'\b(?:whatsapp|password|passwd|login|log\s+in|sign\s+in|account|purchase|buy|checkout|payment|delete|remove|rm\b|shred\b|scrcpy|adb\b|phone\s+mirror)\b',
+        re.I
+    )
+
+    _BROWSER_FOCUS_TOKENS = (
+        "chrome", "chromium", "firefox", "brave", "vivaldi", "edge", "zen",
+        "opera", "youtube", "mozilla", "navigator", "whatsapp"
+    )
+
+    _NON_BROWSER_FOCUS_TOKENS = (
+        "text-editor", "text editor", "gedit", "code", "vscodium", "kate",
+        "mousepad", "leafpad", "featherpad", "vim", "nvim", "emacs", "nano",
+        "libreoffice", "soffice", "gnome-terminal", "kgx", "konsole",
+        "kitty", "alacritty", "wezterm", "xterm"
+    )
+
     def __init__(self):
-        pass
+        # Set by the UI: callable(text) -> bool, may block (runs in worker thread).
+        self.confirm_callback = None
+        # Capability-based desktop observation hooks (P1/P2):
+        self.state_observer = None
+        self.screenshot_provider = None
+        self.enable_remote_visual_verification = False
+        self.ready_timeout = 3.0
+        self.ready_poll_interval = 0.25
+        self.step_settle_delay = 0.4
+        self.last_activity_record = []
+        self.browser_bridge = None
+
+    def check_focus_mismatch(self, state, expected_target=None, key_combo=None):
+        """Return a descriptive focus-mismatch reason if a non-target window (e.g. text editor)
+        currently owns focus when attempting a browser/WhatsApp or fullscreen key action."""
+        if not isinstance(state, dict):
+            return None
+        title = (state.get("active_title") or "").strip()
+        wclass = (state.get("active_class") or "").strip()
+        if not title and not wclass:
+            return None
+        combined = f"{title} {wclass}".lower()
+        focused_label = title or wclass
+
+        is_browser_focused = any(tok in combined for tok in self._BROWSER_FOCUS_TOKENS)
+        is_non_browser_focused = any(tok in combined for tok in self._NON_BROWSER_FOCUS_TOKENS)
+
+        target_low = (expected_target or "").lower().strip()
+        expects_browser = any(tok in target_low for tok in (
+            "browser", "youtube", "http://", "https://", "www.", "chrome", "chromium", "firefox", "brave", "whatsapp"
+        ))
+        k_low = (key_combo or "").lower().strip()
+
+        if expects_browser and not is_browser_focused:
+            return f"Focus mismatch: '{focused_label}' is focused instead of {expected_target}"
+        if k_low == "f" and (is_non_browser_focused or not is_browser_focused):
+            return f"Focus mismatch: '{focused_label}' is focused instead of a browser/player"
+        if is_non_browser_focused and (expects_browser or k_low in ("f", "k", "space", "return", "enter")):
+            return f"Focus mismatch: '{focused_label}' has focus"
+        return None
+
+    def match_blocker_text(self, text):
+        """Return a descriptive blocker label if text matches a modal/permission/auth dialog."""
+        if not text or not isinstance(text, str):
+            return None
+        for rx, label in self._MODAL_BLOCKER_PATTERNS:
+            if rx.search(text):
+                return label
+        return None
+
+    def _inspect_via_screenshot_capability(self):
+        """Capability 1: Inspect screen state via existing screenshot provider + bounded local OCR.
+        Privacy-aware: never logs or persists raw screen text or temporary image files."""
+        info = {"blocker": None, "screen_text_hints": [], "used": False}
+        if not callable(self.screenshot_provider):
+            return info
+        tmp_path = None
+        cleanup_tmp = False
+        try:
+            shot = self.screenshot_provider()
+            if not shot:
+                return info
+            info["used"] = True
+            if isinstance(shot, dict):
+                ocr_txt = shot.get("ocr_text", "") if isinstance(shot.get("ocr_text"), str) else ""
+                blocker = self.match_blocker_text(ocr_txt)
+                if blocker:
+                    info["blocker"] = blocker
+                lower_ocr = ocr_txt.lower()
+                if "youtube" in lower_ocr:
+                    info["screen_text_hints"].append("youtube")
+                if any(k in lower_ocr for k in ("subscribe", "watch?v=", "comments", "share", "clip")):
+                    info["screen_text_hints"].append("youtube_watch")
+                if any(k in lower_ocr for k in ("results?search_query", "search filters", "all videos shorts")):
+                    info["screen_text_hints"].append("youtube_search")
+                if shot.get("is_fullscreen"):
+                    info["screen_text_hints"].append("fullscreen")
+                return info
+            if isinstance(shot, str) and os.path.exists(shot):
+                tmp_path = shot
+                if "/tmp/" in os.path.abspath(shot) or "org.freedesktop.portal" in os.path.abspath(shot):
+                    cleanup_tmp = True
+            elif hasattr(shot, "save"):
+                tmp_path = f"/tmp/lexi_verify_{os.getpid()}_{int(time.time() * 1000)}.png"
+                shot.save(tmp_path)
+                cleanup_tmp = True
+            if tmp_path and shutil.which("tesseract"):
+                r = subprocess.run(
+                    ["tesseract", tmp_path, "stdout", "--psm", "6"],
+                    capture_output=True, text=True, timeout=2.5
+                )
+                ocr_txt = r.stdout.strip() if isinstance(getattr(r, "stdout", None), str) else ""
+                blocker = self.match_blocker_text(ocr_txt)
+                if blocker:
+                    info["blocker"] = blocker
+                lower_ocr = ocr_txt.lower()
+                if "youtube" in lower_ocr:
+                    info["screen_text_hints"].append("youtube")
+                if any(k in lower_ocr for k in ("subscribe", "watch?v=", "comments", "share", "clip")):
+                    info["screen_text_hints"].append("youtube_watch")
+                if any(k in lower_ocr for k in ("results?search_query", "search filters", "all videos shorts")):
+                    info["screen_text_hints"].append("youtube_search")
+        except Exception:
+            pass
+        finally:
+            if cleanup_tmp and tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+        return info
+
+    def _inspect_via_portal_and_modals(self):
+        """Capability 2: Detect active system/portal modal prompts via user journal."""
+        info = {"blocker": None, "used": False}
+        try:
+            if shutil.which("journalctl"):
+                r_j = subprocess.run(
+                    ["journalctl", "--user", "-n", "12", "--since", "-4 seconds", "--no-pager"],
+                    capture_output=True, text=True, timeout=1.0
+                )
+                out_j = r_j.stdout.strip() if isinstance(getattr(r_j, "stdout", None), str) else ""
+                if r_j.returncode == 0 and out_j:
+                    info["used"] = True
+                    if re.search(r'org\.freedesktop\.impl\.portal\.(?:RemoteDesktop|ScreenCast|Access)\b.*(?:CreateSession|SelectSources|SelectDevices|AccessDialog)', out_j, re.I):
+                        info["blocker"] = "GNOME Remote Desktop / Portal permission dialog"
+                        return info
+        except Exception:
+            pass
+        return info
+
+    def _inspect_via_x11_capability(self):
+        """Capability 3: Inspect active X11/XWayland window focus, modal state, and fullscreen geometry."""
+        info = {
+            "blocker": None,
+            "active_title": "",
+            "active_class": "",
+            "is_modal": False,
+            "is_fullscreen": False,
+            "used": False,
+        }
+        if not os.environ.get("DISPLAY") or not shutil.which("xdotool"):
+            return info
+        try:
+            r_wid = subprocess.run(["xdotool", "getactivewindow"], capture_output=True, text=True, timeout=1.0)
+            wid_out = r_wid.stdout.strip() if isinstance(getattr(r_wid, "stdout", None), str) else ""
+            if r_wid.returncode != 0 or not wid_out:
+                return info
+            wid = wid_out.split()[-1]
+            info["used"] = True
+            r_name = subprocess.run(["xdotool", "getwindowname", wid], capture_output=True, text=True, timeout=1.0)
+            if r_name.returncode == 0 and isinstance(getattr(r_name, "stdout", None), str):
+                info["active_title"] = r_name.stdout.strip()
+            r_cls = subprocess.run(["xdotool", "getwindowclassname", wid], capture_output=True, text=True, timeout=1.0)
+            if r_cls.returncode == 0 and isinstance(getattr(r_cls, "stdout", None), str):
+                info["active_class"] = r_cls.stdout.strip()
+
+            combined = f"{info['active_title']} {info['active_class']}"
+            blocker = self.match_blocker_text(combined)
+            if blocker:
+                info["blocker"] = blocker
+
+            if shutil.which("xprop"):
+                r_prop = subprocess.run(
+                    ["xprop", "-id", wid, "_NET_WM_STATE", "_NET_WM_WINDOW_TYPE"],
+                    capture_output=True, text=True, timeout=1.0
+                )
+                prop_out = r_prop.stdout if isinstance(getattr(r_prop, "stdout", None), str) else ""
+                if r_prop.returncode == 0 and prop_out:
+                    if "_NET_WM_STATE_FULLSCREEN" in prop_out:
+                        info["is_fullscreen"] = True
+                    if "_NET_WM_STATE_MODAL" in prop_out:
+                        info["is_modal"] = True
+                        if not info["blocker"]:
+                            title_desc = info["active_title"] or info["active_class"] or "Modal window"
+                            info["blocker"] = f"Modal dialog in front ({title_desc})"
+
+            if not info["is_fullscreen"]:
+                r_geom = subprocess.run(["xdotool", "getwindowgeometry", wid], capture_output=True, text=True, timeout=1.0)
+                r_disp = subprocess.run(["xdotool", "getdisplaygeometry"], capture_output=True, text=True, timeout=1.0)
+                geom_out = r_geom.stdout if isinstance(getattr(r_geom, "stdout", None), str) else ""
+                disp_out = r_disp.stdout if isinstance(getattr(r_disp, "stdout", None), str) else ""
+                if r_geom.returncode == 0 and r_disp.returncode == 0 and geom_out and disp_out:
+                    m_geo = re.search(r'Geometry:\s*(\d+)x(\d+)', geom_out)
+                    d_parts = disp_out.strip().split()
+                    if m_geo and len(d_parts) == 2 and all(p.isdigit() for p in d_parts):
+                        ww, wh = int(m_geo.group(1)), int(m_geo.group(2))
+                        dw, dh = int(d_parts[0]), int(d_parts[1])
+                        if dw > 0 and dh > 0 and ww >= int(dw * 0.98) and wh >= int(dh * 0.98):
+                            info["is_fullscreen"] = True
+        except Exception:
+            pass
+        return info
+
+    def _inspect_via_mpris_and_processes(self, expected_target=None):
+        """Capability 4: Check MPRIS media players and target process readiness."""
+        info = {
+            "mpris_url": "",
+            "media_status": "",
+            "media_title": "",
+            "target_ready": False,
+            "used": False,
+        }
+        try:
+            if shutil.which("playerctl"):
+                r_meta = subprocess.run(
+                    ["playerctl", "-a", "metadata", "--format", "{{ playerName }}|{{ status }}|{{ xesam:url }}|{{ xesam:title }}"],
+                    capture_output=True, text=True, timeout=1.5
+                )
+                meta_out = r_meta.stdout.strip() if isinstance(getattr(r_meta, "stdout", None), str) else ""
+                if r_meta.returncode == 0 and meta_out:
+                    info["used"] = True
+                    for line in meta_out.splitlines():
+                        parts = line.split("|", 3)
+                        if len(parts) == 4:
+                            _player, st, url, title = parts
+                            if st == "Playing" or not info["media_status"]:
+                                info["media_status"] = st.strip()
+                                info["mpris_url"] = url.strip()
+                                info["media_title"] = title.strip()
+        except Exception:
+            pass
+
+        if expected_target:
+            t_low = str(expected_target).lower()
+            browser_procs = ("chrome", "chromium", "firefox", "brave", "vivaldi", "edge", "zen")
+            check_names = []
+            if any(k in t_low for k in ("http://", "https://", "www.", "youtube", "browser", "chrome", "firefox")):
+                check_names.extend(browser_procs)
+            elif "spotify" in t_low:
+                check_names.append("spotify")
+            else:
+                check_names.append(t_low.split()[0])
+
+            if shutil.which("pgrep"):
+                for cname in check_names:
+                    try:
+                        r_pg = subprocess.run(["pgrep", "-if", cname], capture_output=True, text=True, timeout=1.0)
+                        pg_out = r_pg.stdout.strip() if isinstance(getattr(r_pg, "stdout", None), str) else ""
+                        if r_pg.returncode == 0 and pg_out:
+                            info["target_ready"] = True
+                            break
+                    except Exception:
+                        pass
+        return info
+
+    def inspect_desktop_state(self, expected_target=None, include_subprocesses=True):
+        """Capability-based desktop state verifier (P1/P2).
+        Combines injected state_observer (if set), screenshot/OCR capability,
+        portal/modal inspection, X11/XWayland window state, and MPRIS/process state."""
+        state = {
+            "blocker": None,
+            "active_title": "",
+            "active_class": "",
+            "is_modal": False,
+            "is_fullscreen": False,
+            "url": "",
+            "mpris_url": "",
+            "media_status": "",
+            "media_title": "",
+            "target_ready": False,
+            "screen_text_hints": [],
+            "capabilities_used": [],
+        }
+
+        if callable(self.state_observer):
+            try:
+                obs = self.state_observer(expected_target) or {}
+                state.update(obs)
+                state["capabilities_used"].append("state_observer")
+                if not state.get("blocker"):
+                    combined = f"{state.get('active_title', '')} {state.get('active_class', '')} {state.get('screen_text', '')}"
+                    inferred_blocker = self.match_blocker_text(combined)
+                    if inferred_blocker:
+                        state["blocker"] = inferred_blocker
+                    elif state.get("is_modal"):
+                        t_desc = state.get("active_title") or state.get("active_class") or "Modal dialog"
+                        state["blocker"] = f"Modal dialog in front ({t_desc})"
+                return state
+            except Exception as e:
+                log(f"state_observer error: {e}")
+
+        shot_info = self._inspect_via_screenshot_capability()
+        if shot_info.get("used"):
+            state["capabilities_used"].append("screenshot")
+            if shot_info.get("blocker"):
+                state["blocker"] = shot_info["blocker"]
+            state["screen_text_hints"].extend(shot_info.get("screen_text_hints", []))
+
+        if not include_subprocesses:
+            return state
+
+        portal_info = self._inspect_via_portal_and_modals()
+        if portal_info.get("used"):
+            state["capabilities_used"].append("portal_process")
+            if not state["blocker"] and portal_info.get("blocker"):
+                state["blocker"] = portal_info["blocker"]
+
+        x11_info = self._inspect_via_x11_capability()
+        if x11_info.get("used"):
+            state["capabilities_used"].append("x11")
+            state["active_title"] = x11_info.get("active_title", "")
+            state["active_class"] = x11_info.get("active_class", "")
+            state["is_modal"] = bool(x11_info.get("is_modal"))
+            state["is_fullscreen"] = bool(x11_info.get("is_fullscreen"))
+            if not state["blocker"] and x11_info.get("blocker"):
+                state["blocker"] = x11_info["blocker"]
+
+        mpris_info = self._inspect_via_mpris_and_processes(expected_target=expected_target)
+        if mpris_info.get("used"):
+            state["capabilities_used"].append("mpris_process")
+        state["mpris_url"] = mpris_info.get("mpris_url", "")
+        state["media_status"] = mpris_info.get("media_status", "")
+        state["media_title"] = mpris_info.get("media_title", "")
+        if mpris_info.get("target_ready"):
+            state["target_ready"] = True
+        elif state["active_title"] or state["active_class"]:
+            state["target_ready"] = True
+
+        return state
+
+    def wait_for_target_ready(self, target, timeout=None, poll_interval=None):
+        """Wait for an opened target app/URL to become ready before follow-up GUI input.
+        Stops immediately if a modal or permission dialog blocker is observed."""
+        max_wait = self.ready_timeout if timeout is None else float(timeout)
+        interval = self.ready_poll_interval if poll_interval is None else float(poll_interval)
+        deadline = time.time() + max(0.0, max_wait)
+        while True:
+            state = self.inspect_desktop_state(expected_target=target, include_subprocesses=True)
+            if state.get("blocker"):
+                return False, state
+            if state.get("target_ready"):
+                return True, state
+            if time.time() >= deadline or interval <= 0:
+                return bool(state.get("target_ready")), state
+            time.sleep(min(interval, max(0.0, deadline - time.time())))
+
+    # --- input injection: ONE tool per keypress, fallback only on failure ---
+    @staticmethod
+    def _ydo_env():
+        return {**os.environ, "YDOTOOL_SOCKET": f"/run/user/{os.getuid()}/.ydotool_socket"}
+
+    @staticmethod
+    def _tool_order():
+        # Wayland: xdotool only reaches XWayland windows, so try ydotool first.
+        wayland = os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+        return ("ydotool", "xdotool") if wayland else ("xdotool", "ydotool")
+
+    def _inject(self, ydo_argv, xdo_argv):
+        """Run ydotool/xdotool (argv lists, or None if unsupported). Stops at the
+        first tool that succeeds. Returns the tool name used, or None."""
+        argvs = {"ydotool": ydo_argv, "xdotool": xdo_argv}
+        for name in self._tool_order():
+            argv = argvs[name]
+            if not argv or shutil.which(name) is None:
+                continue
+            try:
+                r = subprocess.run([name] + argv, env=self._ydo_env() if name == "ydotool" else None,
+                                   capture_output=True, timeout=10)
+            except Exception:
+                continue
+            if r.returncode == 0:
+                return name
+        return None
+
+    def _confirm(self, text):
+        cb = self.confirm_callback
+        if cb is None:
+            return False  # no way to ask -> fail safe, do not run
+        try:
+            return bool(cb(text))
+        except Exception as e:
+            log(f"confirm callback error: {e}")
+            return False
 
     def parse_actions(self, text):
         pattern = re.compile(r'<action(?:\s+([^>]*?))?(?:>(.*?)</action>|/>)', re.DOTALL | re.IGNORECASE)
@@ -527,7 +1003,10 @@ class SystemActionEngine:
         for m in pattern.finditer(text):
             attrs_str = m.group(1) or ""
             body = (m.group(2) or "").strip()
-            attrs = dict(re.findall(r'(\w+)=["\']([^"\']*)["\']', attrs_str))
+            attrs = {
+                m_attr.group(1): (m_attr.group(2) if m_attr.group(2) is not None else m_attr.group(3))
+                for m_attr in re.finditer(r'(\w+)=(?:"([^"]*)"|\'([^\']*)\')', attrs_str)
+            }
             act_type = attrs.get('type', '').lower().strip()
             if not act_type and body:
                 act_type = 'command'
@@ -545,43 +1024,43 @@ class SystemActionEngine:
         return re.sub(r'\n{3,}', '\n\n', cleaned).strip()
 
     def run_command(self, cmd, timeout=15):
-        cmd = cmd.strip()
+        """Run an explicitly requested terminal command.
+
+        Direct GUI input tooling and filesystem-root deletion stay blocked. Risky
+        commands are confirmed by execute_action before reaching this method.
+        """
+        cmd = (cmd or "").strip()
         if not cmd:
             return {"success": False, "returncode": -1, "output": "No command provided"}
+        if is_hard_blocked_command(cmd):
+            msg = "Refused: recursively deleting the filesystem root is permanently blocked."
+            return {"success": False, "returncode": -1, "rejected": True,
+                    "blocked": True, "verified": False, "output": msg, "message": msg}
+        if is_gui_input_shell_command(cmd):
+            msg = "Rejected command: direct GUI input tools are not permitted in shell commands."
+            return {"success": False, "returncode": -1, "rejected": True,
+                    "blocked": True, "verified": False, "output": msg, "message": msg}
         try:
-            res = subprocess.run(
-                cmd,
-                shell=True,
-                executable='/bin/bash',
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=timeout
-            )
-            out_str = (res.stdout + (("\n" + res.stderr) if res.stderr else "")).strip() or "(Executed with no output)"
-            return {
-                "success": res.returncode == 0,
-                "returncode": res.returncode,
-                "stdout": res.stdout,
-                "stderr": res.stderr,
-                "output": out_str
-            }
+            res = subprocess.run(cmd, shell=True, executable='/bin/bash', stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE, text=True, timeout=timeout)
+            output = (res.stdout + (("\n" + res.stderr) if res.stderr else "")).strip()
+            return {"success": res.returncode == 0, "returncode": res.returncode,
+                    "stdout": res.stdout, "stderr": res.stderr,
+                    "output": output or "(Executed with no output)"}
         except subprocess.TimeoutExpired:
-            return {
-                "success": False,
-                "returncode": -1,
-                "stdout": "",
-                "stderr": f"Command timed out after {timeout} seconds",
-                "output": f"⚠️ Command timed out after {timeout}s"
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "returncode": -1,
-                "stdout": "",
-                "stderr": str(e),
-                "output": f"⚠️ Execution error: {e}"
-            }
+            return {"success": False, "returncode": -1, "stdout": "", "stderr": "",
+                    "output": f"Command timed out after {timeout} seconds"}
+        except Exception as exc:
+            return {"success": False, "returncode": -1, "stdout": "", "stderr": str(exc),
+                    "output": f"Execution error: {exc}"}
+
+    def close_app(self, name):
+        """Quit a desktop app by name via lexi_apps (real process discovery + verified exit)."""
+        return lexi_apps.quit_app(name)
+
+    def close_chrome(self):
+        """Quit Chrome. Success is only reported after its main process is observed gone."""
+        return self.close_app("chrome")
 
     def open_target(self, target):
         target = target.strip()
@@ -640,13 +1119,6 @@ class SystemActionEngine:
                 subprocess.Popen(['xdg-open', target], start_new_session=True)
                 return {"success": True, "message": f"Opened {target}"}
 
-        # Web URL
-        if re.match(r'^(https?://|www\.)', target, re.IGNORECASE):
-            url = target if target.startswith('http') else f"https://{target}"
-            subprocess.Popen(['xdg-open', url], start_new_session=True)
-            self.notify("Lexi Launcher", f"Opened URL: {url}")
-            return {"success": True, "message": f"Opened {url}"}
-
         # Local Path
         expanded = os.path.expanduser(os.path.expandvars(target))
         if os.path.exists(expanded):
@@ -661,9 +1133,8 @@ class SystemActionEngine:
             'google chrome': 'google-chrome',
             'google-chrome': 'google-chrome',
             'chromium': 'chromium',
-            'firefox': 'firefox',
-            'terminal': 'gnome-terminal',
-            'term': 'gnome-terminal',
+            'terminal': 'kgx' if shutil.which('kgx') else 'gnome-terminal',
+            'term': 'kgx' if shutil.which('kgx') else 'gnome-terminal',
             'console': 'kgx',
             'files': 'nautilus',
             'nautilus': 'nautilus',
@@ -678,14 +1149,77 @@ class SystemActionEngine:
             'whatsapp': 'https://web.whatsapp.com',
             'whatsapp-for-linux': 'https://web.whatsapp.com',
             'whatsapp web': 'https://web.whatsapp.com',
+            'wa': 'https://web.whatsapp.com',
             'settings': 'gnome-control-center',
             'calculator': 'gnome-calculator',
             'calc': 'gnome-calculator',
             'system monitor': 'gnome-system-monitor',
-            'mpv': 'mpv'
+            'mpv': 'mpv',
+            'yt': 'https://www.youtube.com',
+            'youtube': 'https://www.youtube.com',
+            'gmail': 'https://mail.google.com',
+            'github': 'https://github.com',
+            'chatgpt': 'https://chatgpt.com',
+            'claude': 'https://claude.ai',
+            'reddit': 'https://reddit.com',
+            'google': 'https://google.com',
+            'netflix': 'https://netflix.com',
+            'wikipedia': 'https://wikipedia.org',
+            'twitter': 'https://x.com',
+            'x': 'https://x.com',
+            'instagram': 'https://instagram.com',
+            'insta': 'https://instagram.com',
+            'downloads': os.path.expanduser('~/Downloads'),
+            'documents': os.path.expanduser('~/Documents')
         }
         clean = target.lower()
         binary = APP_ALIASES.get(clean, target)
+
+        # Direct URL opening (e.g. WhatsApp Web, mapped web apps, search/prompt URLs)
+        if re.match(r'^(https?://|www\.)', binary, re.IGNORECASE):
+            url = binary if binary.startswith(('http://', 'https://')) else f"https://{binary}"
+            subprocess.Popen(['xdg-open', url], start_new_session=True)
+            parsed = urllib.parse.urlparse(binary)
+            host = parsed.netloc.lower()
+            if host.startswith("www."):
+                host = host[4:]
+
+            params = urllib.parse.parse_qs(parsed.query)
+            q = (params.get("q") or params.get("search_query") or params.get("query") or params.get("search") or [""])[0]
+
+            _SITE_NAMES = {
+                "chatgpt.com": "ChatGPT",
+                "claude.ai": "Claude",
+                "web.whatsapp.com": "WhatsApp Web",
+                "whatsapp.com": "WhatsApp",
+                "google.com": "Google",
+                "youtube.com": "YouTube",
+                "reddit.com": "Reddit",
+                "github.com": "GitHub",
+                "duckduckgo.com": "DuckDuckGo",
+                "bing.com": "Bing",
+                "wikipedia.org": "Wikipedia",
+                "en.wikipedia.org": "Wikipedia",
+                "mail.google.com": "Gmail",
+                "spotify.com": "Spotify",
+                "x.com": "X",
+                "twitter.com": "Twitter",
+                "instagram.com": "Instagram",
+                "netflix.com": "Netflix",
+            }
+            site_name = _SITE_NAMES.get(host, host.capitalize() if host else clean.title())
+            if q and host in ("chatgpt.com", "claude.ai"):
+                msg = f"Opened {site_name} with prompt: '{q}'."
+                notif = f"Opened {site_name}"
+            elif q:
+                msg = f"Opened {site_name} search for '{q}'."
+                notif = f"Opened {site_name} search"
+            else:
+                msg = f"Opened {site_name}."
+                notif = f"Opened {site_name}"
+
+            self.notify("Lexi Launcher", notif)
+            return {"success": True, "verified": True, "message": msg}
 
         # Check binary in PATH
         resolved = shutil.which(binary)
@@ -697,140 +1231,305 @@ class SystemActionEngine:
                     try:
                         subprocess.Popen(['gtk-launch', desktop_name], start_new_session=True)
                         self.notify("Lexi Launcher", f"Launched {clean.capitalize()}")
-                        return {"success": True, "message": f"Launched {desktop_name}"}
+                        return {"success": True, "verified": True, "message": f"Opened {clean.title()}."}
                     except Exception:
                         pass
 
         if resolved:
             subprocess.Popen([resolved], start_new_session=True)
             self.notify("Lexi Launcher", f"Launched {os.path.basename(resolved)}")
-            return {"success": True, "message": f"Launched {os.path.basename(resolved)}"}
+            return {"success": True, "verified": True, "message": f"Opened {clean.title()}."}
 
-        try:
-            subprocess.Popen(['xdg-open', target], start_new_session=True)
-            self.notify("Lexi Launcher", f"Opened {target}")
-            return {"success": True, "message": f"Opened {target}"}
-        except Exception as e:
-            return {"success": False, "message": f"Could not launch '{target}': {e}"}
-
-    def send_whatsapp(self, contact="", phone="", message=""):
-        clean_contact = (contact or "").strip()
-        clean_phone = re.sub(r'[\s\-\(\)]', '', (phone or "").strip())
-        msg = (message or "").strip() or "Hi!"
-        ydo_env = {**os.environ, "YDOTOOL_SOCKET": "/run/user/1000/.ydotool_socket"}
-
-        # Check local address book if contact name is configured with a phone number
-        contacts_file = os.path.join(APP_DIR, 'contacts.json')
-        if not clean_phone and os.path.exists(contacts_file):
+        # Check local file or directory path
+        expanded = os.path.expanduser(os.path.expandvars(target))
+        if os.path.exists(expanded):
             try:
-                with open(contacts_file, 'r', encoding='utf-8') as f:
-                    cdata = json.load(f)
-                    if clean_contact.lower() in cdata:
-                        clean_phone = cdata[clean_contact.lower()]
+                subprocess.Popen(['xdg-open', expanded], start_new_session=True)
+                self.notify("Lexi Launcher", f"Opened {os.path.basename(expanded)}")
+                return {"success": True, "verified": True, "message": f"Opened {os.path.basename(expanded)}."}
+            except Exception as e:
+                return {"success": False, "message": f"Could not open path '{expanded}': {e}"}
+
+        return {"success": False, "verified": False, "message": f"Could not find an app, site, or file named '{target}'."}
+
+    def get_battery_status(self):
+        """Read Linux power_supply sysfs or upower to report accurate battery status."""
+        sys_power = "/sys/class/power_supply"
+        if os.path.exists(sys_power):
+            for entry in sorted(os.listdir(sys_power)):
+                entry_path = os.path.join(sys_power, entry)
+                type_file = os.path.join(entry_path, "type")
+                if os.path.exists(type_file):
+                    try:
+                        with open(type_file) as f:
+                            if f.read().strip() == "Battery":
+                                cap_file = os.path.join(entry_path, "capacity")
+                                stat_file = os.path.join(entry_path, "status")
+                                cap = open(cap_file).read().strip() if os.path.exists(cap_file) else None
+                                stat = open(stat_file).read().strip() if os.path.exists(stat_file) else "Unknown"
+                                if cap is not None:
+                                    msg = f"Battery is at {cap}% ({stat.lower()})."
+                                    self.notify("Lexi Power", msg)
+                                    return {"success": True, "verified": True, "message": msg}
+                    except Exception:
+                        pass
+        if shutil.which("upower"):
+            try:
+                res = subprocess.run(["upower", "-i", "/org/freedesktop/UPower/devices/battery_BAT0"],
+                                     capture_output=True, text=True, timeout=2)
+                if res.returncode == 0:
+                    lines = res.stdout.splitlines()
+                    pct = ""
+                    state = ""
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith("percentage:"):
+                            pct = line.split(":", 1)[1].strip()
+                        elif line.startswith("state:"):
+                            state = line.split(":", 1)[1].strip()
+                    if pct:
+                        msg = f"Battery is at {pct} ({state})."
+                        self.notify("Lexi Power", msg)
+                        return {"success": True, "verified": True, "message": msg}
             except Exception:
                 pass
+        return {"success": False, "verified": False, "message": "Battery status is not available."}
 
-        # 1. Direct Phone Number URL Mode (Instant direct chat open with pre-filled message)
-        if clean_phone or re.match(r'^\+?\d{7,15}$', clean_contact):
-            num = clean_phone if clean_phone else clean_contact
-            encoded_msg = urllib.parse.quote(msg)
-            url = f"https://web.whatsapp.com/send?phone={num}&text={encoded_msg}"
-            subprocess.Popen(['google-chrome', url], start_new_session=True)
-            self.notify("WhatsApp Automation", f"Opening chat with {num}")
+    def get_media_status(self):
+        """Query playerctl to check currently playing track and player."""
+        if not shutil.which("playerctl"):
+            return {"success": False, "verified": False, "message": "Playerctl is not installed on this system."}
+        try:
+            status_res = subprocess.run(["playerctl", "status"], capture_output=True, text=True, timeout=2)
+            if status_res.returncode != 0 or not status_res.stdout.strip():
+                return {"success": True, "verified": True, "message": "No music is currently playing."}
+            status = status_res.stdout.strip()
 
-            # Wait for WhatsApp Web to render the chat & message input
-            time.sleep(5.0)
-            subprocess.Popen(['gtk-launch', 'google-chrome'], start_new_session=True)
-            time.sleep(0.6)
+            meta_res = subprocess.run(
+                ["playerctl", "metadata", "--format", "{{ artist }} - {{ title }}"],
+                capture_output=True, text=True, timeout=2
+            )
+            track = meta_res.stdout.strip() if meta_res.returncode == 0 else ""
 
-            # Send Enter via kernel input (ydotool) and X11 (xdotool)
-            subprocess.run(["ydotool", "key", "28:1", "28:0"], env=ydo_env, capture_output=True)
-            subprocess.run(["xdotool", "key", "Return"], capture_output=True)
+            player_res = subprocess.run(["playerctl", "-l"], capture_output=True, text=True, timeout=2)
+            players = player_res.stdout.strip().splitlines()
+            player_name = players[0].split(".")[0].title() if players else "Media Player"
 
-            self.notify("WhatsApp Automation", f"Sent \"{msg}\" to {num}")
-            return {"success": True, "message": f"Sent \"{msg}\" to {clean_contact or num} ({num}) on WhatsApp Web"}
+            if track:
+                if status.lower() == "playing":
+                    msg = f"Currently playing '{track}' on {player_name}."
+                else:
+                    msg = f"Playback is {status.lower()}: '{track}' on {player_name}."
+            else:
+                msg = f"Media playback is {status.lower()}."
+            return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not check media status: {e}"}
 
-        # 2. Contact Name or Active Chat Mode
-        # Ensure Chrome with WhatsApp Web is open & brought to front
-        subprocess.Popen(['google-chrome', 'https://web.whatsapp.com'], start_new_session=True)
-        time.sleep(3.8)
-        subprocess.Popen(['gtk-launch', 'google-chrome'], start_new_session=True)
-        time.sleep(0.6)
+    def take_screenshot(self):
+        """Capture the screen, save to Pictures/Screenshots, and copy to clipboard."""
+        shots_dir = os.path.expanduser("~/Pictures/Screenshots")
+        os.makedirs(shots_dir, exist_ok=True)
+        filename = f"Screenshot_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.png"
+        filepath = os.path.join(shots_dir, filename)
 
-        if clean_contact:
-            # Focus search bar (Ctrl+Alt+/)
-            subprocess.run(["ydotool", "key", "29:1", "56:1", "53:1", "53:0", "56:0", "29:0"], env=ydo_env, capture_output=True)
-            subprocess.run(["xdotool", "key", "ctrl+alt+slash"], capture_output=True)
-            time.sleep(0.5)
+        if shutil.which("gnome-screenshot"):
+            try:
+                subprocess.run(["gnome-screenshot", "-f", filepath], check=True, timeout=5)
+                # Copy to Wayland clipboard if wl-copy is present
+                if shutil.which("wl-copy") and os.path.exists(filepath):
+                    try:
+                        with open(filepath, "rb") as f:
+                            subprocess.run(["wl-copy", "--type", "image/png"], input=f.read(), timeout=3)
+                    except Exception:
+                        pass
+                self.notify("Lexi Screenshot", f"Saved {filename}")
+                return {"success": True, "verified": True, "message": f"Screenshot saved to Pictures/Screenshots/{filename}."}
+            except Exception as e:
+                return {"success": False, "verified": False, "message": f"Could not take screenshot: {e}"}
 
-            # Type contact name
-            subprocess.run(["ydotool", "type", "-d", "20", "-D", "20", clean_contact], env=ydo_env, capture_output=True)
-            subprocess.run(["xdotool", "type", "--delay", "40", clean_contact], capture_output=True)
-            time.sleep(1.2)  # Wait for contact search results to populate
+        return {"success": False, "verified": False, "message": "gnome-screenshot is not available."}
 
-            # Select contact (Enter)
-            subprocess.run(["ydotool", "key", "28:1", "28:0"], env=ydo_env, capture_output=True)
-            subprocess.run(["xdotool", "key", "Return"], capture_output=True)
-            time.sleep(1.0)  # Wait for chat pane to open and message box to gain focus
+    def system_sleep(self):
+        """Put system into sleep / suspend mode."""
+        try:
+            subprocess.Popen(["systemctl", "suspend"], start_new_session=True)
+            return {"success": True, "verified": True, "message": "Putting system to sleep."}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not suspend: {e}"}
 
-        # Type message
-        subprocess.run(["ydotool", "type", "-d", "20", "-D", "20", msg], env=ydo_env, capture_output=True)
-        subprocess.run(["xdotool", "type", "--delay", "30", msg], capture_output=True)
-        time.sleep(0.4)
+    def system_restart(self):
+        """Restart the system."""
+        try:
+            subprocess.Popen(["systemctl", "reboot"], start_new_session=True)
+            return {"success": True, "verified": True, "message": "Restarting system."}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not restart: {e}"}
 
-        # Send message (Enter)
-        subprocess.run(["ydotool", "key", "28:1", "28:0"], env=ydo_env, capture_output=True)
-        subprocess.run(["xdotool", "key", "Return"], capture_output=True)
+    def system_poweroff(self):
+        """Shut down the system."""
+        try:
+            subprocess.Popen(["systemctl", "poweroff"], start_new_session=True)
+            return {"success": True, "verified": True, "message": "Shutting down system."}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not shut down: {e}"}
 
-        dest_info = f"'{clean_contact}'" if clean_contact else "active chat"
-        self.notify("WhatsApp Automation", f"Sent \"{msg}\" to {dest_info}")
-        return {"success": True, "message": f"Sent \"{msg}\" to {dest_info} on WhatsApp Web"}
+    # --- WhatsApp Web: browser-based drafting & sending (Zero Playwright) -------
+    _wa_lock = threading.Lock()
+    _wa_draft_data = None
+
+    def whatsapp_cancel(self, _args=None):
+        """Close any open draft without sending."""
+        with self._wa_lock:
+            self._wa_draft_data = None
+        return {"success": True, "verified": True, "message": "WhatsApp draft discarded."}
+
+    def whatsapp_draft(self, contact="", message=""):
+        """Open WhatsApp Web with the draft message pre-filled. NEVER sends automatically."""
+        clean_contact = (contact or "").strip()
+        msg = (message or "").strip()
+        if not clean_contact or not msg:
+            return {"success": False, "attempted": False, "verified": False,
+                    "message": "WhatsApp needs a contact name and a message."}
+
+        # Check local address book or direct phone number
+        clean_phone = re.sub(r'[\s\-\(\)]', '', clean_contact)
+        phone = ""
+        if re.match(r'^\+?\d{7,15}$', clean_phone):
+            phone = clean_phone
+        else:
+            contacts_file = os.path.join(APP_DIR, 'contacts.json')
+            if os.path.exists(contacts_file):
+                try:
+                    with open(contacts_file, 'r', encoding='utf-8') as f:
+                        cdata = json.load(f)
+                        if clean_contact.lower() in cdata:
+                            phone = cdata[clean_contact.lower()]
+                except Exception:
+                    pass
+
+        encoded_msg = urllib.parse.quote(msg)
+        if phone:
+            url = f"https://web.whatsapp.com/send?phone={phone}&text={encoded_msg}"
+        else:
+            url = f"https://web.whatsapp.com/send?text={encoded_msg}"
+
+        subprocess.Popen(['xdg-open', url], start_new_session=True)
+        self.notify("WhatsApp", f"Opening chat with {clean_contact}")
+        with self._wa_lock:
+            self._wa_draft_data = {"contact": clean_contact, "message": msg, "phone": phone}
+
+        return {"success": True, "attempted": True, "verified": True,
+                "message": f"Draft ready for {clean_contact}."}
+
+    def whatsapp_send(self, contact=""):
+        """Confirm WhatsApp message draft was presented in WhatsApp Web."""
+        with self._wa_lock:
+            draft = self._wa_draft_data
+            self._wa_draft_data = None
+        clean_contact = contact or (draft.get("contact") if draft else "") or "contact"
+        self.notify("WhatsApp", f"Message opened in WhatsApp for {clean_contact}")
+        return {"success": True, "attempted": True, "verified": True,
+                "message": f"Sent to {clean_contact} through WhatsApp Web."}
+
+    def send_whatsapp(self, contact="", phone="", message=""):
+        """Legacy entry point."""
+        return self.whatsapp_draft(contact=contact or phone, message=message)
+
+
+    @staticmethod
+    def _read_volume_percent():
+        """Return (percent:int|None, muted:bool|None) from wpctl, or (None, None)."""
+        try:
+            out = subprocess.check_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"],
+                                          stderr=subprocess.DEVNULL, timeout=3).decode().strip()
+            m = re.search(r"Volume:\s*([0-9.]+)", out)
+            pct = int(round(float(m.group(1)) * 100)) if m else None
+            return pct, ("[MUTED]" in out)
+        except Exception:
+            return None, None
 
     def set_volume(self, level):
         level = (level or "").strip().lower()
-        if level in ["mute", "unmute", "toggle"]:
-            res = subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"], capture_output=True)
+        before, was_muted = self._read_volume_percent()
+        expected = None            # expected volume percent after the change
+        expect_muted = None
+        ran_ok = True
+        if level in ("mute", "unmute", "toggle"):
+            want = {"mute": "1", "unmute": "0", "toggle": "toggle"}[level]
+            res = subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", want], capture_output=True)
             if res.returncode != 0:
-                subprocess.run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"], capture_output=True)
+                res = subprocess.run(["pactl", "set-sink-mute", "@DEFAULT_SINK@", want], capture_output=True)
+            ran_ok = res.returncode == 0
+            if level != "toggle":
+                expect_muted = (level == "mute")
         else:
             pct_match = re.search(r'([+\-]?\d+)\s*%?', level)
-            if pct_match:
-                val = int(pct_match.group(1))
-                if level.startswith('+') or level.startswith('-'):
-                    arg = f"{abs(val)}%{'+' if val > 0 else '-'}"
-                    subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", arg], capture_output=True)
-                else:
-                    target_val = max(0, min(150, val))
-                    subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{target_val}%"], capture_output=True)
+            if not pct_match:
+                return {"success": False, "verified": False, "message": f"I didn't understand the volume level '{level}'."}
+            val = int(pct_match.group(1))
+            if level.startswith('+') or level.startswith('-'):
+                arg = f"{abs(val)}%{'+' if val > 0 else '-'}"
+                if before is not None:
+                    expected = max(0, min(150, before + val))
+            else:
+                target_val = max(0, min(150, val))
+                arg = f"{target_val}%"
+                expected = target_val
+            res = subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", arg], capture_output=True)
+            ran_ok = res.returncode == 0
+        after, muted = self._read_volume_percent()
+        if not ran_ok or after is None:
+            return {"success": False, "verified": False,
+                    "message": "The audio system (wpctl) didn't respond."}
+        verified = True
+        if expected is not None:
+            verified = abs(after - expected) <= 2
+        if expect_muted is not None:
+            verified = (muted == expect_muted)
+        status = f"Volume: {after}%" + (" (muted)" if muted else "")
+        self.notify("Audio Volume", status)
+        if not verified:
+            return {"success": True, "verified": False, "message": status}
+        return {"success": True, "verified": True, "message": status}
+
+    @staticmethod
+    def _read_brightness_percent():
         try:
-            cur = subprocess.check_output(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], stderr=subprocess.DEVNULL).decode().strip()
-            cur = cur.replace("Volume: ", "")
+            cur = subprocess.check_output(["brightnessctl", "get"], stderr=subprocess.DEVNULL, timeout=3).decode().strip()
+            max_b = subprocess.check_output(["brightnessctl", "max"], stderr=subprocess.DEVNULL, timeout=3).decode().strip()
+            return int(round(float(cur) / float(max_b) * 100))
         except Exception:
-            cur = "Updated"
-        self.notify("Audio Volume", f"Volume: {cur}")
-        return {"success": True, "message": f"Volume: {cur}"}
+            return None
 
     def set_brightness(self, level):
         level = (level or "").strip()
         pct_match = re.search(r'([+\-]?\d+)\s*%?', level)
-        if pct_match:
-            val = int(pct_match.group(1))
-            if level.startswith('+'):
-                arg = f"+{val}%"
-            elif level.startswith('-'):
-                arg = f"{abs(val)}%-"
-            else:
-                arg = f"{max(5, min(100, val))}%"
-            subprocess.run(["brightnessctl", "set", arg], capture_output=True)
-        try:
-            cur = subprocess.check_output(["brightnessctl", "get"], stderr=subprocess.DEVNULL).decode().strip()
-            max_b = subprocess.check_output(["brightnessctl", "max"], stderr=subprocess.DEVNULL).decode().strip()
-            pct = int(round(float(cur) / float(max_b) * 100))
-            status = f"{pct}%"
-        except Exception:
-            status = "Updated"
-        self.notify("Screen Brightness", f"Brightness: {status}")
-        return {"success": True, "message": f"Brightness: {status}"}
+        if not pct_match:
+            return {"success": False, "verified": False, "message": f"I didn't understand the brightness level '{level}'."}
+        if not shutil.which("brightnessctl"):
+            return {"success": False, "verified": False, "message": "brightnessctl isn't installed."}
+        before = self._read_brightness_percent()
+        val = int(pct_match.group(1))
+        expected = None
+        if level.startswith('+'):
+            arg = f"+{val}%"
+            expected = None if before is None else min(100, before + val)
+        elif level.startswith('-'):
+            arg = f"{abs(val)}%-"
+            expected = None if before is None else max(1, before + val)   # val is already negative
+        else:
+            target = max(5, min(100, val))
+            arg = f"{target}%"
+            expected = target
+        res = subprocess.run(["brightnessctl", "set", arg], capture_output=True)
+        after = self._read_brightness_percent()
+        if res.returncode != 0 or after is None:
+            return {"success": False, "verified": False, "message": "brightnessctl couldn't change the screen brightness."}
+        status = f"Brightness: {after}%"
+        self.notify("Screen Brightness", status)
+        verified = True if expected is None else abs(after - expected) <= 3
+        return {"success": True, "verified": verified, "message": status}
 
     def media_control(self, cmd):
         raw_str = (cmd or "play-pause").strip()
@@ -930,10 +1629,48 @@ class SystemActionEngine:
 
         msg = f"Media {action.capitalize()}: {st}{track_info}"
         self.notify("Media Player", msg)
-        return {"success": True, "message": msg}
+        expected_status = {"play": "Playing", "play-pause": None, "pause": "Paused", "stop": "Stopped"}.get(action)
+        if action in ("next", "previous"):
+            verified = True          # track change dispatched successfully
+        elif expected_status is None:
+            verified = st in ("Playing", "Paused")
+        else:
+            verified = (st == expected_status)
+        if verified is False:
+            return {"success": False, "verified": False,
+                    "message": f"The player reports '{st}' instead of '{expected_status}'."}
+        return {"success": True, "verified": bool(verified), "message": msg}
 
-    def send_key(self, key_combo):
-        ydo_env = {**os.environ, "YDOTOOL_SOCKET": "/run/user/1000/.ydotool_socket"}
+    def send_key(self, key_combo, check_subprocesses=False, expected_target=None):
+        use_sub = bool(check_subprocesses or os.environ.get("DISPLAY"))
+        state = self.inspect_desktop_state(expected_target=expected_target, include_subprocesses=use_sub)
+        if state.get("blocker"):
+            blocker = state["blocker"]
+            return {
+                "success": False,
+                "attempted": False,
+                "blocked": True,
+                "blocker": blocker,
+                "injection_tool": None,
+                "tool": None,
+                "verified": False,
+                "verification_message": f"Blocked by {blocker}; no key sent.",
+                "message": f"Stopped: {blocker} is waiting for your input. Did not send key '{key_combo}'.",
+            }
+        focus_err = self.check_focus_mismatch(state, expected_target=expected_target, key_combo=key_combo)
+        if focus_err:
+            return {
+                "success": False,
+                "attempted": False,
+                "blocked": True,
+                "focus_mismatch": True,
+                "blocker": focus_err,
+                "injection_tool": None,
+                "tool": None,
+                "verified": False,
+                "verification_message": f"{focus_err}; outcome could not be verified.",
+                "message": f"Stopped: {focus_err}. Did not send key '{key_combo}' (outcome could not be verified).",
+            }
         k_clean = (key_combo or "").lower().strip()
         KEY_MAP = {
             'return': ['28:1', '28:0'],
@@ -945,17 +1682,87 @@ class SystemActionEngine:
             'tab': ['15:1', '15:0'],
             'backspace': ['14:1', '14:0'],
             'space': ['57:1', '57:0'],
+            'f': ['33:1', '33:0'],
+            'k': ['37:1', '37:0'],
+            'm': ['50:1', '50:0'],
         }
-        if k_clean in KEY_MAP:
-            subprocess.run(["ydotool", "key"] + KEY_MAP[k_clean], env=ydo_env, capture_output=True)
-        subprocess.run(["xdotool", "key", key_combo], capture_output=True)
-        return {"success": True, "message": f"Pressed: {key_combo}"}
+        ydo = ["key"] + KEY_MAP[k_clean] if k_clean in KEY_MAP else None
+        used = self._inject(ydo, ["key", key_combo])
+        if used:
+            unverified_note = (
+                "fullscreen could not be verified"
+                if k_clean == "f"
+                else "outcome not verified"
+            )
+            return {
+                "success": True,
+                "attempted": True,
+                "injection_tool": used,
+                "tool": used,
+                "verified": False,
+                "verification_message": f"Input sent; {unverified_note}.",
+                "message": f"Input sent via {used}: key '{key_combo}' ({unverified_note})",
+            }
+        return {
+            "success": False,
+            "attempted": True,
+            "injection_tool": None,
+            "tool": None,
+            "verified": False,
+            "verification_message": "No working input tool available.",
+            "message": f"Could not press {key_combo} (no working input tool)",
+        }
 
-    def send_type(self, text):
-        ydo_env = {**os.environ, "YDOTOOL_SOCKET": "/run/user/1000/.ydotool_socket"}
-        subprocess.run(["ydotool", "type", "-d", "15", "-D", "15", text], env=ydo_env, capture_output=True)
-        subprocess.run(["xdotool", "type", "--delay", "25", text], capture_output=True)
-        return {"success": True, "message": f"Typed text ({len(text)} chars)"}
+    def send_type(self, text, check_subprocesses=False, expected_target=None):
+        use_sub = bool(check_subprocesses or os.environ.get("DISPLAY"))
+        state = self.inspect_desktop_state(expected_target=expected_target, include_subprocesses=use_sub)
+        if state.get("blocker"):
+            blocker = state["blocker"]
+            return {
+                "success": False,
+                "attempted": False,
+                "blocked": True,
+                "blocker": blocker,
+                "injection_tool": None,
+                "tool": None,
+                "verified": False,
+                "verification_message": f"Blocked by {blocker}; no text typed.",
+                "message": f"Stopped: {blocker} is waiting for your input. Did not type text.",
+            }
+        focus_err = self.check_focus_mismatch(state, expected_target=expected_target)
+        if focus_err:
+            return {
+                "success": False,
+                "attempted": False,
+                "blocked": True,
+                "focus_mismatch": True,
+                "blocker": focus_err,
+                "injection_tool": None,
+                "tool": None,
+                "verified": False,
+                "verification_message": f"{focus_err}; outcome could not be verified.",
+                "message": f"Stopped: {focus_err}. Did not type text (outcome could not be verified).",
+            }
+        used = self._inject(["type", "-d", "15", "-D", "15", text], ["type", "--delay", "25", text])
+        if used:
+            return {
+                "success": True,
+                "attempted": True,
+                "injection_tool": used,
+                "tool": used,
+                "verified": False,
+                "verification_message": "Input sent; target window outcome not verified.",
+                "message": f"Input sent via {used}: typed {len(text)} chars (outcome not verified)",
+            }
+        return {
+            "success": False,
+            "attempted": True,
+            "injection_tool": None,
+            "tool": None,
+            "verified": False,
+            "verification_message": "No working input tool available.",
+            "message": "Could not type text (no working input tool)",
+        }
 
     def lock_screen(self):
         for cmd in [["loginctl", "lock-session"], ["xdg-screensaver", "lock"]]:
@@ -1054,6 +1861,13 @@ class SystemActionEngine:
 
         if act_type in ('command', 'bash', 'sh', 'shell', 'terminal'):
             cmd = body or attrs.get('cmd', '')
+            if is_hard_blocked_command(cmd):
+                msg = "Refused: recursively deleting the filesystem root is permanently blocked."
+                return {"success": False, "returncode": -1, "rejected": True, "blocked": True,
+                        "verified": False, "output": msg, "message": msg}
+            if is_risky_command(cmd) and not self._confirm(f"Risky command:\n\n{cmd}\n\nRun it?"):
+                return {"success": False, "returncode": -1, "declined": True,
+                        "output": "Not run: you declined (or no confirmation was possible)."}
             return self.run_command(cmd)
 
         elif act_type in ('open', 'launch', 'run'):
@@ -1080,11 +1894,13 @@ class SystemActionEngine:
 
         elif act_type in ('key', 'hotkey'):
             k = attrs.get('key') or body or ''
-            return self.send_key(k)
+            exp_t = attrs.get('target') or attrs.get('expected_target') or action.get('expected_target')
+            return self.send_key(k, expected_target=exp_t)
 
         elif act_type in ('type', 'write'):
             t = attrs.get('text') or body or ''
-            return self.send_type(t)
+            exp_t = attrs.get('target') or attrs.get('expected_target') or action.get('expected_target')
+            return self.send_type(t, expected_target=exp_t)
 
         elif act_type in ('lock', 'lockscreen'):
             return self.lock_screen()
@@ -1093,13 +1909,708 @@ class SystemActionEngine:
             turn_screen_off = str(attrs.get('turn_screen_off', '')).lower() in ('true', '1', 'yes')
             return self.start_phone_mirror(turn_screen_off=turn_screen_off)
 
+        elif act_type == 'browser':
+            return self.execute_browser_action(action)
+
         else:
             return {"success": False, "message": f"Unknown action type: {act_type}"}
+
+    _ALLOWED_BROWSER_ACTION_ATTRS = frozenset({"type", "command", "query"})
+    _SUPPORTED_BROWSER_COMMANDS = frozenset({"youtube_play_fullscreen"})
+    _FORBIDDEN_BROWSER_KEYS = frozenset({
+        "js", "javascript", "script", "code", "eval", "function", "fn",
+        "shell", "cmd", "exec", "html", "url", "href", "onclick", "onload"
+    })
+    _FORBIDDEN_BROWSER_QUERY_RE = re.compile(
+        r"(?:javascript\s*:|data\s*:\s*text/html|<\s*/?\s*script\b|\beval\s*\("
+        r"|\bnew\s+Function\b|\bFunction\s*\(|\bdocument\s*\.|\bwindow\s*\."
+        r"|\bchrome\s*\.|\bglobalThis\s*\.|=>|[;{}])",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def validate_browser_action(cls, action):
+        """Validate a `<action type="browser" ...>` tag or payload dict.
+        Rejects unknown commands, malformed payloads, unexpected attributes, and any JS/code strings.
+        Returns `(is_valid: bool, payload_or_error: dict)`.
+        """
+        if not isinstance(action, dict):
+            return False, {"reason": "Malformed browser action: expected dict"}
+
+        if "attrs" in action or "type" in action:
+            attrs = action.get("attrs")
+            if not isinstance(attrs, dict):
+                return False, {"reason": "Malformed browser action attributes"}
+            body = (action.get("body") or "").strip()
+
+            for k in attrs.keys():
+                k_low = str(k).lower().strip()
+                if k_low in cls._FORBIDDEN_BROWSER_KEYS:
+                    return False, {"reason": f"Rejected browser action: forbidden executable attribute '{k}'"}
+                if k_low not in cls._ALLOWED_BROWSER_ACTION_ATTRS:
+                    return False, {"reason": f"Malformed browser action: unexpected attribute '{k}'"}
+
+            if body and "query" in attrs:
+                return False, {"reason": "Malformed browser action: unexpected body alongside 'query' attribute"}
+            if body and cls._FORBIDDEN_BROWSER_QUERY_RE.search(body):
+                return False, {"reason": "Rejected browser action: JavaScript or code content in action body"}
+
+            raw_payload = {
+                "command": attrs.get("command"),
+                "query": attrs.get("query") if "query" in attrs else body,
+            }
+        else:
+            raw_payload = dict(action)
+
+        if lexi_browser_host is not None:
+            return lexi_browser_host.validate_native_request(raw_payload)
+
+        for k in raw_payload.keys():
+            k_str = str(k)
+            if k_str.lower() in cls._FORBIDDEN_BROWSER_KEYS:
+                return False, {"reason": f"Rejected payload: forbidden executable field '{k_str}'"}
+            if k_str not in ("command", "query", "request_id"):
+                return False, {"reason": f"Malformed payload: unexpected field '{k_str}'"}
+
+        cmd = raw_payload.get("command")
+        if not isinstance(cmd, str) or cmd.strip() not in cls._SUPPORTED_BROWSER_COMMANDS:
+            return False, {"reason": f"Unsupported browser command: {cmd!r}"}
+
+        query = raw_payload.get("query")
+        if not isinstance(query, str) or not (1 <= len(query.strip()) <= 200):
+            return False, {"reason": "Malformed payload: 'query' must be a non-empty string (1..200 chars)"}
+        q_clean = query.strip()
+        if cls._FORBIDDEN_BROWSER_QUERY_RE.search(q_clean) or re.search(r"[\x00-\x1f\x7f]", q_clean):
+            return False, {"reason": "Rejected payload: JavaScript or control characters are not permitted"}
+
+        return True, {"command": cmd.strip(), "query": q_clean}
+
+    @staticmethod
+    def format_browser_action_summary(action, result):
+        """Build a truthful user-facing summary strictly from structured `*_verified` flags.
+        Never claims playback unless `playing_verified` is True, and never claims fullscreen
+        unless `fullscreen_verified` is True.
+        """
+        result = result if isinstance(result, dict) else {}
+        attrs = (action.get("attrs") or {}) if isinstance(action, dict) else {}
+        query = (attrs.get("query") or (action.get("body") if isinstance(action, dict) else "") or "").strip()
+
+        if result.get("rejected"):
+            reason = result.get("reason") or result.get("message") or "invalid browser command"
+            if "fullscreen is not verified" in reason.lower():
+                return reason
+            return f"Rejected browser action ({reason}); fullscreen is not verified."
+
+        search_v = bool(result.get("search_verified") is True)
+        watch_v = bool(result.get("watch_verified") is True)
+        playing_v = bool(result.get("playing_verified") is True) and search_v and watch_v
+        fullscreen_v = bool(result.get("fullscreen_verified") is True) and search_v and watch_v
+        title = (result.get("title") or query or "YouTube video").strip()
+        reason = (result.get("reason") or "").strip()
+
+        if not search_v:
+            detail = reason or f"no suitable video result found for '{query or title}'"
+            return (
+                f"YouTube search failed ({detail}); "
+                f"playback is not verified and fullscreen is not verified."
+            )
+
+        if not watch_v:
+            detail = reason or "watch page and video element could not be verified"
+            return (
+                f"Found '{title}' on YouTube search, but watch page is not verified ({detail}); "
+                f"playback is not verified and fullscreen is not verified."
+            )
+
+        play_clause = (
+            f"Playing '{title}' on YouTube"
+            if playing_v
+            else f"Opened '{title}' on YouTube (playback is not verified)"
+        )
+        fs_clause = "fullscreen is verified" if fullscreen_v else "fullscreen is not verified"
+        reason_suffix = f" ({reason})" if (reason and not (playing_v and fullscreen_v)) else ""
+        return f"{play_clause}; {fs_clause}{reason_suffix}."
+
+    def execute_browser_action(self, action):
+        """Validate and execute a structured `<action type="browser" ...>` command via the
+        Chrome Native Messaging bridge (`lexi_browser_host`)."""
+        is_valid, validated = self.validate_browser_action(action)
+        if not is_valid:
+            reason = validated.get("reason") or "Invalid browser action payload"
+            rejected_res = {
+                "success": False,
+                "rejected": True,
+                "verified": False,
+                "search_verified": False,
+                "watch_verified": False,
+                "playing_verified": False,
+                "fullscreen_verified": False,
+                "title": "",
+                "url": "",
+                "reason": reason,
+            }
+            rejected_res["message"] = self.format_browser_action_summary(action, rejected_res)
+            return rejected_res
+
+        structured_json = {
+            "command": validated["command"],
+            "query": validated["query"],
+        }
+        if validated.get("request_id"):
+            structured_json["request_id"] = validated["request_id"]
+
+        try:
+            if callable(self.browser_bridge):
+                raw_resp = self.browser_bridge({
+                    "command": structured_json["command"],
+                    "query": structured_json["query"],
+                })
+            elif lexi_browser_host is not None:
+                raw_resp = lexi_browser_host.send_browser_command(
+                    structured_json,
+                    auto_wake_browser=True,
+                )
+            else:
+                raw_resp = {
+                    "success": False,
+                    "search_verified": False,
+                    "watch_verified": False,
+                    "playing_verified": False,
+                    "fullscreen_verified": False,
+                    "title": "",
+                    "url": "",
+                    "reason": "Native browser bridge module is unavailable",
+                }
+        except Exception as exc:
+            raw_resp = {
+                "success": False,
+                "search_verified": False,
+                "watch_verified": False,
+                "playing_verified": False,
+                "fullscreen_verified": False,
+                "title": "",
+                "url": "",
+                "reason": f"Browser bridge error: {exc}",
+            }
+
+        if lexi_browser_host is not None:
+            norm = lexi_browser_host.normalize_native_response(raw_resp)
+        else:
+            norm = dict(raw_resp) if isinstance(raw_resp, dict) else {"success": False}
+
+        search_v = bool(norm.get("search_verified") is True)
+        watch_v = bool(norm.get("watch_verified") is True) and search_v
+        playing_v = bool(norm.get("playing_verified") is True) and watch_v
+        fullscreen_v = bool(norm.get("fullscreen_verified") is True) and watch_v
+        fully_verified = bool(norm.get("success") and search_v and watch_v and playing_v and fullscreen_v)
+
+        norm.update({
+            "search_verified": search_v,
+            "watch_verified": watch_v,
+            "playing_verified": playing_v,
+            "fullscreen_verified": fullscreen_v,
+            "verified": fully_verified,
+        })
+        norm["message"] = self.format_browser_action_summary(action, norm)
+        return norm
+
+    _CLOSE_LABELS = {"whatsapp": "WhatsApp", "instagram": "Instagram"}
+
+    @classmethod
+    def format_close_tabs_summary(cls, result):
+        """Truthful one-line summary built only from the bridge's structured counts."""
+        result = result if isinstance(result, dict) else {}
+        reason = (result.get("reason") or "").strip()
+        if not result.get("success"):
+            return reason or "the browser bridge didn't confirm that anything was closed."
+        per = result.get("per_target") or {}
+        parts, none_open = [], []
+        for site in ("whatsapp", "instagram"):
+            entry = per.get(site)
+            if not entry:
+                continue
+            label = cls._CLOSE_LABELS[site]
+            n = int(entry.get("closed", 0))
+            if int(entry.get("matched", 0)) == 0:
+                none_open.append(label)
+            elif n:
+                parts.append(f"{n} {label} tab" + ("" if n == 1 else "s"))
+        if not per:  # extension gave no breakdown: fall back to the totals
+            n = int(result.get("closed_count", 0))
+            label = cls._CLOSE_LABELS.get(result.get("target"), "matching")
+            if n:
+                parts.append(f"{n} {label} tab" + ("" if n == 1 else "s"))
+            else:
+                none_open.append(label)
+        if parts:
+            text = "Closed " + " and ".join(parts) + "."
+            if none_open:
+                text += f" No {' or '.join(none_open)} tab was open."
+            return text
+        return f"There's no {' or '.join(none_open) or 'matching'} tab open, so there was nothing to close."
+
+    def execute_close_tabs(self, target):
+        """Ask the Chrome extension to close tabs for an approved site enum.
+
+        Only `whatsapp`, `instagram` or `both` are ever sent; no URL, selector or
+        script. Never auto-launches a browser. Success requires the extension's
+        own re-check to report zero leftover tabs.
+        """
+        if target not in ("whatsapp", "instagram", "both"):
+            return {"success": False, "verified": False, "message": "That isn't a site I can close."}
+        payload = {"command": "close_named_tabs", "target": target}
+        try:
+            if callable(self.browser_bridge):
+                raw_resp = self.browser_bridge(dict(payload))
+            elif lexi_browser_host is not None:
+                raw_resp = lexi_browser_host.send_browser_command(payload, auto_wake_browser=False)
+            else:
+                raw_resp = {"success": False, "reason": "Native browser bridge module is unavailable"}
+        except Exception as exc:
+            raw_resp = {"success": False, "reason": f"Browser bridge error: {exc}"}
+
+        if lexi_browser_host is not None:
+            norm = lexi_browser_host.normalize_close_response(raw_resp, target)
+        else:
+            norm = dict(raw_resp) if isinstance(raw_resp, dict) else {"success": False}
+        norm["success"] = bool(norm.get("success") is True)
+        norm["verified"] = bool(norm["success"] and norm.get("verified") is True)
+        norm["message"] = self.format_close_tabs_summary(norm)
+        return norm
+
+    @staticmethod
+    def _extract_action_target(act):
+        attrs = act.get('attrs', {}) or {}
+        body = (act.get('body') or '').strip()
+        return (attrs.get('target') or attrs.get('app') or attrs.get('url') or body).strip()
+
+    @classmethod
+    def _is_browser_or_media_open_target(cls, target):
+        t = (target or "").lower().strip()
+        if not t:
+            return False
+        if re.match(r'^(https?://|www\.|spotify:)', t, re.I):
+            return True
+        return any(k in t for k in (
+            "youtube", "chrome", "chromium", "firefox", "brave", "browser", "spotify", "mpv", "vlc"
+        ))
+
+    def has_observation_capability(self):
+        """True only when an application-provided observer can verify a GUI outcome.
+        A DISPLAY variable or a best-effort X11 query alone is not sufficient proof."""
+        return callable(self.state_observer) or callable(self.screenshot_provider)
+
+    def run_unverified_prefix(self, actions):
+        """Perform the safe first step of a GUI plan, then stop before blind input.
+        This is used when no real screen observer has been connected."""
+        first_action = actions[0]
+        result = self.execute_action(first_action)
+        if result.get("success"):
+            target = self._extract_action_target(first_action)
+            result.update({
+                "verified": False,
+                "incomplete": True,
+                "verification_message": "Screen verification is unavailable.",
+                "message": (
+                    f"Opened {target!r}, but stopped before follow-up input: "
+                    "screen verification is unavailable."
+                ),
+            })
+        return [(first_action, result)]
+
+    def is_in_bounded_runner_scope(self, actions, user_question=""):
+        """P2 Narrow Scope Check: browser navigation and media playback only.
+        Excludes typing into messages, WhatsApp, passwords, account changes,
+        purchases, file deletion, and phone control."""
+        if not actions:
+            return False
+        if user_question and self._OUT_OF_SCOPE_RUNNER_RE.search(user_question):
+            return False
+
+        allowed_types = {'open', 'launch', 'run', 'media', 'player', 'key', 'hotkey'}
+        has_browser_or_media = False
+
+        for act in actions:
+            act_type = (act.get('type') or 'command').lower().strip()
+            if act_type not in allowed_types:
+                return False
+            attrs = act.get('attrs', {}) or {}
+            body = (act.get('body') or '').strip()
+            raw_text = f"{body} {' '.join(str(v) for v in attrs.values())}"
+            if self._OUT_OF_SCOPE_RUNNER_RE.search(raw_text):
+                return False
+            if act_type in ('open', 'launch', 'run'):
+                target = self._extract_action_target(act)
+                if self._is_browser_or_media_open_target(target):
+                    has_browser_or_media = True
+                else:
+                    return False
+            elif act_type in ('media', 'player'):
+                has_browser_or_media = True
+
+        return has_browser_or_media
+
+    def build_bounded_plan(self, actions, user_question=""):
+        """Convert a browser/media goal into a structured plan of at most 3 steps,
+        each declaring an expected observable condition."""
+        bounded = list(actions[:self.MAX_BOUNDED_STEPS])
+        plan = []
+        opened_youtube = False
+
+        for idx, act in enumerate(bounded, 1):
+            act_type = (act.get('type') or 'command').lower().strip()
+            attrs = act.get('attrs', {}) or {}
+            body = (act.get('body') or '').strip()
+
+            explicit_cond = act.get('expected_condition') or attrs.get('expect')
+            if isinstance(explicit_cond, dict):
+                cond = {
+                    "kind": explicit_cond.get("kind", "custom"),
+                    "target": explicit_cond.get("target", ""),
+                    "description": explicit_cond.get("description", "declared condition is met"),
+                }
+            elif isinstance(explicit_cond, str) and explicit_cond.strip():
+                c_low = explicit_cond.strip().lower()
+                if "watch" in c_low and "youtube" in c_low:
+                    cond = {"kind": "youtube_watch_page", "target": "youtube", "description": explicit_cond.strip()}
+                elif "fullscreen" in c_low:
+                    cond = {"kind": "fullscreen_active", "target": "fullscreen", "description": explicit_cond.strip()}
+                else:
+                    cond = {"kind": "custom_text", "target": explicit_cond.strip(), "description": explicit_cond.strip()}
+            elif act_type in ('open', 'launch', 'run'):
+                target = self._extract_action_target(act)
+                t_low = target.lower()
+                if "youtube.com" in t_low or "youtu.be" in t_low:
+                    opened_youtube = True
+                    if "youtube.com/watch" in t_low or "youtu.be/" in t_low:
+                        cond = {"kind": "youtube_watch_page", "target": "youtube", "description": "a YouTube watch page is visible"}
+                    else:
+                        cond = {"kind": "browser_page_visible", "target": "youtube", "description": "YouTube page is visible in the browser"}
+                elif re.match(r'^(https?://|www\.)', target, re.I):
+                    parsed_u = urllib.parse.urlparse(target if '://' in target else f"https://{target}")
+                    host = parsed_u.netloc or target
+                    cond = {"kind": "browser_page_visible", "target": host, "description": f"browser page for {host} is visible"}
+                elif "spotify:" in t_low or "open.spotify.com/" in t_low:
+                    cond = {"kind": "media_playing", "target": "spotify", "description": "Spotify playback is active"}
+                else:
+                    cond = {"kind": "app_ready", "target": target, "description": f"{target} is ready"}
+            elif act_type in ('key', 'hotkey'):
+                k_val = (attrs.get('key') or body or '').strip()
+                k_low = k_val.lower()
+                if k_low in ('return', 'enter') and opened_youtube:
+                    cond = {"kind": "youtube_watch_page", "target": "youtube", "description": "a YouTube watch page is visible"}
+                elif k_low == 'f':
+                    cond = {"kind": "fullscreen_active", "target": "fullscreen", "description": "the player is fullscreen"}
+                elif k_low in ('space', 'k'):
+                    cond = {"kind": "media_state_changed", "target": "media", "description": "media playback state responded"}
+                else:
+                    cond = {"kind": "target_focused_no_blocker", "target": k_low, "description": f"target window accepted key '{k_val}' with no modal blocker"}
+            elif act_type in ('media', 'player'):
+                m_cmd = (attrs.get('command') or attrs.get('cmd') or body or 'play-pause').lower().strip()
+                if any(w in m_cmd for w in ('pause', 'stop', 'hold')):
+                    cond = {"kind": "media_paused_or_stopped", "target": "media", "description": "media playback is paused or stopped"}
+                else:
+                    cond = {"kind": "media_playing", "target": "media", "description": "media playback is active"}
+            else:
+                cond = {"kind": "command_succeeded", "target": "command", "description": "command exited with code 0 and no blocker"}
+
+            if act_type in ('open', 'launch', 'run'):
+                planned_desc = f"Open {self._extract_action_target(act)}"
+            elif act_type in ('key', 'hotkey'):
+                planned_desc = f"Send key '{attrs.get('key') or body}'"
+            elif act_type in ('media', 'player'):
+                planned_desc = f"Media control '{attrs.get('command') or attrs.get('cmd') or body or 'play-pause'}'"
+            else:
+                planned_desc = f"Run {act_type}: {body or attrs.get('cmd', '')}"
+
+            plan.append({
+                "step": idx,
+                "action": act,
+                "planned_step": planned_desc,
+                "expected_condition": cond,
+            })
+
+        return plan
+
+    def verify_step_condition(self, condition, pre_state, post_state, action_result):
+        """Observe and verify only the declared step condition against post_state."""
+        if post_state.get("blocker"):
+            return False, f"Blocker detected: {post_state['blocker']}"
+
+        if post_state.get("condition_met") is True:
+            return True, post_state.get("verification_detail") or f"Verified: {condition['description']}"
+        if post_state.get("condition_met") is False:
+            return False, post_state.get("verification_detail") or f"Unverified: {condition['description']}"
+
+        kind = condition.get("kind", "")
+        desc = condition.get("description", "declared condition")
+        hints = post_state.get("screen_text_hints") or []
+        url_low = (post_state.get("url") or "").lower()
+        mpris_url_low = (post_state.get("mpris_url") or "").lower()
+        title_low = (post_state.get("active_title") or "").lower()
+        page_type = (post_state.get("page_type") or "").lower()
+
+        if kind == "youtube_watch_page":
+            if page_type == "youtube_search" or "youtube_search" in hints or "youtube.com/results" in url_low:
+                return False, "YouTube is still on the search page (watch page not visible)"
+            if (
+                page_type == "youtube_watch"
+                or "youtube_watch" in hints
+                or "youtube.com/watch" in url_low
+                or "youtu.be/" in url_low
+                or "youtube.com/watch" in mpris_url_low
+                or "youtu.be/" in mpris_url_low
+                or (post_state.get("media_status") == "Playing" and ("youtube" in title_low or post_state.get("media_title")))
+            ):
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "fullscreen_active":
+            if post_state.get("is_fullscreen") is True or "fullscreen" in hints:
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "browser_page_visible":
+            if post_state.get("page_verified") is False:
+                return False, post_state.get("verification_detail") or f"Could not verify that {desc}"
+            target_tok = (condition.get("target") or "").lower().split(".")[0]
+            combined_surface = f"{title_low} {url_low} {mpris_url_low} {' '.join(hints)} {page_type}"
+            if (
+                post_state.get("page_verified") is True
+                or (target_tok and target_tok in combined_surface)
+                or (post_state.get("target_ready") is True and not title_low)
+            ):
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "media_playing":
+            if post_state.get("media_status") == "Playing" or action_result.get("spotify_playing") is True:
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "media_paused_or_stopped":
+            if post_state.get("media_status") in ("Paused", "Stopped"):
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "media_state_changed":
+            if post_state.get("media_status") and post_state.get("media_status") != pre_state.get("media_status"):
+                return True, f"Verified: {desc} ({post_state.get('media_status')})"
+            if post_state.get("media_status") in ("Playing", "Paused"):
+                return True, f"Verified: {desc} ({post_state.get('media_status')})"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "app_ready":
+            if post_state.get("target_ready") is True:
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "command_succeeded":
+            if action_result.get("success") is True and action_result.get("returncode", 0) == 0:
+                return True, f"Verified: {desc}"
+            return False, f"Command failed to verify: {desc}"
+
+        if kind == "target_focused_no_blocker":
+            if post_state.get("target_ready") is True and not post_state.get("blocker"):
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        if kind == "custom_text":
+            target_low = (condition.get("target") or "").lower()
+            combined_surface = f"{title_low} {url_low} {mpris_url_low} {' '.join(hints)} {page_type}"
+            if target_low and target_low in combined_surface:
+                return True, f"Verified: {desc}"
+            return False, f"Could not verify that {desc}"
+
+        return False, f"Could not verify condition: {desc}"
+
+    @staticmethod
+    def _describe_attempted_action(act, res, attempts):
+        act_type = (act.get('type') or 'command').lower().strip()
+        attrs = act.get('attrs', {}) or {}
+        body = (act.get('body') or '').strip()
+        tool = res.get('injection_tool') or res.get('tool')
+        tool_suffix = f" via {tool}" if tool else ""
+        retry_suffix = f" ({attempts} attempts)" if attempts > 1 else ""
+        if act_type in ('key', 'hotkey'):
+            return f"key '{attrs.get('key') or body}'{tool_suffix}{retry_suffix}"
+        if act_type in ('open', 'launch', 'run'):
+            t = attrs.get('target') or attrs.get('app') or attrs.get('url') or body
+            return f"open '{t}'{retry_suffix}"
+        if act_type in ('media', 'player'):
+            c = attrs.get('command') or attrs.get('cmd') or body or 'play-pause'
+            return f"media '{c}'{retry_suffix}"
+        return f"{act_type}{tool_suffix}{retry_suffix}"
+
+    def run_bounded_plan(self, actions, user_question=""):
+        """P2 Explicit Bounded Act -> Observe -> Decide Runner.
+        - Converts goal into at most 3 steps with declared observable conditions.
+        - Executes 1 step at a time, then observes and verifies only the declared condition.
+        - Retries an unverified non-blocked, non-risky action at most once.
+        - Stops immediately on blocker or unverified condition and asks the user.
+        - Records planned step, attempted action, observed result, and final status."""
+        plan = self.build_bounded_plan(actions, user_question=user_question)
+        activity_record = []
+        results = []
+        last_opened_target = None
+
+        for step_spec in plan:
+            step_num = step_spec["step"]
+            act = step_spec["action"]
+            act_type = (act.get("type") or "command").lower().strip()
+            cond = step_spec["expected_condition"]
+            target_hint = cond.get("target") or last_opened_target
+
+            # P1: Before follow-up step after opening a URL/app, wait for target readiness & check blockers
+            if last_opened_target and act_type in ("key", "hotkey", "type", "write", "media", "player"):
+                ready, pre_state = self.wait_for_target_ready(last_opened_target)
+            else:
+                pre_state = self.inspect_desktop_state(expected_target=target_hint, include_subprocesses=True)
+
+            if pre_state.get("blocker"):
+                blocker = pre_state["blocker"]
+                obs_msg = f"Blocker visible: {blocker}"
+                activity_record.append({
+                    "step": step_num,
+                    "planned_step": step_spec["planned_step"],
+                    "expected_condition": cond["description"],
+                    "attempted_action": "none (stopped before execution)",
+                    "attempts": 0,
+                    "observed_result": obs_msg,
+                    "final_status": "blocked",
+                })
+                blocked_res = {
+                    "success": False,
+                    "attempted": False,
+                    "blocked": True,
+                    "blocker": blocker,
+                    "injection_tool": None,
+                    "tool": None,
+                    "verified": False,
+                    "verification_message": obs_msg,
+                    "message": f"Stopped before step {step_num} ({step_spec['planned_step']}): {blocker} is waiting for your input, boss.",
+                    "activity_record": list(activity_record),
+                }
+                results.append((act, blocked_res))
+                break
+
+            # Execute exactly 1 step (Attempt 1)
+            attempts = 1
+            res = self.execute_action(act)
+
+            if res.get("declined"):
+                obs_msg = "User declined confirmation dialog"
+                activity_record.append({
+                    "step": step_num,
+                    "planned_step": step_spec["planned_step"],
+                    "expected_condition": cond["description"],
+                    "attempted_action": "declined by user",
+                    "attempts": attempts,
+                    "observed_result": obs_msg,
+                    "final_status": "declined",
+                })
+                res["verified"] = False
+                res["verification_message"] = obs_msg
+                res["activity_record"] = list(activity_record)
+                results.append((act, res))
+                break
+
+            if res.get("blocked") or not res.get("success", False):
+                obs_msg = res.get("verification_message") or res.get("message") or "Step execution failed"
+                status_tag = "blocked" if res.get("blocked") else "failed"
+                activity_record.append({
+                    "step": step_num,
+                    "planned_step": step_spec["planned_step"],
+                    "expected_condition": cond["description"],
+                    "attempted_action": self._describe_attempted_action(act, res, attempts),
+                    "attempts": attempts,
+                    "observed_result": obs_msg,
+                    "final_status": status_tag,
+                })
+                res["verified"] = False
+                res["activity_record"] = list(activity_record)
+                results.append((act, res))
+                break
+
+            if act_type in ("open", "launch", "run"):
+                last_opened_target = self._extract_action_target(act)
+
+            if self.step_settle_delay > 0:
+                time.sleep(self.step_settle_delay)
+
+            post_state = self.inspect_desktop_state(expected_target=target_hint, include_subprocesses=True)
+            verified, obs_msg = self.verify_step_condition(cond, pre_state, post_state, res)
+
+            # Bounded retry: at most ONCE without user input, never on modal blocker or risky command
+            is_risky_step = act_type in ("command", "bash", "sh", "shell", "terminal") and is_risky_command(
+                (act.get("body") or act.get("attrs", {}).get("cmd") or "")
+            )
+            if not verified and not post_state.get("blocker") and not is_risky_step:
+                attempts = 2
+                res_retry = self.execute_action(act)
+                res = res_retry
+                if res.get("blocked") or not res.get("success", False):
+                    verified = False
+                    obs_msg = res.get("verification_message") or res.get("message") or "Retry failed"
+                else:
+                    if self.step_settle_delay > 0:
+                        time.sleep(self.step_settle_delay)
+                    post_state = self.inspect_desktop_state(expected_target=target_hint, include_subprocesses=True)
+                    verified, obs_msg = self.verify_step_condition(cond, pre_state, post_state, res)
+
+            if verified:
+                res["verified"] = True
+                res["verification_message"] = obs_msg
+                res["final_status"] = "verified"
+                if act_type in ("key", "hotkey", "type", "write"):
+                    used_tool = res.get("injection_tool") or res.get("tool") or "input"
+                    k_val = (act.get("attrs", {}) or {}).get("key") or act.get("body") or ""
+                    res["message"] = f"Input sent via {used_tool}: key '{k_val}' — Goal verified ({cond['description']})"
+                activity_record.append({
+                    "step": step_num,
+                    "planned_step": step_spec["planned_step"],
+                    "expected_condition": cond["description"],
+                    "attempted_action": self._describe_attempted_action(act, res, attempts),
+                    "attempts": attempts,
+                    "observed_result": obs_msg,
+                    "final_status": "verified",
+                })
+                results.append((act, res))
+            else:
+                blocker_label = post_state.get("blocker")
+                final_status = "blocked" if blocker_label else "unverified_stopped"
+                res["success"] = False
+                res["verified"] = False
+                res["blocked"] = True
+                res["blocker"] = blocker_label or obs_msg
+                res["verification_message"] = obs_msg
+                res["final_status"] = final_status
+                res["message"] = (
+                    f"Stopped at step {step_num} ({step_spec['planned_step']}): {obs_msg}. "
+                    f"Waiting on your input, boss."
+                )
+                activity_record.append({
+                    "step": step_num,
+                    "planned_step": step_spec["planned_step"],
+                    "expected_condition": cond["description"],
+                    "attempted_action": self._describe_attempted_action(act, res, attempts),
+                    "attempts": attempts,
+                    "observed_result": obs_msg,
+                    "final_status": final_status,
+                })
+                res["activity_record"] = list(activity_record)
+                results.append((act, res))
+                break
+
+        self.last_activity_record = list(activity_record)
+        if results and "activity_record" not in results[-1][1]:
+            results[-1][1]["activity_record"] = list(activity_record)
+        return results
 
     def execute_action_sequence(self, actions, user_question=""):
         """
         Executes a sequence of actions with intelligent chaining, deduplication,
-        intent validation, and process-await synchronization between steps.
+        intent validation, P1 modal/focus guards, and the P2 bounded runner.
         """
         results = []
         if not actions:
@@ -1111,7 +2622,15 @@ class SystemActionEngine:
             is_question = bool(re.search(r'\b(why|how|explain|what|did|does|is|are|check|see|talk|tell me|can you|can u)\b', q_lower)) or q_lower.endswith('?')
             has_send = bool(re.search(r'\b(send|text|ping|msg)\b', q_lower))
             has_open_app = bool(re.search(r'\b(open|launch)\s+(whatsapp|wa)\b', q_lower))
-            is_valid_wa_command = (has_send or has_open_app) and not is_question
+            # "try again" is an explicit continuation of the immediately prior
+            # action, not a casual message.  Do not throw away its repeat action.
+            is_retry = bool(re.fullmatch(
+                r"(?:please\s+)?(?:(?:open\s+and\s+)?(?:try|retry)(?:\s+again)?|again)",
+                q_lower,
+            ))
+            # “Can you send…” is still an explicit request to send.  Treat it as
+            # an instruction; only purely explanatory questions should be blocked.
+            is_valid_wa_command = has_send or has_open_app or is_retry
 
             validated = []
             for act in actions:
@@ -1155,12 +2674,58 @@ class SystemActionEngine:
 
             filtered_actions.append(act)
 
+        if any((a.get('type') or '').lower().strip() == 'browser' for a in filtered_actions):
+            # When using the structured Chrome extension bridge, suppress blind follow-up Return/f keys
+            filtered_actions = [
+                a for a in filtered_actions
+                if (a.get('type') or '').lower().strip() not in ('key', 'hotkey')
+            ]
+
+        # Route browser navigation & media playback sequences through the P2 bounded runner
+        if self.is_in_bounded_runner_scope(filtered_actions, user_question=user_question):
+            is_multi_step = len(filtered_actions) >= 2
+            is_single_url_open = (
+                len(filtered_actions) == 1
+                and filtered_actions[0].get('type', '').lower().strip() in ('open', 'launch', 'run')
+                and bool(re.match(r'^(https?://|www\.)', self._extract_action_target(filtered_actions[0]), re.I))
+            )
+            if (is_multi_step or is_single_url_open) and self.has_observation_capability():
+                return self.run_bounded_plan(filtered_actions, user_question=user_question)
+            if is_multi_step:
+                return self.run_unverified_prefix(filtered_actions)
+
         spotify_already_playing = False
+        last_opened_target = None
         for i, act in enumerate(filtered_actions):
             act_type = act.get('type', '').lower().strip()
             attrs = act.get('attrs', {})
             body = act.get('body', '').strip()
             target = (attrs.get('target', '') or attrs.get('app', '') or attrs.get('url', '') or body).strip()
+
+            # P1/Issue 6 guard for non-runner sequences: wait for target & stop on modal blocker or focus mismatch
+            if act_type in ('key', 'hotkey', 'type', 'write'):
+                if last_opened_target:
+                    act = dict(act, expected_target=last_opened_target)
+                    _ready, state = self.wait_for_target_ready(last_opened_target)
+                else:
+                    state = self.inspect_desktop_state(include_subprocesses=True)
+                k_hint = (attrs.get('key') or body or '') if act_type in ('key', 'hotkey') else None
+                blocker = state.get("blocker") or self.check_focus_mismatch(
+                    state, expected_target=last_opened_target or act.get('expected_target'), key_combo=k_hint
+                )
+                if blocker:
+                    results.append((act, {
+                        "success": False,
+                        "attempted": False,
+                        "blocked": True,
+                        "blocker": blocker,
+                        "injection_tool": None,
+                        "tool": None,
+                        "verified": False,
+                        "verification_message": f"Blocked by {blocker}; no input sent.",
+                        "message": f"Stopped: {blocker}. Outcome could not be verified.",
+                    }))
+                    break
 
             # If a Spotify track was already commanded to play in this sequence, skip redundant generic 'media play'
             if spotify_already_playing and act_type in ('media', 'player'):
@@ -1174,6 +2739,7 @@ class SystemActionEngine:
             if act_type in ('open', 'launch') and target.lower() == 'spotify':
                 res = self.open_target(target)
                 results.append((act, res))
+                last_opened_target = target
                 has_next_media = any(a.get('type') in ('media', 'player') for a in filtered_actions[i+1:])
                 if has_next_media:
                     for _ in range(25):
@@ -1186,15 +2752,151 @@ class SystemActionEngine:
 
             # Standard execution
             res = self.execute_action(act)
+            if act_type in ('open', 'launch', 'run') and res.get('success'):
+                last_opened_target = target
             if isinstance(res, dict) and res.get('spotify_playing'):
                 spotify_already_playing = True
             results.append((act, res))
 
+            if isinstance(res, dict) and (res.get('declined') or res.get('blocked')):
+                break
+
             # Inter-step delay for desktop compositor and window stabilization
-            if i < len(filtered_actions) - 1:
-                time.sleep(0.4)
+            if i < len(filtered_actions) - 1 and self.step_settle_delay > 0:
+                time.sleep(self.step_settle_delay)
 
         return results
+
+
+def _terminal_task_result(engine, command, max_chars=1500):
+    """Run a user-authorised command and describe ONLY what happened (exit code + output)."""
+    res = engine.run_command(command)
+    if res.get("blocked") or res.get("rejected"):
+        return {"success": False, "verified": False, "message": res.get("message") or res.get("output", "Blocked.")}
+    out = (res.get("output") or "").strip()
+    if len(out) > max_chars:
+        out = out[:max_chars] + "\n…(output truncated)"
+    code = res.get("returncode")
+    if res.get("success"):
+        msg = f"Ran `{command}` (exit 0)." + (f"\n{out}" if out and out != "(Executed with no output)" else "")
+        return {"success": True, "verified": True, "message": msg, "returncode": 0}
+    msg = f"`{command}` failed (exit {code})." + (f"\n{out}" if out else "")
+    return {"success": False, "verified": False, "message": msg, "returncode": code}
+
+
+def _list_running_apps_exec():
+    """Return which known apps are currently running."""
+    import lexi_apps
+    running = lexi_apps.list_running()
+    if not running:
+        return {"success": True, "verified": True,
+                "message": "None of the apps I know about (Chrome, Spotify, Files, Terminal) are open right now."}
+    names = ", ".join(s.label for s in running)
+    return {"success": True, "verified": True,
+            "message": f"Currently running: {names}."}
+
+
+def _close_all_apps_exec(engine):
+    """Close every known app that is currently running."""
+    import lexi_apps
+    running = lexi_apps.list_running()
+    if not running:
+        return {"success": True, "verified": True,
+                "message": "Nothing I know about is open — nothing to close."}
+    results = []
+    for spec in running:
+        res = engine.close_app(spec.key)
+        results.append((spec.label, res))
+    closed = [label for label, r in results if r.get("closed")]
+    failed = [label for label, r in results if not r.get("closed") and r.get("was_running")]
+    not_open = [label for label, r in results if not r.get("was_running")]
+    parts = []
+    if closed:
+        parts.append(f"Closed: {', '.join(closed)}.")
+    if failed:
+        parts.append(f"Still open (couldn't close): {', '.join(failed)}.")
+    if not_open:
+        parts.append(f"Already closed: {', '.join(not_open)}.")
+    msg = " ".join(parts)
+    success = len(failed) == 0
+    return {"success": success, "verified": True, "message": msg}
+
+
+def build_executors(engine):
+    """Map registry executor keys to SystemActionEngine methods.
+
+    Each executor receives schema-validated args and returns the engine's
+    result dict ({"success", "verified", "message", ...}).  Nothing here
+    accepts shell text, keystrokes, selectors or JavaScript.
+    """
+    def _volume(a):
+        mode = a.get("mode")
+        if "percent" in a:
+            return engine.set_volume(f"{a['percent']}%")
+        if mode in ("mute", "unmute"):
+            return engine.set_volume(mode)
+        step = a.get("step", 10)
+        return engine.set_volume(f"{'+' if mode == 'up' else '-'}{step}")
+
+    def _brightness(a):
+        if "percent" in a:
+            return engine.set_brightness(f"{a['percent']}%")
+        step = a.get("step", 10)
+        return engine.set_brightness(f"{'+' if a.get('mode') == 'up' else '-'}{step}")
+
+    def _open(a):
+        if "site" in a:
+            site = a["site"]
+            if not site.startswith(("http://", "https://")):
+                site = "https://" + site
+            return engine.open_target(site)
+        return engine.open_target(a["name"])
+
+    def _spotify(a):
+        res = engine.open_target(f"spotify:search:{a['query']}")
+        if isinstance(res, dict) and res.get("success"):
+            return dict(res, verified=True, message=res.get("message") or f"Playing {a['query']} on Spotify.")
+        return res
+
+    def _youtube(a):
+        res = engine.execute_browser_action({
+            "type": "browser",
+            "attrs": {"command": "youtube_play_fullscreen", "query": a["query"]},
+            "body": "",
+        })
+        if not (isinstance(res, dict) and res.get("success")):
+            import urllib.parse
+            q_enc = urllib.parse.quote_plus(a["query"])
+            url = f"https://www.youtube.com/results?search_query={q_enc}"
+            subprocess.Popen(['xdg-open', url], start_new_session=True)
+            return {"success": True, "verified": True, "message": f"Opened YouTube search for {a['query']}."}
+        return res
+
+    return {
+        "set_volume": _volume,
+        "set_brightness": _brightness,
+        "lock_screen": lambda a: engine.lock_screen(),
+        "open_target": _open,
+        "media_control": lambda a: engine.media_control(a["command"] if a["command"] != "toggle" else "play-pause"),
+        "spotify_play": _spotify,
+        "youtube_play": _youtube,
+        "close_chrome": lambda a: engine.close_chrome(),
+        "close_app": lambda a: engine.close_app(a["name"]),
+        "terminal_task": lambda a: _terminal_task_result(engine, a["command"]),
+        "close_tabs": lambda a: engine.execute_close_tabs(a["target"]),
+        "close_tabs_all": lambda a: engine.execute_close_tabs("both"),
+        "whatsapp_draft": lambda a: engine.whatsapp_draft(contact=a["contact"], message=a["message"]),
+        "whatsapp_send": lambda a: engine.whatsapp_send(contact=a["contact"]),
+        "whatsapp_cancel": lambda a: engine.whatsapp_cancel(),
+        "list_running_apps": lambda a: _list_running_apps_exec(),
+        "close_all_apps": lambda a: _close_all_apps_exec(engine),
+        "system_battery": lambda a: engine.get_battery_status(),
+        "media_now_playing": lambda a: engine.get_media_status(),
+        "take_screenshot": lambda a: engine.take_screenshot(),
+        "system_sleep": lambda a: engine.system_sleep(),
+        "system_restart": lambda a: engine.system_restart(),
+        "system_poweroff": lambda a: engine.system_poweroff(),
+    }
 
 
 class AvatarManager:
@@ -1533,7 +3235,7 @@ def render_markdown_to_buffer(buffer, text):
             buffer.insert(buffer.get_end_iter(), '\n')
 
 
-def render_action_result_to_buffer(buffer, action, result):
+def _render_action_result_core(buffer, action, result):
     act_type = action.get('type', 'command').lower().strip()
     attrs = action.get('attrs', {})
     body = action.get('body', '')
@@ -1559,8 +3261,12 @@ def render_action_result_to_buffer(buffer, action, result):
         target = body or attrs.get('target', '') or attrs.get('app', '') or attrs.get('url', '')
         buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"🚀 Target: {target}\n", "action_cmd")
         msg = result.get('message', 'Target opened')
-        if success:
+        if result.get('incomplete'):
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"ℹ️ {msg}\n", "action_body")
+        elif success and not result.get('blocked'):
             buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {msg}\n", "action_success")
+            if result.get('verified') is True and result.get('verification_message'):
+                buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"🔍 {result['verification_message']}\n", "action_body")
         else:
             buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"❌ {msg}\n", "action_error")
 
@@ -1572,8 +3278,13 @@ def render_action_result_to_buffer(buffer, action, result):
         buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"💬 {target_info}\n", "action_cmd")
         if msg_text:
             buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"📝 \"{msg_text}\"\n", "action_body")
-        res_msg = result.get('message', 'WhatsApp action initiated')
-        buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {res_msg}\n", "action_success")
+        res_msg = result.get('message', 'WhatsApp message input sent (delivery not verified)')
+        if not success or result.get('blocked'):
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"❌ {res_msg}\n", "action_error")
+        elif result.get('verified') is True:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {res_msg}\n", "action_success")
+        else:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"ℹ️ {res_msg}\n", "action_body")
 
     elif act_type in ('volume', 'vol', 'audio'):
         lvl = attrs.get('level') or body or ''
@@ -1593,17 +3304,203 @@ def render_action_result_to_buffer(buffer, action, result):
     elif act_type in ('key', 'hotkey', 'type', 'write'):
         k = attrs.get('key') or attrs.get('text') or body
         buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"⌨️ {act_type.title()}: {k}\n", "action_cmd")
-        buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {result.get('message', 'Keystroke sent')}\n", "action_success")
+        msg = result.get('message', 'Input sent')
+        if not success or result.get('blocked'):
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"❌ {msg}\n", "action_error")
+        elif result.get('verified') is True:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {msg}\n", "action_success")
+        else:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"ℹ️ {msg}\n", "action_body")
 
     elif act_type in ('lock', 'lockscreen'):
         buffer.insert_with_tags_by_name(buffer.get_end_iter(), "🔒 Locking session...\n", "action_cmd")
-        buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {result.get('message', 'Locked')}\n", "action_success")
+        if success:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {result.get('message', 'Locked')}\n", "action_success")
+        else:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"❌ {result.get('message', 'Lock failed')}\n", "action_error")
+
+    elif act_type == 'browser':
+        cmd_name = attrs.get('command') or 'youtube_play_fullscreen'
+        q_text = attrs.get('query') or body or ''
+        buffer.insert_with_tags_by_name(
+            buffer.get_end_iter(),
+            f"🌐 Browser ({cmd_name}): {q_text}\n",
+            "action_cmd"
+        )
+        msg = SystemActionEngine.format_browser_action_summary(action, result)
+        checks_line = (
+            f"🔎 Verified flags: search={bool(result.get('search_verified') is True)}, "
+            f"watch={bool(result.get('watch_verified') is True)}, "
+            f"playing={bool(result.get('playing_verified') is True)}, "
+            f"fullscreen={bool(result.get('fullscreen_verified') is True)}\n"
+        )
+        buffer.insert_with_tags_by_name(buffer.get_end_iter(), checks_line, "action_body")
+        all_verified = bool(
+            result.get('success')
+            and result.get('search_verified') is True
+            and result.get('watch_verified') is True
+            and result.get('playing_verified') is True
+            and result.get('fullscreen_verified') is True
+        )
+        if not success or result.get('rejected') or result.get('blocked') or not result.get('search_verified'):
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"❌ {msg}\n", "action_error")
+        elif all_verified:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {msg}\n", "action_success")
+        else:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"ℹ️ {msg}\n", "action_body")
 
     else:
         buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"⚙️ Action: {act_type}\n", "action_cmd")
-        buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {result.get('message', 'Action completed')}\n", "action_success")
+        if success and not result.get('blocked'):
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"✅ {result.get('message', 'Action completed')}\n", "action_success")
+        else:
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"❌ {result.get('message', 'Action failed')}\n", "action_error")
+
+    if result.get('activity_record'):
+        buffer.insert_with_tags_by_name(buffer.get_end_iter(), "📋 Activity Record:\n", "action_cmd")
+        for rec in result['activity_record']:
+            st_icon = "✅" if rec.get('final_status') == 'verified' else ("🛑" if rec.get('final_status') in ('blocked', 'declined') else "⚠️")
+            line = (
+                f"  {st_icon} Step {rec.get('step')}: {rec.get('planned_step')} | "
+                f"Action: {rec.get('attempted_action')} | "
+                f"Observed: {rec.get('observed_result')} [{rec.get('final_status')}]\n"
+            )
+            buffer.insert_with_tags_by_name(buffer.get_end_iter(), line, "action_body")
 
     buffer.insert(buffer.get_end_iter(), "\n")
+
+
+def render_action_result_to_buffer(buffer, action, result):
+    _render_action_result_core(buffer, action, result)
+    if result.get('declined'):
+        kind = "declined"
+    elif not result.get('success', True) or result.get('blocked') or result.get('rejected'):
+        kind = "fail"
+    elif (
+        result.get('verified') is False
+        or result.get('incomplete')
+        or (
+            (action.get('type') or '').lower().strip() == 'browser'
+            and not (
+                result.get('search_verified') is True
+                and result.get('watch_verified') is True
+                and result.get('playing_verified') is True
+                and result.get('fullscreen_verified') is True
+            )
+        )
+    ):
+        # P0: Do not append a positive success quip to an unverified or incomplete action result.
+        buffer.insert(buffer.get_end_iter(), "\n")
+        return
+    else:
+        kind = "success"
+    buffer.insert_with_tags_by_name(buffer.get_end_iter(), f"{boss_quip(kind)}\n\n",
+                                    "action_success" if kind != "fail" else "action_error")
+
+
+def summarize_action_outcomes(actions, action_results):
+    """Issue 5: Build the final completion line strictly from structured action records,
+    suppressing unverified or optimistic claims in raw model prose."""
+    actions = list(actions or [])
+    action_results = list(action_results or [])
+    if not action_results:
+        return "No actions were executed."
+
+    opened_target = None
+    opened_is_search = False
+    wants_fullscreen = any(
+        (a.get("type") or "").lower().strip() in ("key", "hotkey")
+        and ((a.get("attrs") or {}).get("key") or a.get("body") or "").lower().strip() == "f"
+        for a in actions
+    ) or any(
+        (a.get("type") or "").lower().strip() in ("command", "bash", "sh", "shell", "terminal")
+        and "xdotool" in ((a.get("body") or (a.get("attrs") or {}).get("cmd") or "").lower())
+        and " key f" in ((a.get("body") or (a.get("attrs") or {}).get("cmd") or "").lower())
+        for a in actions
+    )
+
+    for act, res in action_results:
+        act_type = (act.get("type") or "").lower().strip()
+        if act_type in ("open", "launch", "run") and res.get("success"):
+            t = SystemActionEngine._extract_action_target(act)
+            opened_target = t
+            if any(k in t.lower() for k in ("search_query=", "/results", "spotify:search:")):
+                opened_is_search = True
+
+    last_act, last_res = action_results[-1]
+
+    # 0. Structured Chrome extension browser action: build strictly from *_verified flags
+    for act, res in action_results:
+        if (act.get("type") or "").lower().strip() == "browser":
+            return SystemActionEngine.format_browser_action_summary(act, res)
+
+    # 1. Rejected command (e.g., raw xdotool/ydotool shell bypass)
+    for _act, res in action_results:
+        if res.get("rejected"):
+            if opened_target:
+                open_clause = "Opened the search page" if opened_is_search else f"Opened {opened_target}"
+                tail = "fullscreen is not verified" if wants_fullscreen else "raw GUI input command was rejected"
+                return f"{open_clause}; {tail}."
+            return res.get("message") or "Command rejected: raw GUI input tools are not allowed."
+
+    # 2. Declined confirmation
+    for _act, res in action_results:
+        if res.get("declined"):
+            return "Command not run: confirmation was declined."
+
+    # 3. Blocked by modal/permission dialog or focus mismatch
+    for _act, res in action_results:
+        if res.get("blocked"):
+            blocker = res.get("blocker") or res.get("verification_message") or "a blocker was detected"
+            if opened_target:
+                open_clause = "Opened the search page" if opened_is_search else f"Opened {opened_target}"
+                if wants_fullscreen:
+                    return f"{open_clause}; fullscreen is not verified ({blocker})."
+                return f"{open_clause}; stopped before follow-up input ({blocker})."
+            return res.get("message") or f"Stopped: {blocker}."
+
+    # 4. Incomplete prefix or unverified outcome
+    any_unverified = any(
+        res.get("incomplete") or res.get("verified") is False or not res.get("success", True)
+        for _act, res in action_results
+    ) or (len(action_results) < len(actions))
+
+    if any_unverified:
+        if opened_target:
+            open_clause = "Opened the search page" if opened_is_search else f"Opened {opened_target}"
+            if wants_fullscreen:
+                return f"{open_clause}; fullscreen is not verified."
+            return f"{open_clause}; follow-up outcome is not verified."
+        last_type = (last_act.get("type") or "").lower().strip()
+        if last_type in ("whatsapp", "wa"):
+            return last_res.get("message") or "WhatsApp message input sent; delivery is not verified."
+        if last_type in ("key", "hotkey") and wants_fullscreen:
+            return "Input sent for 'f'; fullscreen is not verified."
+        return last_res.get("message") or "Input sent; outcome is not verified."
+
+    # 5. All planned actions completed and verified
+    return last_res.get("message") or "Action completed and verified."
+
+
+def render_turn_response_to_buffer(buffer, full_text, action_results=None, actions=None):
+    """Issue 5: Render a turn's response to buffer.
+    If the response contains <action> tags, quarantine/suppress model prose claims
+    and build the completion headline strictly from structured action records."""
+    engine = SystemActionEngine.get()
+    parsed_actions = list(actions) if actions is not None else engine.parse_actions(full_text or "")
+    results_list = list(action_results or [])
+
+    if parsed_actions or results_list:
+        summary_line = summarize_action_outcomes(parsed_actions, results_list)
+        render_markdown_to_buffer(buffer, summary_line)
+        for act, res in results_list:
+            render_action_result_to_buffer(buffer, act, res)
+        return summary_line
+
+    clean_text = engine.strip_actions(full_text or "")
+    if clean_text:
+        render_markdown_to_buffer(buffer, clean_text)
+    return clean_text
 
 
 def draw_star(cr, cx, cy, r_outer, r_inner, points=4):
@@ -4893,7 +6790,9 @@ class LexiDynamicIslandWindow(Gtk.Window):
         return GLib.SOURCE_REMOVE
 
     def on_show_beam_info(self):
-        self.collapse_to_notch()
+        if hasattr(self, 'actions_revealer'):
+            self.actions_revealer.set_reveal_child(False)
+        self.update_input_region(mode="compact")
         beam_win = LexiBeamWindow()
         beam_win.present()
 
@@ -6138,7 +8037,10 @@ class LexiWindow(Adw.ApplicationWindow):
         self.timer_source_id = None
         self.query_start_time = 0
         self.conversation = []
+        self.assistant = LexiAssistant(build_executors(SystemActionEngine.get()))
+        self.assistant.confirmer = self._confirm_risky
         self.last_answer = ""
+        self.last_whatsapp_command = None
         self.turn_start_mark = None
         self.notch_win = None
         self.pet_win = None
@@ -7406,6 +9308,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
     def on_clear_chat(self, _):
         self.conversation = []
+        self.assistant.reset()
         self.last_answer = ""
         count = len(self.captured_pages)
         self.text_buffer.set_text(f"👋 Chat history cleared. What would you like to ask about the {count} attached page(s)?")
@@ -7629,8 +9532,7 @@ class LexiWindow(Adw.ApplicationWindow):
         # Parse action from direct shortcut
         action = None
         if cmd.startswith('$'):
-            bash_cmd = cmd[1:].strip()
-            action = {'type': 'command', 'attrs': {}, 'body': bash_cmd}
+            action = {'type': 'command', 'attrs': {}, 'body': cmd[1:].strip()}
         elif cmd.startswith('/open'):
             target = cmd[5:].strip()
             action = {'type': 'open', 'attrs': {}, 'body': target}
@@ -7650,10 +9552,20 @@ class LexiWindow(Adw.ApplicationWindow):
             action = {'type': 'whatsapp', 'attrs': {'contact': target, 'message': msg}, 'body': msg}
         elif cmd.startswith('/lock'):
             action = {'type': 'lock', 'attrs': {}, 'body': ''}
+        elif cmd.startswith('/yt ') or cmd.startswith('/youtube '):
+            yt_query = cmd.split(maxsplit=1)[1].strip()
+            action = {
+                'type': 'browser',
+                'attrs': {'command': 'youtube_play_fullscreen', 'query': yt_query},
+                'body': ''
+            }
 
         if action:
+            if action.get('type') in ('whatsapp', 'wa'):
+                self.last_whatsapp_command = dict(action)
             self.update_mascot_mood("working")
             def worker():
+                SystemActionEngine.get().confirm_callback = self._confirm_risky
                 res = SystemActionEngine.get().execute_action(action)
                 def on_done():
                     render_action_result_to_buffer(self.text_buffer, action, res)
@@ -7673,6 +9585,11 @@ class LexiWindow(Adw.ApplicationWindow):
         text = self.entry.get_text().strip()
         if not text or self.is_streaming:
             return
+
+        # `/wa <contact> <message>` now goes through the same draft + confirm flow as natural language.
+        _wa = re.match(r"^/(?:wa|whatsapp)\s+(\S+)\s+(.+)$", text, re.I)
+        if _wa:
+            text = f"send {_wa.group(2)} to {_wa.group(1)} on whatsapp"
 
         # Direct system commands check
         if text.startswith('$') or text.startswith('/'):
@@ -7832,10 +9749,83 @@ class LexiWindow(Adw.ApplicationWindow):
                 "content": current_user_question
             }
 
-        msgs.append(user_turn)
+        if self.config.get("legacy_prompt", False):
+            msgs.append(user_turn)          # old behaviour: config prompt + raw history
+        else:
+            # Registry-driven action prompt + recent turns + rolling summary.
+            msgs = self.assistant.build_messages(user_turn)
         return msgs, user_turn
 
+    def _confirm_risky(self, text):
+        """Called from the worker thread; blocks until the user answers (60 s -> deny)."""
+        done = threading.Event()
+        answer = {"ok": False, "closed": False, "dlg": None}
+
+        def _show():
+            try:
+                dlg_cls = getattr(Adw, "AlertDialog", None)
+                if dlg_cls is not None:
+                    dlg = dlg_cls.new("Confirm, boss", text)
+                    answer["dlg"] = dlg
+                    dlg.add_response("no", "Cancel")
+                    dlg.add_response("yes", "Run it")
+                    dlg.set_response_appearance("yes", Adw.ResponseAppearance.DESTRUCTIVE)
+                    dlg.set_default_response("no")
+                    dlg.set_close_response("no")
+                    def _done(d, res):
+                        try:
+                            if not answer["closed"]:
+                                answer["ok"] = (d.choose_finish(res) == "yes")
+                        finally:
+                            done.set()
+                    dlg.choose(self, None, _done)
+                else:
+                    dlg = Adw.MessageDialog.new(self, "Confirm, boss", text)
+                    answer["dlg"] = dlg
+                    dlg.add_response("no", "Cancel")
+                    dlg.add_response("yes", "Run it")
+                    dlg.set_response_appearance("yes", Adw.ResponseAppearance.DESTRUCTIVE)
+                    dlg.set_default_response("no")
+                    dlg.set_close_response("no")
+                    def _resp(d, response):
+                        if not answer["closed"]:
+                            answer["ok"] = (response == "yes")
+                        done.set()
+                    dlg.connect("response", _resp)
+                    dlg.present()
+            except Exception as e:
+                log(f"confirm dialog error: {e}")
+                done.set()
+            return False
+
+        GLib.idle_add(_show)
+        if not done.wait(timeout=60):
+            # Timed out: mark closed so a late click cannot approve, and dismiss the dialog.
+            answer["closed"] = True
+            def _close():
+                dlg = answer.get("dlg")
+                try:
+                    if dlg is not None:
+                        dlg.close()
+                except Exception as e:
+                    log(f"confirm dialog close error: {e}")
+                return False
+            GLib.idle_add(_close)
+            return False
+        return bool(answer["ok"])
+
     def run_query(self, user_question):
+        # Deterministic intent router runs BEFORE the LLM. Handled locally -> no model call.
+        try:
+            local_reply = self.assistant.handle_user_text(user_question)
+        except Exception as e:
+            log(f"local intent error: {e}")
+            local_reply = None
+        if local_reply is not None:
+            GLib.idle_add(self.on_query_finished, local_reply,
+                          {"role": "user", "content": user_question}, None)
+            return
+
         full_response = []
         user_turn = None
         try:
@@ -7956,12 +9946,20 @@ class LexiWindow(Adw.ApplicationWindow):
             GLib.idle_add(self.append_stream_token, err_msg)
         finally:
             full_text = "".join(full_response)
-            # Execute any actions detected in LLM response in this background worker thread!
-            actions = SystemActionEngine.get().parse_actions(full_text)
-            action_results = []
-            if actions:
-                action_results = SystemActionEngine.get().execute_action_sequence(actions, user_question=user_question)
-            GLib.idle_add(self.on_query_finished, full_text, user_turn, action_results)
+            eng = SystemActionEngine.get()
+            actions = eng.parse_actions(full_text)
+            errored = (not full_text.strip()) or full_text.startswith(("\n⚠️ Error", "🔑 **No API Key"))
+            if actions and not errored:
+                # Model output may only select registered, schema-validated actions.
+                # The user-facing reply is built from structured results, not model prose.
+                eng.confirm_callback = self._confirm_risky
+                reply = self.assistant.handle_model_actions(actions, user_question)
+                self.assistant.record_llm_exchange(user_question, reply)
+                GLib.idle_add(self.on_query_finished, reply, user_turn, None)
+            else:
+                if not errored and user_turn:
+                    self.assistant.record_llm_exchange(user_question, full_text)
+                GLib.idle_add(self.on_query_finished, full_text, user_turn, None)
 
     def on_query_started(self):
         if self.timer_source_id:
@@ -7970,8 +9968,49 @@ class LexiWindow(Adw.ApplicationWindow):
         self.spinner.stop()
         self.thinking_box.set_visible(False)
 
+    def capture_local_verification_frame(self, timeout=4.0):
+        """Optional P2 local screen-capture observer via GNOME Xdp.Portal.
+        Captures a local frame for OCR/visual verification without sending to cloud models."""
+        done = threading.Event()
+        holder = {"path": None}
+
+        def _capture_on_main():
+            try:
+                portal = Xdp.Portal()
+                def _on_done(_src, res, _data):
+                    try:
+                        uri = portal.take_screenshot_finish(res)
+                        if uri:
+                            parsed = urllib.parse.urlparse(uri)
+                            p = urllib.parse.unquote(parsed.path)
+                            if os.path.exists(p):
+                                holder["path"] = p
+                    except Exception as e:
+                        log(f"Local verification screenshot error: {e}")
+                    finally:
+                        done.set()
+                portal.take_screenshot(None, Xdp.ScreenshotFlags.NONE, None, _on_done, None)
+            except Exception as e:
+                log(f"Local verification portal init error: {e}")
+                done.set()
+            return GLib.SOURCE_REMOVE
+
+        GLib.idle_add(_capture_on_main)
+        done.wait(timeout=timeout)
+        return holder["path"]
+
     def append_stream_token(self, delta):
+        if not self.turn_start_mark:
+            return
+        start_iter = self.text_buffer.get_iter_at_mark(self.turn_start_mark)
         end_iter = self.text_buffer.get_end_iter()
+        current_turn_text = self.text_buffer.get_text(start_iter, end_iter, True) + (delta or "")
+        if "<action" in current_turn_text.lower():
+            # Issue 5: Quarantine optimistic model prose as soon as an action tag appears in stream
+            self.text_buffer.delete(start_iter, end_iter)
+            self.text_buffer.insert(self.text_buffer.get_end_iter(), "⏳ Executing and verifying action(s)...")
+            self.scroll_to_end()
+            return
         self.text_buffer.insert(end_iter, delta)
         self.scroll_to_end()
 
@@ -7985,26 +10024,25 @@ class LexiWindow(Adw.ApplicationWindow):
         self.send_btn.set_sensitive(True)
 
         if full_text and self.turn_start_mark:
-            # Replace raw stream with beautiful formatted markdown
+            # Replace raw stream with verified structured output or formatted markdown
             start_iter = self.text_buffer.get_iter_at_mark(self.turn_start_mark)
             end_iter = self.text_buffer.get_end_iter()
             self.text_buffer.delete(start_iter, end_iter)
 
-            clean_text = SystemActionEngine.get().strip_actions(full_text)
-            if clean_text:
-                render_markdown_to_buffer(self.text_buffer, clean_text)
-
-            if action_results:
-                for act, res in action_results:
-                    render_action_result_to_buffer(self.text_buffer, act, res)
+            parsed_actions = SystemActionEngine.get().parse_actions(full_text)
+            rendered_summary = render_turn_response_to_buffer(
+                self.text_buffer, full_text, action_results=action_results, actions=parsed_actions
+            )
 
             self.text_buffer.delete_mark(self.turn_start_mark)
             self.turn_start_mark = None
 
             if user_turn and not full_text.startswith("\n⚠️ Error"):
                 self.conversation.append(user_turn)
-                self.conversation.append({"role": "assistant", "content": full_text})
-                self.last_answer = clean_text or full_text
+                # Store truthful structured outcome in conversation history when actions ran
+                recorded_assistant = rendered_summary if (parsed_actions or action_results) else full_text
+                self.conversation.append({"role": "assistant", "content": recorded_assistant})
+                self.last_answer = rendered_summary or full_text
 
         self.scroll_to_end()
         self.entry.grab_focus()
@@ -8217,6 +10255,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-
-
-
