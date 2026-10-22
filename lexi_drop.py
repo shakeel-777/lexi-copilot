@@ -185,6 +185,34 @@ class PhoneMirrorManager:
                 except Exception:
                     pass
 
+                # 1. ARP / Neighbor discovery (hotspot clients on 10.42.0.x or Wi-Fi subnet)
+                try:
+                    neigh = subprocess.run(['ip', 'neigh', 'show'], capture_output=True, text=True, timeout=1.5)
+                    if neigh.returncode == 0:
+                        for nl in neigh.stdout.strip().splitlines():
+                            parts = nl.split()
+                            if parts:
+                                nip = parts[0]
+                                if re.match(r'^\d+\.\d+\.\d+\.\d+$', nip) and not nip.startswith('127.'):
+                                    if 'REACHABLE' in nl or 'DELAY' in nl or 'STALE' in nl or nip.startswith('10.42.0.'):
+                                        if nip not in candidate_ips:
+                                            candidate_ips.append(nip)
+                except Exception:
+                    pass
+
+                # 2. Default gateway discovery (if laptop is connected to phone hotspot, e.g. 192.168.43.1)
+                try:
+                    gw_res = subprocess.run(['ip', 'route', 'show', 'default'], capture_output=True, text=True, timeout=1.5)
+                    if gw_res.returncode == 0:
+                        for gl in gw_res.stdout.strip().splitlines():
+                            m = re.search(r'via\s+(\d+\.\d+\.\d+\.\d+)', gl)
+                            if m:
+                                gw_ip = m.group(1)
+                                if gw_ip not in candidate_ips and not gw_ip.startswith('127.'):
+                                    candidate_ips.append(gw_ip)
+                except Exception:
+                    pass
+
                 for cip in candidate_ips:
                     try:
                         subprocess.run(['adb', 'connect', f'{cip}:5555'], capture_output=True, timeout=2)
@@ -420,6 +448,74 @@ def get_unique_destination_path(directory: Path, filename: str) -> Path:
     return candidate
 
 
+def play_beam_sound(sound_name: str = "complete"):
+    """
+    Plays high-fidelity system sound asynchronously for AirDrop audio feedback.
+    Falls back gracefully if sound player or audio file is absent.
+    """
+    def _play():
+        sound_map = {
+            "complete": "/usr/share/sounds/freedesktop/stereo/complete.oga",
+            "send_complete": "/usr/share/sounds/freedesktop/stereo/complete.oga",
+            "receive_complete": "/usr/share/sounds/freedesktop/stereo/complete.oga",
+            "device_found": "/usr/share/sounds/freedesktop/stereo/device-added.oga",
+            "device_removed": "/usr/share/sounds/freedesktop/stereo/device-removed.oga",
+            "bell": "/usr/share/sounds/freedesktop/stereo/bell.oga",
+            "camera": "/usr/share/sounds/freedesktop/stereo/camera-shutter.oga",
+        }
+        snd_file = sound_map.get(sound_name, sound_map["complete"])
+        if not os.path.exists(snd_file):
+            return
+        for player in ('pw-play', 'paplay', 'canberra-gtk-play'):
+            if shutil.which(player):
+                try:
+                    if player == 'canberra-gtk-play':
+                        subprocess.run(['canberra-gtk-play', '-f', snd_file], capture_output=True, timeout=2)
+                    else:
+                        subprocess.run([player, snd_file], capture_output=True, timeout=2)
+                    return
+                except Exception:
+                    pass
+    threading.Thread(target=_play, daemon=True, name="LexiBeamSound").start()
+
+
+_adb_device_names = {}
+
+def get_friendly_adb_device_name(device_id: str) -> str:
+    """Queries friendly marketing name or model of Android device over ADB."""
+    if not device_id:
+        return "Android Phone"
+    if device_id in _adb_device_names:
+        return _adb_device_names[device_id]
+    name = None
+    try:
+        res = subprocess.run(['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.marketname'], capture_output=True, text=True, timeout=1.5)
+        out = res.stdout.strip()
+        if out and out != "unknown":
+            name = out
+    except Exception:
+        pass
+    if not name:
+        try:
+            res = subprocess.run(['adb', '-s', device_id, 'shell', 'settings', 'get', 'global', 'device_name'], capture_output=True, text=True, timeout=1.5)
+            out = res.stdout.strip()
+            if out and out != "null":
+                name = out
+        except Exception:
+            pass
+    if not name:
+        try:
+            res = subprocess.run(['adb', '-s', device_id, 'shell', 'getprop', 'ro.product.model'], capture_output=True, text=True, timeout=1.5)
+            out = res.stdout.strip()
+            if out:
+                name = out
+        except Exception:
+            pass
+    final_name = name or "Android Companion"
+    _adb_device_names[device_id] = final_name
+    return final_name
+
+
 class LexiPeerBeacon:
     """
     Lightweight UDP Multicast / Broadcast Peer Discovery Beacon.
@@ -427,12 +523,15 @@ class LexiPeerBeacon:
     """
     def __init__(self, server):
         self.server = server
-        self.local_ip = server.local_ip
         self.port = server.port
         self.hostname = socket.gethostname() or "Linux-Lexi"
         self.running = False
         self.lan_peers = {}  # ip -> {hostname, ip, port, last_seen, type}
         self.lock = threading.Lock()
+
+    @property
+    def local_ip(self) -> str:
+        return self.server.local_ip
 
     def start(self):
         if self.running:
@@ -447,19 +546,19 @@ class LexiPeerBeacon:
     def _broadcast_loop(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        bcast_ip = get_broadcast_ip(self.local_ip)
-
-        payload = json.dumps({
-            "type": "lexi_peer",
-            "hostname": self.hostname,
-            "ip": self.local_ip,
-            "port": self.port,
-            "os": "linux",
-            "device_type": "laptop"
-        }).encode('utf-8')
 
         while self.running:
             try:
+                curr_ip = self.local_ip
+                bcast_ip = get_broadcast_ip(curr_ip)
+                payload = json.dumps({
+                    "type": "lexi_peer",
+                    "hostname": self.hostname,
+                    "ip": curr_ip,
+                    "port": self.port,
+                    "os": "linux",
+                    "device_type": "laptop"
+                }).encode('utf-8')
                 sock.sendto(payload, ("255.255.255.255", BEACON_PORT))
                 if bcast_ip != "255.255.255.255":
                     sock.sendto(payload, (bcast_ip, BEACON_PORT))
@@ -527,7 +626,8 @@ class LexiDropServer:
     def __init__(self, host="0.0.0.0", port=PORT):
         self.host = host
         self.port = port
-        self.local_ip = get_local_ip()
+        self._local_ip_cached = None
+        self._local_ip_time = 0
         self.active_shared_files = {}  # token -> {path, name, size, time}
         self.connected_websockets = set()
         self.connected_peers = {}      # ws -> {device, ip, connected_at}
@@ -553,12 +653,26 @@ class LexiDropServer:
         self.on_peer_accepted_download = None
         self.current_clipboard_text = ""
 
+    @property
+    def local_ip(self) -> str:
+        now = time.time()
+        if not self._local_ip_cached or (now - self._local_ip_time > 4.0):
+            self._local_ip_cached = get_local_ip()
+            self._local_ip_time = now
+        return self._local_ip_cached
+
+    @local_ip.setter
+    def local_ip(self, val: str):
+        self._local_ip_cached = val
+        self._local_ip_time = time.time()
+
     def get_server_url(self):
         return f"http://{self.local_ip}:{self.port}"
 
     def get_all_peers(self) -> list:
-        """Returns unified list of active peers (Linux P2P, Android App, Web/PWA clients)."""
+        """Returns unified list of active peers (Linux P2P, Android App, Web/PWA clients, ADB)."""
         seen_ips = set()
+        seen_dev_ids = set()
         result = []
         now = time.time()
 
@@ -607,24 +721,46 @@ class LexiDropServer:
                     "port": PORT
                 })
 
-        # 4. Connected ADB phone if present
+        # 4. Connected ADB phone if present (Wi-Fi or USB)
         try:
             res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=1)
             lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
             for line in lines:
-                if 'device' in line and 'offline' not in line:
+                if 'device' in line and 'offline' not in line and 'unauthorized' not in line:
                     dev_id = line.split()[0]
-                    if ':' in dev_id:
-                        pip = dev_id.split(':')[0]
-                        if pip not in seen_ips and pip != self.local_ip:
-                            seen_ips.add(pip)
-                            result.append({
-                                "device": "Android Phone (Companion)",
-                                "ip": pip,
-                                "type": "phone",
-                                "os": "android",
-                                "port": PORT
-                            })
+                    seen_dev_ids.add(dev_id)
+                    pip = dev_id.split(':')[0] if ':' in dev_id else dev_id
+                    friendly_name = get_friendly_adb_device_name(dev_id)
+
+                    # Auto-sync laptop host IP to phone in background
+                    def _sync_host(did=dev_id, lip=self.local_ip, lport=self.port):
+                        try:
+                            subprocess.run(['adb', '-s', did, 'shell', 'am', 'broadcast', '-a', 'com.lexi.connect.SET_HOST', '--es', 'host', lip, '--ei', 'port', str(lport)], capture_output=True, timeout=2)
+                        except Exception:
+                            pass
+                    threading.Thread(target=_sync_host, daemon=True).start()
+
+                    # Merge or update existing peer entry with friendly name
+                    merged = False
+                    for existing in result:
+                        if existing.get("ip") == pip or (existing.get("type") == "phone" and (pip.startswith("10.") or pip.startswith("192."))):
+                            existing["device"] = friendly_name
+                            existing["adb_device"] = dev_id
+                            existing["type"] = "phone"
+                            existing["os"] = "android"
+                            merged = True
+                            break
+
+                    if not merged and pip not in seen_ips and pip != self.local_ip:
+                        seen_ips.add(pip)
+                        result.append({
+                            "device": friendly_name,
+                            "ip": pip,
+                            "adb_device": dev_id,
+                            "type": "phone",
+                            "os": "android",
+                            "port": PORT
+                        })
         except Exception:
             pass
 
@@ -778,6 +914,13 @@ class LexiDropServer:
         if self.on_file_received:
             self.on_file_received(str(dest_path), total_bytes, speed_mbps)
 
+        play_beam_sound("receive_complete")
+        try:
+            sz_str = f"{total_bytes / (1024*1024):.1f} MB" if total_bytes >= 1024*1024 else f"{total_bytes // 1024} KB"
+            subprocess.Popen(['notify-send', '-i', 'document-save', '⚡ Lexi Beam', f'Received {dest_path.name} ({sz_str}) in ~/Downloads'])
+        except Exception:
+            pass
+
         return web.json_response(result)
 
     async def handle_download(self, request):
@@ -895,17 +1038,144 @@ class LexiDropServer:
             final_speed = (received / (1024 * 1024)) / elapsed
             if self.on_file_received:
                 self.on_file_received(str(dest_path), received, final_speed)
+            play_beam_sound("receive_complete")
+            try:
+                sz_str = f"{received / (1024*1024):.1f} MB" if received >= 1024*1024 else f"{received // 1024} KB"
+                subprocess.Popen(['notify-send', '-i', 'document-save', '⚡ Lexi Beam', f'Received {dest_path.name} ({sz_str}) in ~/Downloads'])
+            except Exception:
+                pass
         except Exception as e:
             print(f"[LexiDrop] P2P download failed for {filename}: {e}")
 
     def send_p2p_to_peer(self, peer_ip: str, filepath: str) -> dict:
-        """Sends a direct P2P transfer proposal to another Lexi machine."""
+        """
+        AirDrop-Grade multi-transport file transfer engine.
+        Transfers directly via:
+        1. Fast ADB Push (if peer is an Android phone attached via Wi-Fi or USB)
+        2. WebSocket Direct Push (if peer is connected via Web/PWA receiver)
+        3. Linux LAN P2P Proposal (if peer is a Lexi desktop on LAN)
+        4. High-speed kernel download link fallback
+        """
+        if not filepath or not os.path.exists(filepath):
+            return {"error": f"File not found: {filepath}"}
+
         share_info = self.share_file(filepath)
         token = share_info["token"]
         name = share_info["name"]
         size = share_info["size"]
         url = share_info["url"]
 
+        # --- Transport 1: ADB Direct Push to Android Phone ---
+        try:
+            adb_res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=1.5)
+            lines = [l.strip() for l in adb_res.stdout.strip().split('\n')[1:] if l.strip()]
+            attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
+
+            matched_adb_dev = None
+            if attached:
+                # 1. Exact match on device id or ip
+                for dev in attached:
+                    if peer_ip == dev or (':' in dev and dev.split(':')[0] == peer_ip):
+                        matched_adb_dev = dev
+                        break
+                # 2. Check registered peers: is peer_ip a phone?
+                if not matched_adb_dev and peer_ip in self.registered_peers:
+                    reg = self.registered_peers[peer_ip]
+                    if reg.get("type") == "phone" or reg.get("os") == "android":
+                        matched_adb_dev = attached[0]
+                # 3. If there is only 1 attached phone and peer_ip represents phone
+                if not matched_adb_dev and len(attached) == 1:
+                    if peer_ip.startswith("10.") or peer_ip.startswith("192.") or "phone" in peer_ip.lower() or peer_ip == "usb":
+                        matched_adb_dev = attached[0]
+
+            if matched_adb_dev:
+                friendly_name = get_friendly_adb_device_name(matched_adb_dev)
+                dest_phone_path = f"/sdcard/Download/{name}"
+                t0 = time.time()
+                timeout_sec = max(35, int(size / (500 * 1024)) + 15)
+
+                push = subprocess.run(
+                    ['adb', '-s', matched_adb_dev, 'push', filepath, dest_phone_path],
+                    capture_output=True, text=True, timeout=timeout_sec
+                )
+
+                if push.returncode == 0:
+                    elapsed = max(time.time() - t0, 0.05)
+                    speed_mbps = (size / (1024 * 1024)) / elapsed
+
+                    # A. Trigger Android MediaScanner so file appears in Gallery/Downloads
+                    subprocess.run(
+                        ['adb', '-s', matched_adb_dev, 'shell', 'am', 'broadcast', '-a', 'android.intent.action.MEDIA_SCANNER_SCAN_FILE', '-d', f'file://{dest_phone_path}'],
+                        capture_output=True, timeout=2
+                    )
+
+                    # B. Post Android system notification
+                    subprocess.run(
+                        ['adb', '-s', matched_adb_dev, 'shell', 'cmd', 'notification', 'post', '-S', 'bigtext', '-t', '⚡ Lexi Beam', 'lexi_beam_recv', f'Received {name} in Downloads'],
+                        capture_output=True, timeout=2
+                    )
+
+                    # C. Notify Lexi Connect companion app
+                    subprocess.run(
+                        ['adb', '-s', matched_adb_dev, 'shell', 'am', 'broadcast', '-a', 'com.lexi.connect.BEAM_RECEIVED', '--es', 'filename', name, '--es', 'path', dest_phone_path, '--el', 'size', str(size)],
+                        capture_output=True, timeout=2
+                    )
+
+                    # D. Play chime on laptop
+                    play_beam_sound("send_complete")
+
+                    return {
+                        "success": True,
+                        "status": "delivered_adb",
+                        "method": "adb",
+                        "device": friendly_name,
+                        "filename": name,
+                        "size": size,
+                        "speed_mbps": round(speed_mbps, 1),
+                        "destination": dest_phone_path,
+                        "share_info": share_info
+                    }
+        except Exception as e:
+            print(f"[LexiDrop] ADB push attempt error: {e}", file=sys.stderr)
+
+        # --- Transport 2: WebSocket Direct Push to Connected Browser / PWA ---
+        if self.loop and self.connected_peers:
+            target_ws = None
+            target_device_name = "Web Client"
+            for ws, info in self.connected_peers.items():
+                if info.get("ip") == peer_ip or peer_ip in info.get("device", "") or peer_ip == "web":
+                    target_ws = ws
+                    target_device_name = info.get("device", "Web Client")
+                    break
+
+            if target_ws and target_ws in self.connected_websockets:
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        target_ws.send_json({
+                            "type": "incoming_file",
+                            "file": {
+                                "token": token,
+                                "name": name,
+                                "size": size,
+                                "url": f"/api/download/{token}"
+                            }
+                        }),
+                        self.loop
+                    )
+                    play_beam_sound("send_complete")
+                    return {
+                        "success": True,
+                        "status": "delivered_ws",
+                        "method": "websocket",
+                        "device": target_device_name,
+                        "filename": name,
+                        "size": size,
+                        "share_info": share_info
+                    }
+                except Exception as e:
+                    print(f"[LexiDrop] WS direct push error: {e}", file=sys.stderr)
+
+        # --- Transport 3: Linux-to-Linux LAN P2P Proposal ---
         payload = json.dumps({
             "from_device": socket.gethostname(),
             "from_ip": self.local_ip,
@@ -924,10 +1194,18 @@ class LexiDropServer:
         try:
             with urllib.request.urlopen(req, timeout=2.5) as resp:
                 result = json.loads(resp.read().decode('utf-8'))
+                result["success"] = True
+                result["status"] = "delivered_proposal"
+                result["method"] = "p2p"
                 result["share_info"] = share_info
+                play_beam_sound("send_complete")
                 return result
         except Exception as e:
-            return {"error": f"Failed to reach peer at {peer_ip}: {e}", "share_info": share_info}
+            return {
+                "success": False,
+                "error": f"Failed to reach peer at {peer_ip}: {e}",
+                "share_info": share_info
+            }
 
     async def handle_status(self, request):
         return web.json_response({

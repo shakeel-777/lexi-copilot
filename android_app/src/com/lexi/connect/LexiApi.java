@@ -11,7 +11,7 @@ public class LexiApi {
     private static final String PREFS_NAME = "lexi_connect_prefs";
     private static final String KEY_HOST = "host_ip";
     private static final String KEY_PORT = "host_port";
-    public static final String DEFAULT_HOST = "10.93.59.11";
+    public static final String DEFAULT_HOST = "10.22.216.11";
     public static final int DEFAULT_PORT = 7890;
 
     public interface ProgressListener {
@@ -31,6 +31,11 @@ public class LexiApi {
     public static int getPort(Context ctx) {
         SharedPreferences p = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         return p.getInt(KEY_PORT, DEFAULT_PORT);
+    }
+
+    public static void setPort(Context ctx, int port) {
+        SharedPreferences p = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        p.edit().putInt(KEY_PORT, port).apply();
     }
 
     public static String getBaseUrl(Context ctx) {
@@ -175,6 +180,79 @@ public class LexiApi {
         return null;
     }
 
+    public static boolean pingHostWithIp(String host, int port) {
+        if (host == null || host.trim().isEmpty()) return false;
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL("http://" + host.trim() + ":" + port + "/api/status");
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(1200);
+            conn.setReadTimeout(1200);
+            return conn.getResponseCode() == 200;
+        } catch (Exception ignored) {
+            return false;
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    public static String discoverHostSync(Context ctx) {
+        String current = getHost(ctx);
+        int port = getPort(ctx);
+        if (pingHostWithIp(current, port)) {
+            return current;
+        }
+
+        // 1. Try Wi-Fi DHCP Gateway (Hotspot or local router)
+        try {
+            android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                android.net.DhcpInfo dhcp = wm.getDhcpInfo();
+                if (dhcp != null && dhcp.gateway != 0) {
+                    int g = dhcp.gateway;
+                    String gw = String.format("%d.%d.%d.%d", (g & 0xff), (g >> 8 & 0xff), (g >> 16 & 0xff), (g >> 24 & 0xff));
+                    if (pingHostWithIp(gw, port)) {
+                        setHost(ctx, gw);
+                        return gw;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        // 2. Try standard Lexi Hotspot Gateway (10.42.0.1)
+        if (pingHostWithIp("10.42.0.1", port)) {
+            setHost(ctx, "10.42.0.1");
+            return "10.42.0.1";
+        }
+
+        // 3. Try UDP Beacon Discovery (listen on port 7891 for up to 1.2s)
+        try {
+            java.net.DatagramSocket sock = new java.net.DatagramSocket(7891);
+            sock.setSoTimeout(1200);
+            byte[] buf = new byte[1024];
+            java.net.DatagramPacket packet = new java.net.DatagramPacket(buf, buf.length);
+            sock.receive(packet);
+            sock.close();
+            String s = new String(packet.getData(), 0, packet.getLength(), "UTF-8");
+            if (s.contains("\"type\":\"lexi_peer\"") || s.contains("\"ip\"")) {
+                int idx = s.indexOf("\"ip\":");
+                if (idx != -1) {
+                    int st = s.indexOf("\"", idx + 5);
+                    int en = s.indexOf("\"", st + 1);
+                    if (st != -1 && en > st) {
+                        String bIp = s.substring(st + 1, en);
+                        if (pingHostWithIp(bIp, port)) {
+                            setHost(ctx, bIp);
+                            return bIp;
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return current;
+    }
+
     /**
      * Queries host status and ping latency.
      */
@@ -184,14 +262,33 @@ public class LexiApi {
         try {
             URL url = new URL(getBaseUrl(ctx) + "/api/status");
             conn = (HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(2000);
-            conn.setReadTimeout(2000);
+            conn.setConnectTimeout(1500);
+            conn.setReadTimeout(1500);
             if (conn.getResponseCode() == 200) {
                 return (int) (System.currentTimeMillis() - t0);
             }
         } catch (Exception ignored) {}
         finally {
             if (conn != null) conn.disconnect();
+        }
+
+        // Auto-discover if current host is offline
+        String currentHost = getHost(ctx);
+        String found = discoverHostSync(ctx);
+        if (found != null && !found.equals(currentHost)) {
+            t0 = System.currentTimeMillis();
+            try {
+                URL url = new URL(getBaseUrl(ctx) + "/api/status");
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(1500);
+                conn.setReadTimeout(1500);
+                if (conn.getResponseCode() == 200) {
+                    return (int) (System.currentTimeMillis() - t0);
+                }
+            } catch (Exception ignored) {}
+            finally {
+                if (conn != null) conn.disconnect();
+            }
         }
         return -1;
     }

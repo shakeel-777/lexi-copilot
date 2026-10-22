@@ -1819,6 +1819,30 @@ class SystemActionEngine:
         except Exception as e:
             return {"success": False, "message": f"Failed to launch phone mirror: {e}"}
 
+    def toggle_hotspot(self, enable=True):
+        """Starts or stops the local high-speed Wi-Fi hotspot via NetworkManager."""
+        try:
+            if enable:
+                res = subprocess.run(['nmcli', 'connection', 'up', 'Hotspot'], capture_output=True, text=True, timeout=5)
+                if res.returncode == 0:
+                    return {
+                        "success": True,
+                        "message": (
+                            "🔗 **Direct Wi-Fi Hotspot Started!**\n\n"
+                            "• **Network Name (SSID)**: `shakeel`\n"
+                            "• **Password**: `shakeel786`\n"
+                            "• **Subnet**: Direct low-latency P2P (`10.42.0.x`)\n\n"
+                            "Connect your phone to `shakeel`, and Lexi will automatically establish the wireless mirroring link!"
+                        )
+                    }
+                else:
+                    return {"success": False, "message": f"Failed to start hotspot: {res.stderr.strip() or res.stdout.strip()}"}
+            else:
+                subprocess.run(['nmcli', 'connection', 'down', 'Hotspot'], capture_output=True, text=True, timeout=5)
+                return {"success": True, "message": "🔗 **Wi-Fi Hotspot Stopped.** Switched back to normal Wi-Fi."}
+        except Exception as e:
+            return {"success": False, "message": f"Hotspot error: {e}"}
+
     def execute_action(self, action):
         act_type = action.get('type', 'command').lower().strip()
         attrs = action.get('attrs', {})
@@ -1873,6 +1897,11 @@ class SystemActionEngine:
         elif act_type in ('mirror', 'phone', 'scrcpy'):
             turn_screen_off = str(attrs.get('turn_screen_off', '')).lower() in ('true', '1', 'yes')
             return self.start_phone_mirror(turn_screen_off=turn_screen_off)
+
+        elif act_type in ('hotspot', 'wifi_hotspot'):
+            state = attrs.get('state') or body or 'on'
+            enable = str(state).lower().strip() not in ('off', 'stop', 'disable', 'false', '0', 'down')
+            return self.toggle_hotspot(enable=enable)
 
         elif act_type == 'browser':
             return self.execute_browser_action(action)
@@ -6596,14 +6625,24 @@ class LexiDynamicIslandWindow(Gtk.Window):
 
         peers = self.drop_server.get_all_peers() if getattr(self, 'drop_server', None) else []
         if peers:
-            p0 = peers[0]
-            peer_label = f"⚡ Send to {p0['device']}"
+            phone_peers = [peer for peer in peers if peer.get("type") == "phone"]
+            target_peer = phone_peers[0] if phone_peers else peers[0]
+
+            peer_label = f"⚡ Beam to {target_peer['device']}"
             p_btn = Gtk.Button(label=peer_label)
             p_btn.set_focusable(False)
             p_btn.add_css_class('island-beam-btn')
-            p_btn.set_tooltip_text(f"Send directly to {p0['device']} ({p0['ip']})")
-            p_btn.connect('clicked', lambda _, pip=p0['ip'], fp=p: self.on_send_direct_to_peer(pip, fp))
+            p_btn.set_tooltip_text(f"AirDrop directly to {target_peer['device']} ({target_peer['ip']})")
+            p_btn.connect('clicked', lambda _, pip=target_peer['ip'], fp=p: self.on_send_direct_to_peer(pip, fp))
             self.convert_box.append(p_btn)
+
+            if len(peers) > 1:
+                hub_btn = Gtk.Button(label=f"📡 Hub ({len(peers)})")
+                hub_btn.set_focusable(False)
+                hub_btn.add_css_class('island-convert-btn')
+                hub_btn.set_tooltip_text("View all nearby AirDrop peers and QR code")
+                hub_btn.connect('clicked', lambda *_: self.on_show_qr_for_file(p))
+                self.convert_box.append(hub_btn)
         else:
             beam_label = "⚡ Beam to Laptop" if is_archive else "⚡ Beam"
             beam_btn = Gtk.Button(label=beam_label)
@@ -6802,7 +6841,15 @@ class LexiDynamicIslandWindow(Gtk.Window):
 
             fname = os.path.basename(file_path)
             short_name = (fname[:12] + '…') if len(fname) > 13 else fname
-            lbl = Gtk.Label(label=f"⚡ Sent proposal for {short_name} to peer!")
+            method = res.get("method")
+            if method == "adb":
+                dev = res.get("device", "Phone")
+                lbl = Gtk.Label(label=f"✓ Beamed {short_name} to {dev} (Downloads)!")
+            elif method == "websocket":
+                dev = res.get("device", "Web Client")
+                lbl = Gtk.Label(label=f"✓ Beamed {short_name} to {dev}!")
+            else:
+                lbl = Gtk.Label(label=f"⚡ Sent proposal for {short_name} to peer!")
             lbl.add_css_class('dynamic-island-label')
             self.convert_box.append(lbl)
 
@@ -7055,17 +7102,8 @@ class LexiDynamicIslandWindow(Gtk.Window):
                     if os.path.exists(p):
                         paths.append(p)
         if paths:
-            presets = converter.get_presets_for_file(paths[0])
-            ext = os.path.splitext(paths[0])[1].lower()
-            is_archive = ext in ('.zip', '.tar', '.gz', '.tgz', '.bz2', '.xz', '.7z', '.iso', '.dmg', '.bin', '.rar', '.pkg')
-            if presets or is_archive:
-                self.show_converter_bar(paths)
-                return True
-            elif self.copilot_win:
-                for p in paths:
-                    self.copilot_win.feed_file(p)
-                self.on_expand_copilot()
-                return True
+            self.show_converter_bar(paths)
+            return True
         return False
 
 # Backwards compatibility alias
@@ -7611,6 +7649,20 @@ class LexiBeamWindow(Gtk.Window):
         self.status_lbl.add_css_class('lexi-qr-status')
         root.append(self.status_lbl)
 
+        # Drag and drop support for files directly into window
+        drop_target = Gtk.DropTarget.new(Gio.File, Gdk.DragAction.COPY)
+        def _on_file_drop(target, value, x, y):
+            if value and hasattr(value, 'get_path'):
+                p = value.get_path()
+                if p and os.path.exists(p):
+                    self.file_path = p
+                    self._update_file_preview()
+                    self.status_lbl.set_label(f"📄 Loaded {os.path.basename(p)} · Ready to Beam")
+                    return True
+            return False
+        drop_target.connect('drop', _on_file_drop)
+        self.add_controller(drop_target)
+
         # Refresh peers immediately & on timer
         self._refresh_peers()
         self.poll_timer_id = GLib.timeout_add_seconds(2, self._refresh_peers)
@@ -7630,7 +7682,7 @@ class LexiBeamWindow(Gtk.Window):
             self.file_lbl.set_label(f"📄 {short_name} ({sz_str})")
             self.pick_file_btn.set_label("Change")
         else:
-            self.file_lbl.set_label("No file selected yet")
+            self.file_lbl.set_label("No file selected yet (Drop file here)")
             self.pick_file_btn.set_label("📁 Choose File")
 
     def _on_pick_file(self, on_chosen_cb=None):
@@ -7683,7 +7735,7 @@ class LexiBeamWindow(Gtk.Window):
             pip = peer.get("ip")
             dev_name = peer.get("device", "Lexi Peer")
             dev_type = peer.get("type", "laptop")
-            is_phone = dev_type == "phone" or "phone" in dev_name.lower() or "android" in dev_name.lower()
+            is_phone = dev_type == "phone" or "phone" in dev_name.lower() or "android" in dev_name.lower() or "redmi" in dev_name.lower()
 
             card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
             card.add_css_class('lexi-beam-device-card')
@@ -7698,7 +7750,8 @@ class LexiBeamWindow(Gtk.Window):
             name_lbl.add_css_class('lexi-beam-device-name')
             info_box.append(name_lbl)
 
-            ip_lbl = Gtk.Label(label=f"● Online · {pip}", xalign=0)
+            status_text = "⚡ Instant AirDrop" if is_phone else f"● Online · {pip}"
+            ip_lbl = Gtk.Label(label=status_text, xalign=0)
             ip_lbl.add_css_class('lexi-beam-device-ip')
             info_box.append(ip_lbl)
             card.append(info_box)
@@ -7722,7 +7775,7 @@ class LexiBeamWindow(Gtk.Window):
     def _beam_file_to_peer(self, file_path, peer_ip, dev_name, beam_btn):
         beam_btn.set_label("⏳ Sending...")
         beam_btn.set_sensitive(False)
-        self.status_lbl.set_label(f"⚡ Proposing transfer to {dev_name}...")
+        self.status_lbl.set_label(f"⚡ Beaming {os.path.basename(file_path)} to {dev_name}...")
 
         def _send():
             server = lexi_drop.get_lexi_drop_instance() if lexi_drop else None
@@ -7737,8 +7790,17 @@ class LexiBeamWindow(Gtk.Window):
                 self.status_lbl.set_label(f"⚠️ {err[:35]}")
                 GLib.timeout_add_seconds(3, lambda: (beam_btn.set_label("⚡ Beam"), beam_btn.set_sensitive(True)))
             else:
-                beam_btn.set_label("✓ Sent")
-                self.status_lbl.set_label(f"✨ Sent to {dev_name}! Waiting for accept...")
+                method = res.get("method")
+                if method == "adb":
+                    spd = res.get("speed_mbps", 0)
+                    beam_btn.set_label("✓ Beamed!")
+                    self.status_lbl.set_label(f"✨ Beamed to {dev_name} (Downloads) @ {spd:.1f} MB/s!")
+                elif method == "websocket":
+                    beam_btn.set_label("✓ Beamed!")
+                    self.status_lbl.set_label(f"✨ Delivered to {dev_name} via Web Receiver!")
+                else:
+                    beam_btn.set_label("✓ Sent")
+                    self.status_lbl.set_label(f"✨ Sent to {dev_name}! Waiting for accept...")
                 GLib.timeout_add_seconds(4, lambda: (beam_btn.set_label("⚡ Beam"), beam_btn.set_sensitive(True)))
 
         threading.Thread(target=lambda: GLib.idle_add(_on_done, _send()), daemon=True).start()

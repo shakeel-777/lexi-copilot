@@ -63,10 +63,16 @@ public class DynamicIslandService extends Service implements View.OnTouchListene
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && "expand".equals(intent.getStringExtra("action"))) {
-            handler.post(this::expandIsland);
-        } else if (intent != null && "collapse".equals(intent.getStringExtra("action"))) {
-            handler.post(this::collapseIsland);
+        if (intent != null) {
+            String act = intent.getStringExtra("action");
+            if ("expand".equals(act)) {
+                handler.post(this::expandIsland);
+            } else if ("collapse".equals(act)) {
+                handler.post(this::collapseIsland);
+            } else if ("beam_alert".equals(act)) {
+                String fname = intent.getStringExtra("filename");
+                handler.post(() -> showBeamAlert(fname));
+            }
         }
         return START_STICKY;
     }
@@ -306,6 +312,16 @@ public class DynamicIslandService extends Service implements View.OnTouchListene
         try {
             windowManager.updateViewLayout(islandRoot, params);
         } catch (Exception ignored) {}
+    }
+
+    public void showBeamAlert(String filename) {
+        if (filename == null || filename.isEmpty()) filename = "File";
+        if (tvExpandedTitle != null) tvExpandedTitle.setText("⚡ Received " + filename + " (Downloads)");
+        if (tvCompactStatus != null) tvCompactStatus.setText("⚡ " + filename);
+        if (viewCompactDot != null) viewCompactDot.setVisibility(View.VISIBLE);
+        if (viewExpandedDot != null) viewExpandedDot.setVisibility(View.VISIBLE);
+        expandIsland();
+        vibrate(35);
     }
 
     private int registerCounter = 0;
