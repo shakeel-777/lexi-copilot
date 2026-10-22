@@ -137,6 +137,62 @@ _OPEN_RE = re.compile(
     re.I
 )
 
+_PHONE_BATTERY_RE = re.compile(
+    r"^(?:(?:what(?:\x27s| is)|check)\s+(?:the\s+|my\s+)?)?phone(?:'?s)?\s+battery(?:\s+(?:percentage|level|status|life|health))?$"
+    r"|^(?:check\s+)?battery\s+(?:on|of)\s+(?:my\s+|the\s+)?phone$"
+    r"|^(?:how\s+much\s+)?phone\s+battery(?:\s+do\s+i\s+have)?$",
+    re.I
+)
+
+_PHONE_RING_RE = re.compile(
+    r"^(?:ring|find|buzz|locate|call)\s+(?:my\s+|the\s+)?phone$"
+    r"|^(?:where\s+is\s+my\s+phone|ping\s+my\s+phone)$",
+    re.I
+)
+
+_PHONE_SNAP_RE = re.compile(
+    r"^(?:take|snap|capture)\s+(?:a\s+)?(?:photo|pic|picture|camera\s+snap)\s+(?:from|with|using)\s+(?:my\s+|the\s+)?phone$"
+    r"|^(?:phone\s+camera\s+snap|snap\s+phone\s+camera)$",
+    re.I
+)
+
+_PHONE_CLIPBOARD_RE = re.compile(
+    r"^(?:push|sync|send|copy)\s+(?:the\s+|my\s+)?clipboard\s+to\s+(?:my\s+|the\s+)?phone$"
+    r"|^sync\s+clipboard$",
+    re.I
+)
+
+_SYS_RESOURCES_RE = re.compile(
+    r"^(?:(?:check|what(?:\x27s| is))\s+)?(?:system\s+|cpu\s+|ram\s+|memory\s+|disk\s+)?(?:resources|usage|stats|load)$"
+    r"|^(?:how\s+is\s+my\s+cpu|what\s+is\s+eating\s+my\s+(?:cpu|ram|memory|disk))$"
+    r"|^(?:check\s+)?(?:disk\s+space|cpu\s+usage|ram\s+usage)$",
+    re.I
+)
+
+_NETWORK_STATUS_RE = re.compile(
+    r"^(?:(?:check|what(?:\x27s| is))\s+)?(?:my\s+)?(?:network|wifi|wi-fi|internet)(?:\s+(?:status|connection|speed))?$"
+    r"|^(?:what(?:\x27s| is)\s+my\s+ip(?:\s+address)?)$"
+    r"|^(?:am\s+i\s+connected\s+to\s+(?:the\s+)?internet)$",
+    re.I
+)
+
+_WIFI_LIST_RE = re.compile(
+    r"^(?:scan|list|show|find|search)\s+(?:available\s+|nearby\s+)?(?:wi-?fi|wifi)(?:\s+networks)?$",
+    re.I
+)
+
+_BLUETOOTH_RE = re.compile(
+    r"^(?:turn|switch)\s+bluetooth\s+(?P<act1>on|off)$"
+    r"|^bluetooth\s+(?P<act2>on|off)$"
+    r"|^(?:check\s+)?bluetooth(?:\s+status)?$",
+    re.I
+)
+
+_CLIPBOARD_READ_RE = re.compile(
+    r"^(?:what(?:\x27s| is)\s+(?:on|in)\s+(?:the\s+|my\s+)?clipboard|read\s+(?:the\s+|my\s+)?clipboard|show\s+(?:the\s+|my\s+)?clipboard|paste\s+clipboard)$",
+    re.I
+)
+
 _BATTERY_RE = re.compile(
     r"^(?:(?:what(?:\x27s| is)|check)\s+(?:the\s+|my\s+)?)?battery(?:\s+(?:percentage|level|status|life|health))?$"
     r"|^(?:how\s+much\s+)?battery(?:\s+do\s+i\s+have)?$"
@@ -642,9 +698,32 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
     if math_res:
         return Route(REPLY, text=math_res)
 
-    # 0a-iv. Battery queries
+    # 0a-iv. Phone & Battery queries
+    if _PHONE_BATTERY_RE.match(low):
+        return Route(ACTION, "phone_battery", {})
+    if _PHONE_RING_RE.match(low):
+        return Route(ACTION, "phone_ring", {})
+    if _PHONE_SNAP_RE.match(low):
+        return Route(ACTION, "phone_camera_snap", {})
+    if _PHONE_CLIPBOARD_RE.match(low):
+        return Route(ACTION, "phone_clipboard_sync", {})
+
     if _BATTERY_RE.match(low):
         return Route(ACTION, "system_battery", {})
+
+    # Extended System & Network queries
+    if _SYS_RESOURCES_RE.match(low):
+        return Route(ACTION, "system_resources", {})
+    if _NETWORK_STATUS_RE.match(low):
+        return Route(ACTION, "network_status", {})
+    if _WIFI_LIST_RE.match(low):
+        return Route(ACTION, "wifi_list", {})
+    m_bt = _BLUETOOTH_RE.match(low)
+    if m_bt:
+        act = m_bt.group("act1") or m_bt.group("act2") or "status"
+        return Route(ACTION, "bluetooth_control", {"action": act})
+    if _CLIPBOARD_READ_RE.match(low):
+        return Route(ACTION, "clipboard_read", {})
 
     # 0a-v. Media now playing query
     if _NOW_PLAYING_RE.match(low):

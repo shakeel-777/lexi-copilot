@@ -1167,3 +1167,22 @@ window.lexi-beam-win,
     color: #64748b;
 }
 
+/* Dynamic Island Quick Notch Prompt */
+.island-notch-entry {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 9999px;
+    color: #ffffff;
+    font-size: 11px;
+    padding: 2px 10px;
+    min-height: 24px;
+    outline: none;
+    box-shadow: none;
+}
+
+.island-notch-entry:focus {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.45);
+    box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
+}
+

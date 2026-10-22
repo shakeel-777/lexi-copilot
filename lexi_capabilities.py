@@ -373,6 +373,82 @@ _register(Capability(
     executor="system_poweroff",
     router_only=True,
 ))
+
+# --- Mobile & Phone Copilot Capabilities (Android Companion / ADB) ---
+_register(Capability(
+    name="phone_battery",
+    description="Check the connected Android phone's battery percentage, charging state, and health via ADB.",
+    schema={},
+    verification="adb dumpsys battery reported state",
+    failure_text="I couldn't check your phone's battery level.",
+    executor="phone_battery",
+))
+_register(Capability(
+    name="phone_ring",
+    description="Ring the connected Android phone at maximum volume to help locate it.",
+    schema={},
+    verification="alarm ringtone triggered on phone",
+    failure_text="I couldn't ring your phone.",
+    executor="phone_ring",
+))
+_register(Capability(
+    name="phone_camera_snap",
+    description="Trigger a camera snap on the connected phone and load the photo into Lexi.",
+    schema={},
+    verification="photo captured by phone camera",
+    failure_text="I couldn't take a photo from your phone.",
+    executor="phone_camera_snap",
+))
+_register(Capability(
+    name="phone_clipboard_sync",
+    description="Sync text from desktop clipboard or message argument directly to connected Android phone.",
+    schema={"text": Field("str", required=False, max_len=4000, allow_free_text=True)},
+    verification="clipboard synced to phone companion app",
+    failure_text="I couldn't sync clipboard to your phone.",
+    executor="phone_clipboard_sync",
+))
+
+# --- Extended Hardware & System Capabilities ---
+_register(Capability(
+    name="system_resources",
+    description="Check CPU usage, RAM utilization, load average, disk space, and temperatures.",
+    schema={},
+    verification="system status read from proc and sysfs",
+    failure_text="I couldn't read system resources.",
+    executor="system_resources",
+))
+_register(Capability(
+    name="network_status",
+    description="Check active Wi-Fi SSID, local IP address, gateway latency, and internet status.",
+    schema={},
+    verification="network interface and ping verified",
+    failure_text="I couldn't check network status.",
+    executor="network_status",
+))
+_register(Capability(
+    name="wifi_list",
+    description="Scan and list nearby available Wi-Fi networks with signal strength.",
+    schema={},
+    verification="nmcli wifi scan completed",
+    failure_text="I couldn't scan Wi-Fi networks.",
+    executor="wifi_list",
+))
+_register(Capability(
+    name="bluetooth_control",
+    description="Check bluetooth status or turn bluetooth radio on/off.",
+    schema={"action": Field("enum", choices=("status", "on", "off"))},
+    verification="bluetoothctl / rfkill state confirmed",
+    failure_text="I couldn't manage bluetooth.",
+    executor="bluetooth_control",
+))
+_register(Capability(
+    name="clipboard_read",
+    description="Read the current contents of the desktop clipboard.",
+    schema={},
+    verification="clipboard content read via wl-paste/xclip",
+    failure_text="I couldn't read your clipboard.",
+    executor="clipboard_read",
+))
 # Intentionally NOT registered: raw keystrokes, typing text, JavaScript, selectors.
 # (Shell commands ARE available, but only through terminal_task and its policy.)
 

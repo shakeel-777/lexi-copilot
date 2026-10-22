@@ -93,6 +93,8 @@
             <intent-filter>
                 <action android:name="com.lexi.connect.SET_HOST" />
                 <action android:name="com.lexi.connect.BEAM_RECEIVED" />
+                <action android:name="com.lexi.connect.RING_PHONE" />
+                <action android:name="com.lexi.connect.SYNC_CLIPBOARD" />
             </intent-filter>
         </receiver>
 

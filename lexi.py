@@ -1375,6 +1375,359 @@ class SystemActionEngine:
         except Exception as e:
             return {"success": False, "verified": False, "message": f"Could not shut down: {e}"}
 
+    # --- Mobile Copilot Superpowers (ADB & Companion App) ----------------------
+    def _get_connected_phone_adb(self):
+        """Find the first active connected ADB device."""
+        if not shutil.which("adb"):
+            return None
+        try:
+            res = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=2.0)
+            if res.returncode == 0:
+                for line in res.stdout.strip().splitlines()[1:]:
+                    parts = line.strip().split()
+                    if len(parts) >= 2 and parts[1] == "device":
+                        return parts[0]
+        except Exception:
+            pass
+        return None
+
+    def get_phone_battery(self):
+        """Read Android battery status via ADB."""
+        dev = self._get_connected_phone_adb()
+        if not dev:
+            return {"success": False, "verified": False, "message": "No Android phone is currently connected via ADB or Wi-Fi."}
+        try:
+            res = subprocess.run(["adb", "-s", dev, "shell", "dumpsys", "battery"], capture_output=True, text=True, timeout=3.0)
+            if res.returncode != 0 or not res.stdout:
+                return {"success": False, "verified": False, "message": "Could not read phone battery status."}
+
+            info = {}
+            for line in res.stdout.splitlines():
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    info[k.strip().lower()] = v.strip()
+
+            level = info.get("level", "Unknown")
+            status_code = info.get("status", "1")
+            status_map = {"1": "unknown", "2": "charging", "3": "discharging", "4": "not charging", "5": "full"}
+            status_str = status_map.get(status_code, "discharging")
+
+            health_code = info.get("health", "2")
+            health_map = {"1": "unknown", "2": "good", "3": "overheat", "4": "dead", "5": "over voltage", "6": "failure", "7": "cold"}
+            health_str = health_map.get(health_code, "good")
+
+            temp_str = ""
+            if "temperature" in info:
+                try:
+                    t_val = float(info["temperature"]) / 10.0
+                    temp_str = f", {t_val:.1f}°C"
+                except Exception:
+                    pass
+
+            dev_name = dev
+            try:
+                from lexi_drop import get_friendly_adb_device_name
+                dev_name = get_friendly_adb_device_name(dev)
+            except Exception:
+                pass
+
+            msg = f"📱 {dev_name} battery is at {level}% ({status_str}{temp_str}, health: {health_str})."
+            self.notify("Lexi Phone", msg)
+            return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Error querying phone battery: {e}"}
+
+    def ring_phone(self):
+        """Ring connected Android phone at maximum volume to locate it."""
+        dev = self._get_connected_phone_adb()
+        if not dev:
+            return {"success": False, "verified": False, "message": "No Android phone is connected to ring."}
+        try:
+            # 1. Unmute & set volumes to maximum
+            subprocess.run(["adb", "-s", dev, "shell", "cmd", "media_session", "volume", "--set", "15"], capture_output=True, timeout=2.0)
+            subprocess.run(["adb", "-s", dev, "shell", "settings", "put", "system", "volume_ring", "15"], capture_output=True, timeout=1.5)
+            subprocess.run(["adb", "-s", dev, "shell", "settings", "put", "system", "volume_alarm", "15"], capture_output=True, timeout=1.5)
+
+            # 2. Wake phone screen
+            subprocess.run(["adb", "-s", dev, "shell", "input", "keyevent", "224"], capture_output=True, timeout=1.5)
+
+            # 3. Broadcast to Lexi Companion App
+            subprocess.run(["adb", "-s", dev, "shell", "am", "broadcast", "-a", "com.lexi.connect.RING_PHONE"], capture_output=True, timeout=2.0)
+
+            # 4. Trigger system ringtone / alarm preview fallback
+            subprocess.run([
+                "adb", "-s", dev, "shell", "am", "start", "-a", "android.intent.action.VIEW",
+                "-d", "file:///system/media/audio/alarms/AlarmClock.ogg", "-t", "audio/ogg"
+            ], capture_output=True, timeout=2.0)
+
+            msg = "🔔 Ringing your phone at maximum volume!"
+            self.notify("Lexi Phone", msg)
+            return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not ring phone: {e}"}
+
+    def trigger_phone_camera_snap(self):
+        """Trigger phone camera capture and pull photo into Lexi."""
+        dev = self._get_connected_phone_adb()
+        if not dev:
+            return {"success": False, "verified": False, "message": "No Android phone is connected for camera snap."}
+        try:
+            subprocess.run(["adb", "-s", dev, "shell", "input", "keyevent", "224"], capture_output=True, timeout=1.5)
+            subprocess.run(["adb", "-s", dev, "shell", "am", "start", "-a", "android.media.action.STILL_IMAGE_CAMERA"], capture_output=True, timeout=3.0)
+            time.sleep(1.2)
+            subprocess.run(["adb", "-s", dev, "shell", "input", "keyevent", "27"], capture_output=True, timeout=2.0)
+            time.sleep(1.0)
+
+            cmd = "ls -t /sdcard/DCIM/Camera/IMG_*.jpg 2>/dev/null | head -n 1"
+            chk = subprocess.run(["adb", "-s", dev, "shell", cmd], capture_output=True, text=True, timeout=3.0)
+            newest = chk.stdout.strip()
+
+            snap_dest = f"/tmp/lexi_phone_snap_{int(time.time())}.jpg"
+            if newest and not newest.startswith("ls:") and not "No such file" in newest:
+                pull = subprocess.run(["adb", "-s", dev, "pull", newest, snap_dest], capture_output=True, timeout=8.0)
+                if pull.returncode == 0 and os.path.exists(snap_dest) and os.path.getsize(snap_dest) > 0:
+                    msg = f"📸 Photo captured from phone and saved to {snap_dest}."
+                    self.notify("Lexi Camera", msg)
+                    return {"success": True, "verified": True, "message": msg, "path": snap_dest}
+
+            # Fallback to screencap
+            scap_path = f"/tmp/lexi_phone_screen_{int(time.time())}.png"
+            scap = subprocess.run(["adb", "-s", dev, "exec-out", "screencap", "-p"], capture_output=True, timeout=5.0)
+            if scap.returncode == 0 and scap.stdout:
+                with open(scap_path, "wb") as f:
+                    f.write(scap.stdout)
+                msg = f"📸 Captured phone screen to {scap_path}."
+                self.notify("Lexi Camera", msg)
+                return {"success": True, "verified": True, "message": msg, "path": scap_path}
+
+            return {"success": False, "verified": False, "message": "Camera shutter was triggered, but could not retrieve photo."}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Error capturing photo: {e}"}
+
+    def sync_clipboard_to_phone(self, text=None):
+        """Sync desktop clipboard content (or given text) to connected Android phone."""
+        clip_text = text
+        if not clip_text:
+            clip_res = self.read_clipboard()
+            if clip_res.get("success") and clip_res.get("raw_text"):
+                clip_text = clip_res["raw_text"]
+
+        if not clip_text:
+            return {"success": False, "verified": False, "message": "Nothing in desktop clipboard to sync."}
+
+        dev = self._get_connected_phone_adb()
+        if not dev:
+            return {"success": False, "verified": False, "message": "No Android phone is connected to sync clipboard to."}
+
+        try:
+            escaped_clip = clip_text.replace('"', '\\"').replace("'", "\\'")[:4000]
+            subprocess.run([
+                "adb", "-s", dev, "shell", "am", "broadcast", "-a", "com.lexi.connect.SYNC_CLIPBOARD",
+                "--es", "text", escaped_clip
+            ], capture_output=True, timeout=2.5)
+
+            short_preview = (clip_text[:30] + "...") if len(clip_text) > 30 else clip_text
+            msg = f"📋 Synced clipboard to phone: '{short_preview}'"
+            self.notify("Lexi Clipboard", msg)
+            return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not sync clipboard to phone: {e}"}
+
+    # --- Extended System & Network Capabilities --------------------------------
+    def get_system_resources(self):
+        """Inspect CPU, RAM, disk, load average, and temperature."""
+        try:
+            load1, load5, load15 = os.getloadavg()
+
+            mem_total = 0
+            mem_avail = 0
+            if os.path.exists("/proc/meminfo"):
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        if line.startswith("MemTotal:"):
+                            mem_total = int(line.split()[1]) * 1024
+                        elif line.startswith("MemAvailable:"):
+                            mem_avail = int(line.split()[1]) * 1024
+            mem_used = mem_total - mem_avail
+            ram_pct = int((mem_used / mem_total * 100)) if mem_total else 0
+            ram_used_gb = mem_used / (1024**3)
+            ram_total_gb = mem_total / (1024**3)
+
+            disk = shutil.disk_usage("/")
+            disk_used_gb = (disk.total - disk.free) / (1024**3)
+            disk_total_gb = disk.total / (1024**3)
+            disk_pct = int(((disk.total - disk.free) / disk.total) * 100)
+
+            temp_str = ""
+            thermal_dir = "/sys/class/thermal"
+            if os.path.exists(thermal_dir):
+                for tzone in sorted(os.listdir(thermal_dir)):
+                    if tzone.startswith("thermal_zone"):
+                        t_file = os.path.join(thermal_dir, tzone, "temp")
+                        if os.path.exists(t_file):
+                            try:
+                                with open(t_file) as tf:
+                                    temp_val = int(tf.read().strip()) / 1000.0
+                                if temp_val > 0:
+                                    temp_str = f" • Temp: {temp_val:.1f}°C"
+                                    break
+                            except Exception:
+                                pass
+
+            msg = (
+                f"💻 System Resources:\n"
+                f"• CPU Load: {load1:.2f} (1m), {load5:.2f} (5m), {load15:.2f} (15m)\n"
+                f"• RAM: {ram_used_gb:.1f} GB / {ram_total_gb:.1f} GB ({ram_pct}% used)\n"
+                f"• Disk (/): {disk_used_gb:.1f} GB / {disk_total_gb:.1f} GB ({disk_pct}% used){temp_str}"
+            )
+            return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not read system resources: {e}"}
+
+    def get_network_status(self):
+        """Check Wi-Fi SSID, local IP address, gateway ping, and internet connectivity."""
+        try:
+            from lexi_drop import get_local_ip
+            local_ip = get_local_ip()
+        except Exception:
+            local_ip = "127.0.0.1"
+
+        ssid = ""
+        if shutil.which("nmcli"):
+            try:
+                r = subprocess.run(["nmcli", "-t", "-f", "active,ssid", "dev", "wifi"], capture_output=True, text=True, timeout=2.0)
+                if r.returncode == 0:
+                    for line in r.stdout.splitlines():
+                        if line.startswith("yes:"):
+                            ssid = line.split(":", 1)[1].strip()
+                            break
+            except Exception:
+                pass
+
+        if not ssid and shutil.which("iwgetid"):
+            try:
+                r = subprocess.run(["iwgetid", "-r"], capture_output=True, text=True, timeout=1.5)
+                if r.returncode == 0:
+                    ssid = r.stdout.strip()
+            except Exception:
+                pass
+
+        net_label = f"Wi-Fi '{ssid}'" if ssid else "Ethernet/LAN"
+
+        ping_status = "Offline"
+        try:
+            r_ping = subprocess.run(["ping", "-c", "1", "-W", "1", "1.1.1.1"], capture_output=True, text=True, timeout=2.0)
+            if r_ping.returncode == 0:
+                m_time = re.search(r'time=([\d\.]+)\s*ms', r_ping.stdout)
+                ping_ms = f" ({m_time.group(1)}ms)" if m_time else ""
+                ping_status = f"Online{ping_ms}"
+        except Exception:
+            pass
+
+        msg = f"🌐 Network: Connected via {net_label} (Local IP: {local_ip}) • Internet: {ping_status}."
+        return {"success": True, "verified": True, "message": msg}
+
+    def list_wifi_networks(self):
+        """Scan and list nearby available Wi-Fi networks."""
+        if not shutil.which("nmcli"):
+            return {"success": False, "verified": False, "message": "nmcli is not available for Wi-Fi scanning."}
+        try:
+            r = subprocess.run(
+                ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY,IN-USE", "dev", "wifi", "list", "--rescan", "no"],
+                capture_output=True, text=True, timeout=3.5
+            )
+            if r.returncode != 0 or not r.stdout.strip():
+                r = subprocess.run(
+                    ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY,IN-USE", "dev", "wifi", "list"],
+                    capture_output=True, text=True, timeout=5.0
+                )
+
+            seen = {}
+            for line in r.stdout.strip().splitlines():
+                parts = line.split(":")
+                if len(parts) >= 2:
+                    s_name = parts[0].strip()
+                    if not s_name:
+                        continue
+                    signal = parts[1].strip() if len(parts) > 1 else "?"
+                    sec = parts[2].strip() if len(parts) > 2 and parts[2].strip() else "Open"
+                    in_use = "*" if (len(parts) > 3 and parts[3].strip() == "*") else ""
+                    if s_name not in seen or int(signal or 0) > int(seen[s_name].get("signal", 0)):
+                        seen[s_name] = {"signal": signal, "sec": sec, "active": bool(in_use)}
+
+            if not seen:
+                return {"success": True, "verified": True, "message": "No Wi-Fi networks detected nearby."}
+
+            sorted_nets = sorted(seen.items(), key=lambda x: int(x[1]["signal"]) if x[1]["signal"].isdigit() else 0, reverse=True)[:8]
+            lines = []
+            for name, data in sorted_nets:
+                star = " (Connected)" if data["active"] else ""
+                lock = "🔒" if data["sec"] != "Open" else "🔓"
+                lines.append(f"• {name}{star} — {data['signal']}% {lock} ({data['sec']})")
+
+            msg = "📶 Nearby Wi-Fi Networks:\n" + "\n".join(lines)
+            return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Error scanning Wi-Fi: {e}"}
+
+    def control_bluetooth(self, action="status"):
+        """Check status or toggle bluetooth radio."""
+        act = (action or "status").lower().strip()
+        if not shutil.which("bluetoothctl"):
+            return {"success": False, "verified": False, "message": "bluetoothctl is not installed."}
+        try:
+            if act == "on":
+                subprocess.run(["bluetoothctl", "power", "on"], capture_output=True, timeout=3.0)
+                if shutil.which("rfkill"):
+                    subprocess.run(["rfkill", "unblock", "bluetooth"], capture_output=True, timeout=2.0)
+                return {"success": True, "verified": True, "message": "Bluetooth radio turned ON."}
+            elif act == "off":
+                subprocess.run(["bluetoothctl", "power", "off"], capture_output=True, timeout=3.0)
+                return {"success": True, "verified": True, "message": "Bluetooth radio turned OFF."}
+            else:
+                r = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True, timeout=2.5)
+                powered = "on" if "Powered: yes" in r.stdout else "off"
+                r_dev = subprocess.run(["bluetoothctl", "devices", "Connected"], capture_output=True, text=True, timeout=2.0)
+                conn_devs = [l.strip() for l in r_dev.stdout.splitlines() if l.strip()]
+                conn_str = f", connected to {len(conn_devs)} device(s)" if conn_devs else ", no connected devices"
+                msg = f"📡 Bluetooth is currently {powered.upper()}{conn_str}."
+                return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Bluetooth control error: {e}"}
+
+    def read_clipboard(self):
+        """Read the current desktop clipboard content."""
+        text = ""
+        if shutil.which("wl-paste"):
+            try:
+                r = subprocess.run(["wl-paste", "--no-newline"], capture_output=True, text=True, timeout=1.0)
+                if r.returncode == 0:
+                    text = r.stdout
+            except Exception:
+                pass
+        if not text and shutil.which("xclip"):
+            try:
+                r = subprocess.run(["xclip", "-selection", "clipboard", "-o"], capture_output=True, text=True, timeout=1.0)
+                if r.returncode == 0:
+                    text = r.stdout
+            except Exception:
+                pass
+        if not text and shutil.which("xsel"):
+            try:
+                r = subprocess.run(["xsel", "--clipboard", "--output"], capture_output=True, text=True, timeout=1.0)
+                if r.returncode == 0:
+                    text = r.stdout
+            except Exception:
+                pass
+
+        if not text or not text.strip():
+            return {"success": True, "verified": True, "message": "Desktop clipboard is currently empty.", "raw_text": ""}
+
+        clean_text = text.strip()
+        preview = clean_text[:400] + ("..." if len(clean_text) > 400 else "")
+        msg = f"📋 Desktop Clipboard ({len(clean_text)} characters):\n```\n{preview}\n```"
+        return {"success": True, "verified": True, "message": msg, "raw_text": clean_text}
+
     # --- WhatsApp Web: browser-based drafting & sending (Zero Playwright) -------
     _wa_lock = threading.Lock()
     _wa_draft_data = None
@@ -2890,6 +3243,15 @@ def build_executors(engine):
         "system_sleep": lambda a: engine.system_sleep(),
         "system_restart": lambda a: engine.system_restart(),
         "system_poweroff": lambda a: engine.system_poweroff(),
+        "phone_battery": lambda a: engine.get_phone_battery(),
+        "phone_ring": lambda a: engine.ring_phone(),
+        "phone_camera_snap": lambda a: engine.trigger_phone_camera_snap(),
+        "phone_clipboard_sync": lambda a: engine.sync_clipboard_to_phone(text=a.get("text")),
+        "system_resources": lambda a: engine.get_system_resources(),
+        "network_status": lambda a: engine.get_network_status(),
+        "wifi_list": lambda a: engine.list_wifi_networks(),
+        "bluetooth_control": lambda a: engine.control_bluetooth(action=a.get("action", "status")),
+        "clipboard_read": lambda a: engine.read_clipboard(),
     }
 
 
@@ -6098,6 +6460,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
             return b
 
         actions_box.append(make_btn("💬 Copilot", "island-action-btn island-btn-primary", "Open floating center copilot card", self.on_expand_copilot))
+        actions_box.append(make_btn("⚡ Quick", "island-action-btn island-btn-secondary", "Quick inline copilot query from notch", self.toggle_notch_chat))
         actions_box.append(make_btn("⚡ Beam", "island-action-btn island-btn-secondary", "Local Wi-Fi file sharing & PWA status", self.on_show_beam_info))
         actions_box.append(make_btn("📱 Phone", "island-action-btn island-btn-secondary", "Mirror & control Android phone", self.on_trigger_phone_mirror))
         actions_box.append(make_btn("◨ Side Panel", "island-action-btn island-btn-secondary", "Open vertical Side Panel", self.on_expand_side_panel))
@@ -6188,6 +6551,30 @@ class LexiDynamicIslandWindow(Gtk.Window):
         self.convert_box.set_valign(Gtk.Align.CENTER)
         self.convert_revealer.set_child(self.convert_box)
 
+        # 7. Quick Notch Chat Revealer (Inline mini copilot prompt)
+        self.notch_chat_revealer = Gtk.Revealer()
+        self.notch_chat_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_LEFT)
+        self.notch_chat_revealer.set_transition_duration(200)
+        self.notch_chat_revealer.set_reveal_child(False)
+        self.pill.append(self.notch_chat_revealer)
+
+        self.notch_chat_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.notch_chat_box.set_valign(Gtk.Align.CENTER)
+        self.notch_chat_revealer.set_child(self.notch_chat_box)
+
+        self.notch_entry = Gtk.Entry()
+        self.notch_entry.set_placeholder_text("Ask Lexi or command (battery, ring, wifi)...")
+        self.notch_entry.set_size_request(240, 26)
+        self.notch_entry.add_css_class('island-notch-entry')
+        self.notch_entry.connect('activate', self.on_notch_chat_submit)
+        self.notch_chat_box.append(self.notch_entry)
+
+        notch_close_btn = Gtk.Button(label="✕")
+        notch_close_btn.set_focusable(False)
+        notch_close_btn.add_css_class('island-action-btn')
+        notch_close_btn.connect('clicked', lambda *_: self.close_notch_chat())
+        self.notch_chat_box.append(notch_close_btn)
+
         # Mouse hover motion: smooth morphing expansion
         motion = Gtk.EventControllerMotion()
         motion.connect('enter', self.on_hover_enter)
@@ -6249,8 +6636,10 @@ class LexiDynamicIslandWindow(Gtk.Window):
         try:
             if mode == "convert":
                 rect = cairo.RectangleInt(40, 2, 600, 48)
+            elif mode == "notch_chat":
+                rect = cairo.RectangleInt(80, 2, 520, 48)
             elif mode == "actions":
-                rect = cairo.RectangleInt(100, 2, 480, 48)
+                rect = cairo.RectangleInt(90, 2, 500, 48)
             elif mode == "media_expanded":
                 rect = cairo.RectangleInt(140, 2, 400, 48)
             elif mode == "media_compact":
@@ -6265,7 +6654,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
             pass
 
     def on_hover_enter(self, *args):
-        if self.current_mode == "convert":
+        if self.current_mode in ("convert", "notch_chat"):
             return
         surface = self.get_surface()
         if surface and hasattr(surface, 'get_xid'):
@@ -6283,7 +6672,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.actions_revealer.set_reveal_child(True)
 
     def on_hover_leave(self, *args):
-        if self.current_mode == "convert":
+        if self.current_mode in ("convert", "notch_chat"):
             return
         self.pill.remove_css_class('dynamic-island-expanded')
         if self.current_mode == "media":
@@ -6292,6 +6681,50 @@ class LexiDynamicIslandWindow(Gtk.Window):
         elif self.current_mode == "compact":
             self.actions_revealer.set_reveal_child(False)
             GLib.timeout_add(220, lambda: self.update_input_region(mode="compact"))
+
+    def toggle_notch_chat(self):
+        if self.notch_chat_revealer.get_reveal_child():
+            self.close_notch_chat()
+        else:
+            self.open_notch_chat()
+
+    def open_notch_chat(self):
+        self.current_mode = "notch_chat"
+        self.actions_revealer.set_reveal_child(False)
+        self.notch_chat_revealer.set_reveal_child(True)
+        self.pill.add_css_class('dynamic-island-expanded')
+        self.update_input_region(mode="notch_chat")
+        GLib.idle_add(lambda: (self.notch_entry.grab_focus(), GLib.SOURCE_REMOVE)[1])
+
+    def close_notch_chat(self):
+        self.notch_chat_revealer.set_reveal_child(False)
+        self.current_mode = "compact"
+        self.pill.remove_css_class('dynamic-island-expanded')
+        self.update_input_region(mode="compact")
+
+    def on_notch_chat_submit(self, entry):
+        text = entry.get_text().strip()
+        if not text:
+            return
+        entry.set_text("")
+        self.close_notch_chat()
+
+        from lexi_intents import route, ACTION, REPLY
+        res = route(text)
+        if res.kind == ACTION:
+            eng = SystemActionEngine.get()
+            def _run():
+                exec_res = eng.execute_action(res.capability, **(res.args or {}))
+                msg = exec_res.get("message", "Done!")
+                GLib.idle_add(self.trigger_island_alert, "⚡", msg[:60], "purple", 4.0)
+            threading.Thread(target=_run, daemon=True).start()
+        elif res.kind == REPLY:
+            self.trigger_island_alert("✨", res.text[:60], "purple", 4.0)
+        else:
+            self.on_expand_copilot()
+            if hasattr(self, 'copilot_win') and self.copilot_win:
+                self.copilot_win.entry.set_text(text)
+                self.copilot_win.on_submit()
 
     def on_media_action(self, cmd):
         env = dict(os.environ)
@@ -8110,6 +8543,15 @@ class LexiAvatarDialog(Gtk.Window):
                 m.trigger_walk()
 
 
+_SCREEN_QUERY_RE = re.compile(
+    r'\b(?:what(?:\x27s| is)|read|explain|check|analyze|summarize|translate|debug|solve)\s+'
+    r'(?:(?:this|my|the)\s+)?(?:screen|code|error|page|window|diagram|slide|terminal|text|image|tab|ui)\b'
+    r'|\b(?:what(?:\x27s| is)\s+(?:on|in)\s+(?:my\s+|the\s+)?screen)\b'
+    r'|\b(?:look\s+at\s+(?:this|my\s+screen|the\s+screen))\b',
+    re.I
+)
+
+
 class LexiWindow(Adw.ApplicationWindow):
     def __init__(self, app, config, is_snip=False):
         super().__init__(application=app, title="Lexi Cosmic Screen Copilot")
@@ -8123,6 +8565,7 @@ class LexiWindow(Adw.ApplicationWindow):
         self.timer_source_id = None
         self.query_start_time = 0
         self.conversation = []
+        self._load_conversation_from_disk()
         self.assistant = LexiAssistant(build_executors(SystemActionEngine.get()))
         self.assistant.confirmer = self._confirm_risky
         self.last_answer = ""
@@ -8966,6 +9409,14 @@ class LexiWindow(Adw.ApplicationWindow):
         self.copy_btn.connect('clicked', self.on_copy)
         bottom_bar.append(self.copy_btn)
 
+        self.copy_code_btn = Gtk.Button(label="📋 Copy Code")
+        self.copy_code_btn.set_focusable(False)
+        self.copy_code_btn.add_css_class('flat')
+        self.copy_code_btn.add_css_class('lexi-action-btn')
+        self.copy_code_btn.set_tooltip_text("Extract and copy code blocks from response")
+        self.copy_code_btn.connect('clicked', self.on_copy_code)
+        bottom_bar.append(self.copy_code_btn)
+
         bottom_spacer = Gtk.Box()
         bottom_spacer.set_hexpand(True)
         bottom_bar.append(bottom_spacer)
@@ -9394,6 +9845,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
     def on_clear_chat(self, _):
         self.conversation = []
+        self._save_conversation_to_disk()
         self.assistant.reset()
         self.last_answer = ""
         count = len(self.captured_pages)
@@ -9766,6 +10218,18 @@ class LexiWindow(Adw.ApplicationWindow):
             conv = conv[-14:]
         msgs.extend(conv)
 
+        # Contextual active window injection
+        active_ctx = ""
+        try:
+            eng = SystemActionEngine.get()
+            win = eng._inspect_via_x11_capability()
+            if win.get("active_title") or win.get("active_class"):
+                app_c = win.get("active_class") or "App"
+                app_t = win.get("active_title") or ""
+                active_ctx = f"[Active Window Context: App '{app_c}', Title '{app_t}']\n"
+        except Exception:
+            pass
+
         # Build current user turn with ALL currently active captured pages
         if self.captured_pages:
             num_pages = len(self.captured_pages)
@@ -9786,6 +10250,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
             if num_pages > 1:
                 instruction = (
+                    f"{active_ctx}"
                     f"📁 **Attached Materials ({num_pages} Pages total)**:\n"
                     f"{manifest_block}\n\n"
                     f"**User Request**: {current_user_question}\n\n"
@@ -9797,6 +10262,7 @@ class LexiWindow(Adw.ApplicationWindow):
                 )
             else:
                 instruction = (
+                    f"{active_ctx}"
                     f"📁 **Attached**: {manifest_lines[0]}\n\n"
                     f"**User Request**: {current_user_question}"
                 )
@@ -9832,7 +10298,7 @@ class LexiWindow(Adw.ApplicationWindow):
         else:
             user_turn = {
                 "role": "user",
-                "content": current_user_question
+                "content": f"{active_ctx}{current_user_question}" if active_ctx else current_user_question
             }
 
         if self.config.get("legacy_prompt", False):
@@ -9911,6 +10377,15 @@ class LexiWindow(Adw.ApplicationWindow):
             GLib.idle_add(self.on_query_finished, local_reply,
                           {"role": "user", "content": user_question}, None)
             return
+
+        # Auto-Screen Intelligence: zero-click silent screen grab if visual question asked without prior snip
+        if not self.captured_pages and _SCREEN_QUERY_RE.search(user_question):
+            try:
+                auto_shot = self._auto_capture_screen_sync()
+                if auto_shot:
+                    self.process_screenshot(auto_shot, is_snip=False, append_mode=False)
+            except Exception as e:
+                log(f"Auto screen grab failed: {e}")
 
         full_response = []
         user_turn = None
@@ -10129,6 +10604,7 @@ class LexiWindow(Adw.ApplicationWindow):
                 recorded_assistant = rendered_summary if (parsed_actions or action_results) else full_text
                 self.conversation.append({"role": "assistant", "content": recorded_assistant})
                 self.last_answer = rendered_summary or full_text
+                self._save_conversation_to_disk()
 
         self.scroll_to_end()
         self.entry.grab_focus()
@@ -10170,6 +10646,97 @@ class LexiWindow(Adw.ApplicationWindow):
                     self.update_mascot_mood("happy")
                 return GLib.SOURCE_REMOVE
             GLib.timeout_add_seconds(2, reset_copy)
+
+    def on_copy_code(self, _=None):
+        ans = self.last_answer or ""
+        if not ans:
+            start = self.text_buffer.get_start_iter()
+            end = self.text_buffer.get_end_iter()
+            ans = self.text_buffer.get_text(start, end, True)
+
+        code_blocks = re.findall(r'```(?:[\w\+\-\.]+)?\n?(.*?)```', ans, re.DOTALL)
+        if code_blocks:
+            extracted_code = "\n\n".join(b.strip() for b in code_blocks if b.strip())
+        else:
+            inline_code = re.findall(r'`([^`\n]+)`', ans)
+            if inline_code:
+                extracted_code = "\n".join(inline_code)
+            else:
+                extracted_code = ans
+
+        if extracted_code:
+            display = Gdk.Display.get_default()
+            if display:
+                clipboard = display.get_clipboard()
+                clipboard.set(extracted_code)
+            if shutil.which("wl-copy"):
+                try:
+                    subprocess.run(["wl-copy"], input=extracted_code.encode("utf-8"), timeout=1.0)
+                except Exception:
+                    pass
+            self.copy_code_btn.set_label("✓ Copied Code!")
+            self.update_mascot_mood("happy")
+            def reset_code_copy():
+                self.copy_code_btn.set_label("📋 Copy Code")
+                return GLib.SOURCE_REMOVE
+            GLib.timeout_add_seconds(2, reset_code_copy)
+
+    def _save_conversation_to_disk(self):
+        try:
+            hist_file = os.path.join(APP_DIR, "conversation_history.json")
+            clean_conv = []
+            for item in self.conversation[-30:]:
+                role = item.get("role", "")
+                content = item.get("content", "")
+                if isinstance(content, list):
+                    text_parts = [p.get("text", "") for p in content if p.get("type") == "text"]
+                    content = "\n".join(text_parts)
+                clean_conv.append({"role": role, "content": str(content)})
+            with open(hist_file, "w", encoding="utf-8") as f:
+                json.dump(clean_conv, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            log(f"Failed to save conversation history: {e}")
+
+    def _load_conversation_from_disk(self):
+        try:
+            hist_file = os.path.join(APP_DIR, "conversation_history.json")
+            if os.path.exists(hist_file):
+                with open(hist_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        self.conversation = data[-20:]
+                        for turn in reversed(self.conversation):
+                            if turn.get("role") == "assistant" and turn.get("content"):
+                                self.last_answer = turn["content"]
+                                break
+        except Exception as e:
+            log(f"Failed to load conversation history: {e}")
+
+    def _auto_capture_screen_sync(self):
+        """Zero-click silent screenshot capture when visual queries are asked."""
+        shot_path = f"/tmp/lexi_auto_screen_{int(time.time())}.png"
+        if shutil.which("gnome-screenshot"):
+            try:
+                res = subprocess.run(["gnome-screenshot", "-f", shot_path], capture_output=True, timeout=2.5)
+                if res.returncode == 0 and os.path.exists(shot_path) and os.path.getsize(shot_path) > 0:
+                    return shot_path
+            except Exception:
+                pass
+        if shutil.which("scrot"):
+            try:
+                res = subprocess.run(["scrot", shot_path], capture_output=True, timeout=2.5)
+                if res.returncode == 0 and os.path.exists(shot_path) and os.path.getsize(shot_path) > 0:
+                    return shot_path
+            except Exception:
+                pass
+        if shutil.which("import"):
+            try:
+                res = subprocess.run(["import", "-window", "root", shot_path], capture_output=True, timeout=2.5)
+                if res.returncode == 0 and os.path.exists(shot_path) and os.path.getsize(shot_path) > 0:
+                    return shot_path
+            except Exception:
+                pass
+        return None
 
 
 class LexiApp(Adw.Application):

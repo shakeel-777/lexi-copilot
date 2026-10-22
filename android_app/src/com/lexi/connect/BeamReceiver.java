@@ -15,6 +15,8 @@ import java.io.File;
 public class BeamReceiver extends BroadcastReceiver {
     public static final String ACTION_SET_HOST = "com.lexi.connect.SET_HOST";
     public static final String ACTION_BEAM_RECEIVED = "com.lexi.connect.BEAM_RECEIVED";
+    public static final String ACTION_RING_PHONE = "com.lexi.connect.RING_PHONE";
+    public static final String ACTION_SYNC_CLIPBOARD = "com.lexi.connect.SYNC_CLIPBOARD";
     private static final String NOTIF_CHANNEL_ID = "lexi_beam_channel";
     private static final int NOTIF_ID = 9902;
 
@@ -55,6 +57,26 @@ public class BeamReceiver extends BroadcastReceiver {
 
             // 3. Post system notification with tap to open
             showNotification(context, filename, path);
+        } else if (ACTION_RING_PHONE.equals(action)) {
+            vibrate(context, 1000);
+            try {
+                android.media.Ringtone r = android.media.RingtoneManager.getRingtone(
+                        context,
+                        android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+                );
+                if (r != null) r.play();
+            } catch (Exception ignored) {}
+        } else if (ACTION_SYNC_CLIPBOARD.equals(action)) {
+            String text = intent.getStringExtra("text");
+            if (text != null && !text.isEmpty()) {
+                try {
+                    android.content.ClipboardManager cm = (android.content.ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Lexi Copilot", text));
+                        vibrate(context, 50);
+                    }
+                } catch (Exception ignored) {}
+            }
         }
     }
 

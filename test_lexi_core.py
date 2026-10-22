@@ -454,7 +454,7 @@ class MemoryCompaction(unittest.TestCase):
         self.assertIn("volume_set", p)
         self.assertNotIn("whatsapp_send", p)
         self.assertNotIn("xdotool key", p)
-        self.assertLess(len(p), 3000)
+        self.assertLess(len(p), 4500)
 
 
 if __name__ == "__main__":
