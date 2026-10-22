@@ -6232,6 +6232,9 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 self.drop_server.on_peer_accepted_download = lambda fname, peer: GLib.idle_add(
                     self.trigger_island_alert, "⚡", f"{peer} accepted {fname[:14]}!", "green", 4.0
                 )
+                self.drop_server.on_peer_declined_transfer = lambda fname, peer: GLib.idle_add(
+                    self.on_p2p_declined_by_peer, fname, peer
+                )
                 self.drop_server.start_background()
             except Exception as e:
                 log(f"Failed to start Lexi Drop server: {e}")
@@ -6863,6 +6866,12 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.dismiss_timer_id = GLib.timeout_add_seconds(8, self.hide_converter_bar)
 
         threading.Thread(target=lambda: GLib.idle_add(_on_done, _do_send()), daemon=True).start()
+
+    def on_p2p_declined_by_peer(self, filename, peer):
+        short_name = (filename[:12] + '…') if len(filename) > 13 else filename
+        self.trigger_island_alert("⚠️", f"{peer} declined {short_name}", "yellow", 4.0)
+        self.mini_mascot.set_mood("dizzy")
+        return GLib.SOURCE_REMOVE
 
     def on_p2p_incoming_from_peer(self, info):
         token = info.get("token")
@@ -7575,15 +7584,38 @@ class LexiBeamWindow(Gtk.Window):
 
         self._update_file_preview()
 
-        # Section Label: Nearby Devices
+        # Section Label: Nearby Devices & Direct IP
         sec_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         pulse_dot = Gtk.Label(label="●")
         pulse_dot.add_css_class('lexi-beam-pulse-dot')
         sec_box.append(pulse_dot)
-        sec_lbl = Gtk.Label(label="AVAILABLE DEVICES", xalign=0)
+        sec_lbl = Gtk.Label(label="AVAILABLE DEVICES", xalign=0, hexpand=True)
         sec_lbl.add_css_class('lexi-beam-sec-title')
         sec_box.append(sec_lbl)
+
+        direct_ip_btn = Gtk.Button(label="＋ Direct IP")
+        direct_ip_btn.set_focusable(False)
+        direct_ip_btn.add_css_class('lexi-beam-tab-btn')
+        direct_ip_btn.set_tooltip_text("Pair with a laptop directly by IP (bypasses router client isolation)")
+        direct_ip_btn.connect('clicked', lambda *_: self._on_toggle_direct_ip())
+        sec_box.append(direct_ip_btn)
         root.append(sec_box)
+
+        # Direct IP Entry Tray (revealed on click)
+        self.direct_ip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.direct_ip_box.set_visible(False)
+        self.direct_ip_entry = Gtk.Entry()
+        self.direct_ip_entry.set_placeholder_text("Laptop IP (e.g. 192.168.1.5)")
+        self.direct_ip_entry.set_hexpand(True)
+        self.direct_ip_entry.connect('activate', lambda *_: self._on_connect_direct_ip())
+        self.direct_ip_box.append(self.direct_ip_entry)
+
+        pair_btn = Gtk.Button(label="Pair")
+        pair_btn.set_focusable(False)
+        pair_btn.add_css_class('lexi-beam-device-btn')
+        pair_btn.connect('clicked', lambda *_: self._on_connect_direct_ip())
+        self.direct_ip_box.append(pair_btn)
+        root.append(self.direct_ip_box)
 
         # Peers Scroll Area / Box
         scroller = Gtk.ScrolledWindow()
@@ -7673,6 +7705,32 @@ class LexiBeamWindow(Gtk.Window):
         if self.poll_timer_id:
             GLib.source_remove(self.poll_timer_id)
             self.poll_timer_id = None
+
+    def _on_toggle_direct_ip(self):
+        vis = not self.direct_ip_box.get_visible()
+        self.direct_ip_box.set_visible(vis)
+        if vis:
+            self.direct_ip_entry.grab_focus()
+
+    def _on_connect_direct_ip(self):
+        ip = self.direct_ip_entry.get_text().strip()
+        if not ip:
+            return
+        self.status_lbl.set_label(f"📡 Probing {ip}...")
+        def _worker():
+            server = lexi_drop.get_lexi_drop_instance() if lexi_drop else None
+            if not server:
+                return
+            res = server.probe_peer(ip)
+            def _done():
+                if res.get("success"):
+                    self.status_lbl.set_label(f"✨ Paired with {res.get('device')} ({ip})!")
+                    self.direct_ip_box.set_visible(False)
+                    self._refresh_peers()
+                else:
+                    self.status_lbl.set_label(f"⚠️ Could not reach {ip}: {res.get('error', '')[:25]}")
+            GLib.idle_add(_done)
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _update_file_preview(self):
         if self.file_path and os.path.exists(self.file_path):

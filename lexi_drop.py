@@ -20,6 +20,7 @@ import asyncio
 import threading
 import subprocess
 import shutil
+import tempfile
 import urllib.request
 from pathlib import Path
 from aiohttp import web, WSMsgType
@@ -462,6 +463,8 @@ def play_beam_sound(sound_name: str = "complete"):
             "device_removed": "/usr/share/sounds/freedesktop/stereo/device-removed.oga",
             "bell": "/usr/share/sounds/freedesktop/stereo/bell.oga",
             "camera": "/usr/share/sounds/freedesktop/stereo/camera-shutter.oga",
+            "declined": "/usr/share/sounds/freedesktop/stereo/dialog-warning.oga",
+            "incoming": "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga",
         }
         snd_file = sound_map.get(sound_name, sound_map["complete"])
         if not os.path.exists(snd_file):
@@ -651,6 +654,7 @@ class LexiDropServer:
         self.on_clipboard_received = None
         self.on_camera_snap_received = None
         self.on_peer_accepted_download = None
+        self.on_peer_declined_transfer = None
         self.current_clipboard_text = ""
 
     @property
@@ -765,6 +769,36 @@ class LexiDropServer:
             pass
 
         return result
+
+    def probe_peer(self, ip: str, port: int = PORT) -> dict:
+        """
+        Actively checks if a peer at the given IP is running Lexi and pairs with it.
+        Bypasses UDP multicast/broadcast restrictions on restrictive corporate/hotel networks.
+        """
+        clean_ip = ip.strip()
+        url = f"http://{clean_ip}:{port}/api/status"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Lexi-Probe/1.0"})
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=2.0) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                hostname = data.get("host") or clean_ip
+                now = time.time()
+                with self.beacon.lock:
+                    self.beacon.lan_peers[clean_ip] = {
+                        "hostname": hostname,
+                        "ip": clean_ip,
+                        "port": port,
+                        "last_seen": now,
+                        "type": "laptop",
+                        "os": "linux"
+                    }
+                if self.on_peer_joined:
+                    self.on_peer_joined(hostname, clean_ip)
+                play_beam_sound("device_found")
+                return {"success": True, "device": hostname, "ip": clean_ip, "port": port}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def generate_qr_code(self, target_url=None, save_path="/tmp/lexi_beam_qr.png") -> str:
         """Generates a high-contrast dark obsidian QR code for Android phone camera scanning."""
@@ -979,6 +1013,9 @@ class LexiDropServer:
             }
             self.pending_incoming_transfers[token] = transfer_info
 
+            # Play gentle incoming beam alert chime
+            play_beam_sound("incoming")
+
             # Notify Dynamic Island to pop up: [ ✓ Accept ] [ ✕ Decline ]
             if self.on_p2p_incoming_request:
                 self.on_p2p_incoming_request(transfer_info)
@@ -1007,13 +1044,47 @@ class LexiDropServer:
                 ).start()
                 return web.json_response({"status": "accepted", "token": token})
             else:
+                from_ip = info.get("from_ip")
+                if from_ip and from_ip not in ('127.0.0.1', 'localhost'):
+                    def _notify_decline():
+                        try:
+                            payload = json.dumps({
+                                "token": token,
+                                "declined_by": socket.gethostname(),
+                                "filename": info.get("filename", "")
+                            }).encode('utf-8')
+                            req = urllib.request.Request(
+                                f"http://{from_ip}:{self.port}/api/peer/declined",
+                                data=payload,
+                                headers={"Content-Type": "application/json"},
+                                method="POST"
+                            )
+                            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+                            opener.open(req, timeout=2.5)
+                        except Exception:
+                            pass
+                    threading.Thread(target=_notify_decline, daemon=True).start()
                 return web.json_response({"status": "declined", "token": token})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
 
+    async def handle_peer_declined(self, request):
+        """Called when a remote peer declines an incoming transfer."""
+        try:
+            data = await request.json()
+            declined_by = data.get("declined_by", "Peer")
+            filename = data.get("filename", "file")
+            play_beam_sound("declined")
+            if self.on_peer_declined_transfer:
+                self.on_peer_declined_transfer(filename, declined_by)
+            return web.json_response({"status": "acknowledged"})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
     def _download_peer_file_sync(self, download_url: str, filename: str, expected_size: int, token: str):
-        """Pulls the file from the remote peer directly to ~/Downloads with 4MB chunks."""
+        """Pulls the file from the remote peer directly to ~/Downloads with 4MB chunks and atomic commit."""
         dest_path = get_unique_destination_path(DOWNLOADS_DIR, filename)
+        part_path = dest_path.with_name(f".{dest_path.name}.lexipart")
         t0 = time.time()
         received = 0
         chunk_size = 4 * 1024 * 1024
@@ -1021,7 +1092,7 @@ class LexiDropServer:
         try:
             req = urllib.request.Request(download_url, headers={"User-Agent": "Lexi-P2P/1.0"})
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(req, timeout=30) as resp, open(dest_path, "wb") as f:
+            with opener.open(req, timeout=60) as resp, open(part_path, "wb") as f:
                 while True:
                     chunk = resp.read(chunk_size)
                     if not chunk:
@@ -1035,6 +1106,9 @@ class LexiDropServer:
                         speed = (received / (1024 * 1024)) / elapsed
                         self.on_transfer_progress(token, "download", received, expected_size, speed, pct)
 
+            # Atomic rename from .lexipart to final destination
+            os.replace(part_path, dest_path)
+
             elapsed = max(time.time() - t0, 0.05)
             final_speed = (received / (1024 * 1024)) / elapsed
             if self.on_file_received:
@@ -1046,6 +1120,11 @@ class LexiDropServer:
             except Exception:
                 pass
         except Exception as e:
+            if part_path.exists():
+                try:
+                    part_path.unlink()
+                except Exception:
+                    pass
             print(f"[LexiDrop] P2P download failed for {filename}: {e}")
 
     def send_p2p_to_peer(self, peer_ip: str, filepath: str) -> dict:
@@ -1091,12 +1170,13 @@ class LexiDropServer:
 
             if matched_adb_dev:
                 friendly_name = get_friendly_adb_device_name(matched_adb_dev)
+                actual_path = share_info.get("path", filepath)
                 dest_phone_path = f"/sdcard/Download/{name}"
                 t0 = time.time()
                 timeout_sec = max(35, int(size / (500 * 1024)) + 15)
 
                 push = subprocess.run(
-                    ['adb', '-s', matched_adb_dev, 'push', filepath, dest_phone_path],
+                    ['adb', '-s', matched_adb_dev, 'push', actual_path, dest_phone_path],
                     capture_output=True, text=True, timeout=timeout_sec
                 )
 
@@ -1177,6 +1257,11 @@ class LexiDropServer:
                     print(f"[LexiDrop] WS direct push error: {e}", file=sys.stderr)
 
         # --- Transport 3: Linux-to-Linux LAN P2P Proposal ---
+        target_port = self.port
+        with self.beacon.lock:
+            if peer_ip in self.beacon.lan_peers:
+                target_port = self.beacon.lan_peers[peer_ip].get("port", self.port)
+
         payload = json.dumps({
             "from_device": socket.gethostname(),
             "from_ip": self.local_ip,
@@ -1187,7 +1272,7 @@ class LexiDropServer:
         }).encode('utf-8')
 
         req = urllib.request.Request(
-            f"http://{peer_ip}:{self.port}/api/peer/incoming",
+            f"http://{peer_ip}:{target_port}/api/peer/incoming",
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST"
@@ -1398,17 +1483,25 @@ class LexiDropServer:
         })
 
     def share_file(self, filepath: str) -> dict:
-        """Registers a local file for fast sharing and notifies all connected peers via WebSocket."""
+        """Registers a local file or directory for fast sharing and notifies all connected peers via WebSocket."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"File not found: {filepath}")
 
+        # If directory, bundle into a temporary zip archive
+        actual_path = filepath
+        if os.path.isdir(filepath):
+            folder_name = os.path.basename(os.path.abspath(filepath)) or "Archive"
+            zip_target = os.path.join(tempfile.gettempdir(), f"{folder_name}.zip")
+            shutil.make_archive(zip_target[:-4], 'zip', filepath)
+            actual_path = zip_target
+
         token = uuid.uuid4().hex[:10]
-        name = os.path.basename(filepath)
-        size = os.path.getsize(filepath)
+        name = os.path.basename(actual_path)
+        size = os.path.getsize(actual_path)
 
         record = {
             "token": token,
-            "path": filepath,
+            "path": actual_path,
             "name": name,
             "size": size,
             "created_at": time.time()
@@ -1429,6 +1522,7 @@ class LexiDropServer:
 
         return {
             "token": token,
+            "path": actual_path,
             "name": name,
             "size": size,
             "url": download_url,
@@ -1480,6 +1574,7 @@ class LexiDropServer:
             self.app.router.add_post("/api/share", self.handle_share_request)
             self.app.router.add_post("/api/peer/incoming", self.handle_peer_incoming)
             self.app.router.add_post("/api/peer/respond", self.handle_peer_respond)
+            self.app.router.add_post("/api/peer/declined", self.handle_peer_declined)
             self.app.router.add_get("/api/status", self.handle_status)
             self.app.router.add_get("/api/peers", self.handle_peers_list)
             self.app.router.add_post("/api/peer/register", self.handle_peer_register)

@@ -125,7 +125,58 @@ class TestLexiBeam(unittest.TestCase):
     @patch("subprocess.run")
     def test_play_beam_sound_complete(self, mock_sub):
         play_beam_sound("complete")
-        # Ensure it doesn't crash or raise exceptions
+        play_beam_sound("declined")
+        play_beam_sound("incoming")
+
+    def test_share_directory_auto_zip(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            f = Path(tmp_dir) / "notes.txt"
+            f.write_text("hello peer")
+            res = self.server.share_file(tmp_dir)
+            self.assertTrue(res["name"].endswith(".zip"))
+            self.assertTrue(os.path.exists(res["path"]))
+            self.assertTrue(res["size"] > 0)
+            if os.path.exists(res["path"]):
+                os.unlink(res["path"])
+
+    @patch("urllib.request.build_opener")
+    def test_probe_peer_success(self, mock_opener_cls):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"status": "online", "host": "ThinkPad-X1"}'
+        mock_opener = MagicMock()
+        mock_opener.open.return_value.__enter__.return_value = mock_resp
+        mock_opener_cls.return_value = mock_opener
+
+        joined = []
+        self.server.on_peer_joined = lambda host, ip: joined.append((host, ip))
+
+        res = self.server.probe_peer("192.168.1.42")
+        self.assertTrue(res["success"])
+        self.assertEqual(res["device"], "ThinkPad-X1")
+        self.assertIn("192.168.1.42", self.server.beacon.lan_peers)
+        self.assertEqual(joined, [("ThinkPad-X1", "192.168.1.42")])
+
+    def test_probe_peer_failure(self):
+        res = self.server.probe_peer("127.0.0.1", port=65432)
+        self.assertFalse(res["success"])
+        self.assertIn("error", res)
+
+    def test_peer_decline_notification_callback(self):
+        from unittest.mock import AsyncMock
+        declined_events = []
+        self.server.on_peer_declined_transfer = lambda fname, peer: declined_events.append((fname, peer))
+
+        import asyncio
+
+        async def _test():
+            req = MagicMock()
+            req.json = AsyncMock(return_value={"filename": "presentation.pdf", "declined_by": "MacBook-Air"})
+            resp = await self.server.handle_peer_declined(req)
+            self.assertEqual(resp.status, 200)
+
+        asyncio.run(_test())
+        self.assertEqual(declined_events, [("presentation.pdf", "MacBook-Air")])
 
 
 if __name__ == "__main__":
