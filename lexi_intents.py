@@ -189,7 +189,11 @@ _WA_PATTERNS = [
     re.compile(r"(?:message|text|msg)\s+(?P<c>[\w .'\-]{1,60}?)\s+(?:saying\s+|that\s+says\s+|:\s*)(?P<m>.+?)(?:\s+on whatsapp)?$", re.I),
     re.compile(r"tell\s+(?P<c>[\w .'\-]{1,60}?)\s+(?:on whatsapp\s+)?(?:that\s+)?(?P<m>.+?)(?:\s+on whatsapp)?$", re.I),
 ]
-_NOT_WHATSAPP_RE = re.compile(r"\b(?:email|e-mail|mail|file|files|document|pdf|photo|picture|money|payment|\$|rupees?|inr)\b", re.I)
+_NOT_WHATSAPP_RE = re.compile(
+    r"\b(?:email|e-mail|mail|file|files|document|pdf|photo|picture|money|payment|\$|rupees?|inr|"
+    r"chatgpt|claude|gemini|openai|copilot|ai|terminal|bash|shell)\b",
+    re.I
+)
 
 _KNOWN_SITES = {
     "youtube": "youtube.com", "yt": "youtube.com",
@@ -364,9 +368,9 @@ def _search_or_ask_route(norm: str) -> Optional[Route]:
         url_tmpl = _SEARCH_SERVICES.get(svc, ("Google", "google.com/search?q={q}"))[1]
         return Route(ACTION, "open_site", {"site": url_tmpl.format(q=urllib.parse.quote_plus(q))})
 
-    # 2. "ask/prompt <chatgpt|claude> [to|with|about|that] <query>"
+    # 2. "ask/prompt/send/tell <chatgpt|claude> [to|with|about|that|saying] <query>"
     m = re.match(
-        r"^(?:ask|prompt)\s+(?P<svc>chatgpt|claude)\s+(?:to\s+|with\s+|about\s+|that\s+|:\s*)?(?P<q>.+)$",
+        r"^(?:ask|prompt|tell|send(?:\s+(?:a\s+)?(?:message|prompt))?(?:\s+to)?)\s+(?P<svc>chatgpt|claude)\s+(?:to\s+|with\s+|about\s+|that\s+|saying\s+|:\s*)?(?P<q>.+)$",
         norm, re.I
     )
     if m:
@@ -377,9 +381,9 @@ def _search_or_ask_route(norm: str) -> Optional[Route]:
         url_tmpl = _SEARCH_SERVICES[svc][1]
         return Route(ACTION, "open_site", {"site": url_tmpl.format(q=urllib.parse.quote_plus(q))})
 
-    # 2b. "ask <query> (in|on|to) (chatgpt|claude)"
+    # 2b. "ask/send/prompt <query> (in|on|to) (chatgpt|claude)"
     m = re.match(
-        r"^ask\s+(?P<q>.+?)\s+(?:in|on|to)\s+(?P<svc>chatgpt|claude)$",
+        r"^(?:ask|prompt|send(?:\s+(?:a\s+)?(?:message|prompt))?)\s+(?P<q>.+?)\s+(?:in|on|to)\s+(?P<svc>chatgpt|claude)$",
         norm, re.I
     )
     if m:
@@ -587,6 +591,8 @@ def _whatsapp_route(norm: str) -> Optional[Route]:
         contact = re.sub(r"\s+", " ", m.group("c")).strip(" \"'")
         message = m.group("m").strip().strip("\"'")
         contact = re.sub(r"^(?:my |to )", "", contact, flags=re.I).strip()
+        if contact.lower() in ("chatgpt", "claude", "gemini", "openai", "copilot", "google", "youtube", "spotify", "browser", "chrome"):
+            return None
         if not contact or not message:
             return Route(CLARIFY, text="Who should I message, and what should it say?")
         if len(contact) > 60 or len(message) > 1000:

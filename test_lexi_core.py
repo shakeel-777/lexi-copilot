@@ -160,11 +160,16 @@ class IntentParsing(unittest.TestCase):
             r = self.r(phrase)
             self.assertEqual((r.kind, r.name, r.args), (I.ACTION, "open_site", {"site": "chatgpt.com/?q=who+are+u"}), phrase)
 
-        # Direct ask / prompt
+        # Direct ask / prompt / send
         r = self.r("ask chatgpt who are you")
         self.assertEqual((r.kind, r.name, r.args), (I.ACTION, "open_site", {"site": "chatgpt.com/?q=who+are+you"}))
         r2 = self.r("ask who are you in chatgpt")
         self.assertEqual((r2.kind, r2.name, r2.args), (I.ACTION, "open_site", {"site": "chatgpt.com/?q=who+are+you"}))
+        r3 = self.r("send hi to chatgpt")
+        self.assertEqual((r3.kind, r3.name, r3.args), (I.ACTION, "open_site", {"site": "chatgpt.com/?q=hi"}))
+        self.assertNotEqual(r3.name, "whatsapp_draft")
+        r4 = self.r("send hi to claude")
+        self.assertEqual((r4.kind, r4.name, r4.args), (I.ACTION, "open_site", {"site": "claude.ai/new?q=hi"}))
 
     def test_search_engines_and_modifiers(self):
         # Google search variants
