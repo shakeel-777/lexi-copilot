@@ -6931,7 +6931,8 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 headers={"Content-Type": "application/json"},
                 method="POST"
             )
-            urllib.request.urlopen(req, timeout=2.0)
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            opener.open(req, timeout=2.0)
         except Exception as e:
             print(f"[LexiIsland] Failed to respond to P2P transfer: {e}")
 

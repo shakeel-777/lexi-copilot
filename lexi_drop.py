@@ -1020,7 +1020,8 @@ class LexiDropServer:
 
         try:
             req = urllib.request.Request(download_url, headers={"User-Agent": "Lexi-P2P/1.0"})
-            with urllib.request.urlopen(req, timeout=30) as resp, open(dest_path, "wb") as f:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=30) as resp, open(dest_path, "wb") as f:
                 while True:
                     chunk = resp.read(chunk_size)
                     if not chunk:
@@ -1192,7 +1193,8 @@ class LexiDropServer:
             method="POST"
         )
         try:
-            with urllib.request.urlopen(req, timeout=2.5) as resp:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=2.5) as resp:
                 result = json.loads(resp.read().decode('utf-8'))
                 result["success"] = True
                 result["status"] = "delivered_proposal"
