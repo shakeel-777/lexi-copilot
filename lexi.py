@@ -6392,7 +6392,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
         self.set_decorated(False)
         self.set_resizable(False)
         self.set_focusable(False)  # NEVER steal keyboard focus from active desktop apps or Copilot
-        self.set_default_size(680, 52)
+        self.set_default_size(980, 52)
         self.add_css_class('lexi-island-win')
 
         self.current_mode = "compact"  # "compact", "actions", "media", "alert", "convert"
@@ -6400,6 +6400,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
         self.dismiss_timer_id = None
         self.alert_timer_id = None
         self.last_media_info = None
+        self._leave_timeout_id = None
 
         # Outer centering container
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
@@ -6564,9 +6565,30 @@ class LexiDynamicIslandWindow(Gtk.Window):
 
         self.notch_entry = Gtk.Entry()
         self.notch_entry.set_placeholder_text("Ask Lexi or command (battery, ring, wifi)...")
-        self.notch_entry.set_size_request(240, 26)
+        self.notch_entry.set_size_request(260, 26)
         self.notch_entry.add_css_class('island-notch-entry')
         self.notch_entry.connect('activate', self.on_notch_chat_submit)
+
+        notch_key_ctrl = Gtk.EventControllerKey()
+        def _on_notch_key(ctrl, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                self.close_notch_chat()
+                return True
+            return False
+        notch_key_ctrl.connect('key-pressed', _on_notch_key)
+        self.notch_entry.add_controller(notch_key_ctrl)
+
+        entry_click = Gtk.GestureClick()
+        def _on_entry_clicked(gesture, n_press, x, y):
+            self.set_focusable(True)
+            self.notch_entry.set_focusable(True)
+            self.notch_entry.grab_focus()
+            surface = self.get_surface()
+            if surface and hasattr(surface, 'get_xid'):
+                X11Helper.get().activate_window(surface.get_xid())
+        entry_click.connect('pressed', _on_entry_clicked)
+        self.notch_entry.add_controller(entry_click)
+
         self.notch_chat_box.append(self.notch_entry)
 
         notch_close_btn = Gtk.Button(label="✕")
@@ -6635,25 +6657,29 @@ class LexiDynamicIslandWindow(Gtk.Window):
             return
         try:
             if mode == "convert":
-                rect = cairo.RectangleInt(40, 2, 600, 48)
+                rect = cairo.RectangleInt(60, 0, 860, 52)
             elif mode == "notch_chat":
-                rect = cairo.RectangleInt(80, 2, 520, 48)
+                rect = cairo.RectangleInt(240, 0, 500, 52)
             elif mode == "actions":
-                rect = cairo.RectangleInt(90, 2, 500, 48)
+                rect = cairo.RectangleInt(40, 0, 900, 52)
             elif mode == "media_expanded":
-                rect = cairo.RectangleInt(140, 2, 400, 48)
+                rect = cairo.RectangleInt(200, 0, 580, 52)
             elif mode == "media_compact":
-                rect = cairo.RectangleInt(170, 2, 340, 48)
+                rect = cairo.RectangleInt(290, 0, 400, 52)
             elif mode == "alert":
-                rect = cairo.RectangleInt(230, 2, 220, 48)
+                rect = cairo.RectangleInt(240, 0, 500, 52)
             else:
-                rect = cairo.RectangleInt(275, 2, 130, 48)
+                rect = cairo.RectangleInt(390, 0, 200, 52)
             region = cairo.Region(rect)
             surface.set_input_region(region)
         except Exception:
             pass
 
     def on_hover_enter(self, *args):
+        if getattr(self, '_leave_timeout_id', None):
+            GLib.source_remove(self._leave_timeout_id)
+            self._leave_timeout_id = None
+
         if self.current_mode in ("convert", "notch_chat"):
             return
         surface = self.get_surface()
@@ -6672,15 +6698,26 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.actions_revealer.set_reveal_child(True)
 
     def on_hover_leave(self, *args):
+        if getattr(self, '_leave_timeout_id', None):
+            GLib.source_remove(self._leave_timeout_id)
+            self._leave_timeout_id = None
+
         if self.current_mode in ("convert", "notch_chat"):
             return
-        self.pill.remove_css_class('dynamic-island-expanded')
-        if self.current_mode == "media":
-            self.media_controls_revealer.set_reveal_child(False)
-            GLib.timeout_add(220, lambda: self.update_input_region(mode="media_compact"))
-        elif self.current_mode == "compact":
-            self.actions_revealer.set_reveal_child(False)
-            GLib.timeout_add(220, lambda: self.update_input_region(mode="compact"))
+
+        def _do_leave():
+            self._leave_timeout_id = None
+            self.pill.remove_css_class('dynamic-island-expanded')
+            if self.current_mode == "media":
+                self.media_controls_revealer.set_reveal_child(False)
+                self.update_input_region(mode="media_compact")
+            elif self.current_mode == "compact":
+                self.actions_revealer.set_reveal_child(False)
+                self.update_input_region(mode="compact")
+            return GLib.SOURCE_REMOVE
+
+        # 180ms hysteresis buffer so moving between chips never accidentally collapses island
+        self._leave_timeout_id = GLib.timeout_add(180, _do_leave)
 
     def toggle_notch_chat(self):
         if self.notch_chat_revealer.get_reveal_child():
@@ -6689,17 +6726,37 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.open_notch_chat()
 
     def open_notch_chat(self):
+        if getattr(self, '_leave_timeout_id', None):
+            GLib.source_remove(self._leave_timeout_id)
+            self._leave_timeout_id = None
         self.current_mode = "notch_chat"
+        self.set_focusable(True)
         self.actions_revealer.set_reveal_child(False)
         self.notch_chat_revealer.set_reveal_child(True)
         self.pill.add_css_class('dynamic-island-expanded')
         self.update_input_region(mode="notch_chat")
-        GLib.idle_add(lambda: (self.notch_entry.grab_focus(), GLib.SOURCE_REMOVE)[1])
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            xid = surface.get_xid()
+            X11Helper.get().set_window_type(xid, "normal")
+            X11Helper.get().activate_window(xid)
+        self.present()
+        GLib.idle_add(self._focus_notch_entry)
+
+    def _focus_notch_entry(self):
+        self.notch_entry.set_focusable(True)
+        self.notch_entry.grab_focus()
+        return GLib.SOURCE_REMOVE
 
     def close_notch_chat(self):
         self.notch_chat_revealer.set_reveal_child(False)
         self.current_mode = "compact"
         self.pill.remove_css_class('dynamic-island-expanded')
+        self.set_focusable(False)
+        surface = self.get_surface()
+        if surface and hasattr(surface, 'get_xid'):
+            xid = surface.get_xid()
+            X11Helper.get().set_dock_type(xid)
         self.update_input_region(mode="compact")
 
     def on_notch_chat_submit(self, entry):
@@ -6724,7 +6781,7 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.on_expand_copilot()
             if hasattr(self, 'copilot_win') and self.copilot_win:
                 self.copilot_win.entry.set_text(text)
-                self.copilot_win.on_submit()
+                GLib.idle_add(lambda: self.copilot_win.on_submit(None))
 
     def on_media_action(self, cmd):
         env = dict(os.environ)
@@ -6861,7 +6918,6 @@ class LexiDynamicIslandWindow(Gtk.Window):
         self.set_visible(False)
         if self.copilot_win:
             self.copilot_win.set_mode('card')
-            self.copilot_win.set_mode('card')
             self.copilot_win.expand_from_notch()
 
     def on_expand_side_panel(self):
@@ -6960,8 +7016,8 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 display = Gdk.Display.get_default()
                 if display and display.get_monitors():
                     screen_w = display.get_monitors().get_item(0).get_geometry().width
-                pos_x = (screen_w - 680) // 2
-                X11Helper.get().move_window(xid, pos_x, 34)
+                pos_x = (screen_w - 980) // 2
+                X11Helper.get().move_resize_window(xid, pos_x, 34, 980, 52)
                 X11Helper.get().make_always_on_top_and_sticky(xid, is_dock=True)
                 if hasattr(surface, 'move_to_desktop'):
                     surface.move_to_desktop(0xFFFFFFFF)
@@ -10119,7 +10175,7 @@ class LexiWindow(Adw.ApplicationWindow):
                 GLib.idle_add(on_done)
             threading.Thread(target=worker, daemon=True).start()
 
-    def on_submit(self, _):
+    def on_submit(self, _=None):
         text = self.entry.get_text().strip()
         if not text or self.is_streaming:
             return

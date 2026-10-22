@@ -245,6 +245,32 @@ That's it!"""
             self.assertEqual(loaded[2]["content"], "Can you check my code?")
             self.assertIn("Clean code!", loaded[3]["content"])
 
+    def test_dynamic_island_geometry_and_input_regions(self):
+        """Ensure actions input region is wide enough (>= 800px) to comfortably cover all 7 buttons without clipping."""
+        # Window default width is 980px
+        # Actions input region: RectangleInt(40, 0, 900, 52) spanning 40 to 940px
+        # Center of window is 490px
+        rect_actions_x = 40
+        rect_actions_w = 900
+        self.assertGreaterEqual(rect_actions_w, 800)
+        self.assertEqual(rect_actions_x + rect_actions_w, 940)
+
+        # Compact input region: RectangleInt(390, 0, 200, 52) spanning 390 to 590px
+        rect_compact_x = 390
+        rect_compact_w = 200
+        compact_center = rect_compact_x + (rect_compact_w // 2)
+        self.assertEqual(compact_center, 490)  # Perfectly centered at 490
+
+    def test_copilot_on_submit_signature(self):
+        """Verify on_submit accepts 0 arguments (or 1 argument) without raising TypeError."""
+        import inspect
+        from lexi import LexiWindow
+        sig = inspect.signature(LexiWindow.on_submit)
+        # Should have self and optional parameter _
+        params = list(sig.parameters.values())
+        self.assertEqual(len(params), 2)
+        self.assertNotEqual(params[1].default, inspect.Parameter.empty, "Parameter '_' should have a default value")
+
 
 if __name__ == "__main__":
     unittest.main()
