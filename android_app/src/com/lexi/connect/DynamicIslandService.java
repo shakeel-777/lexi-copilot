@@ -11,10 +11,12 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.PixelFormat;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.view.Gravity;
@@ -44,6 +46,8 @@ public class DynamicIslandService extends Service implements View.OnTouchListene
     private WindowManager.LayoutParams params;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean isExpanded = false;
+    private WifiManager.WifiLock wifiLock;
+    private PowerManager.WakeLock wakeLock;
 
     // Drag touch state
     private int initialX;
@@ -72,6 +76,30 @@ public class DynamicIslandService extends Service implements View.OnTouchListene
         super.onCreate();
         createNotificationChannel();
         startForeground(NOTIF_ID, buildForegroundNotification());
+
+        // Keep Wi-Fi chip in ultra-low latency mode to prevent distance packet drops
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "Lexi:LowLatencyLock");
+                } else {
+                    wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "Lexi:HighPerfLock");
+                }
+                wifiLock.setReferenceCounted(false);
+                wifiLock.acquire();
+            }
+        } catch (Exception ignored) {}
+
+        // Prevent CPU deep sleep drops during active link
+        try {
+            PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Lexi:KeepAliveWakeLock");
+                wakeLock.setReferenceCounted(false);
+                wakeLock.acquire();
+            }
+        } catch (Exception ignored) {}
 
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         LayoutInflater inflater = LayoutInflater.from(this);
@@ -367,6 +395,16 @@ public class DynamicIslandService extends Service implements View.OnTouchListene
         if (windowManager != null && islandRoot != null) {
             try {
                 windowManager.removeView(islandRoot);
+            } catch (Exception ignored) {}
+        }
+        if (wifiLock != null && wifiLock.isHeld()) {
+            try {
+                wifiLock.release();
+            } catch (Exception ignored) {}
+        }
+        if (wakeLock != null && wakeLock.isHeld()) {
+            try {
+                wakeLock.release();
             } catch (Exception ignored) {}
         }
     }

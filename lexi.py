@@ -1809,79 +1809,13 @@ class SystemActionEngine:
             pass
 
     def start_phone_mirror(self, stay_awake=True, turn_screen_off=False):
-        """Launches scrcpy for full Android phone control & mirroring."""
-        if not shutil.which('scrcpy'):
-            return {"success": False, "message": "⚠️ `scrcpy` is not installed on the system."}
-
+        """Launches resilient scrcpy for full Android phone control & mirroring."""
         try:
-            res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=3)
-            lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
-            attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
-            unauth = [l.split()[0] for l in lines if 'unauthorized' in l]
-
-            if not attached:
-                try:
-                    from lexi_drop import get_lexi_drop_instance
-                    drop = get_lexi_drop_instance()
-                    for peer in drop.get_all_peers():
-                        peer_ip = peer.get("ip")
-                        if peer_ip and peer_ip != "127.0.0.1":
-                            subprocess.run(['adb', 'connect', f'{peer_ip}:5555'], capture_output=True, timeout=2)
-                    res = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=2)
-                    lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
-                    attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
-                except Exception:
-                    pass
-
-            if not attached:
-                if unauth:
-                    return {
-                        "success": False,
-                        "message": "⚠️ **Android Device Detected (Unauthorized)**\n\nPlease unlock your phone and tap **'Always allow from this computer'** on the USB debugging prompt."
-                    }
-                return {
-                    "success": False,
-                    "message": (
-                        "📱 **No Android Phone Connected**\n\n"
-                        "To mirror and control your phone:\n"
-                        "1. On phone: Go to **Settings → About Phone** → tap **Build Number** 7 times.\n"
-                        "2. Enable **USB Debugging** in Developer Options.\n"
-                        "3. Plug phone into laptop via USB cable once and tap **'Allow'**.\n"
-                        "4. *(Optional Wireless)* Run `$ adb tcpip 5555` to unplug USB and mirror wirelessly over Wi-Fi!"
-                    )
-                }
-
-            device_id = attached[0]
-            cmd = [
-                'scrcpy',
-                '-s', device_id,
-                '--window-title=📱 Lexi Phone Mirror',
-                '--mouse-bind=++++:bhsn',
-                '--no-mouse-hover',
-            ]
-            if stay_awake:
-                cmd.append('--stay-awake')
-            if turn_screen_off:
-                cmd.append('--turn-screen-off')
-
-            subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            try:
-                from lexi_drop import auto_unlock_phone
-                threading.Thread(target=auto_unlock_phone, args=(device_id,), daemon=True).start()
-            except Exception:
-                pass
-
-            return {
-                "success": True,
-                "message": (
-                    f"📱 **Mirroring Android Phone (`{device_id}`) at 60 FPS**\n\n"
-                    "• **Touchpad & Mouse**: Tap to click, two-finger drag to scroll (smooth & natural)\n"
-                    "• **Navigation Shortcuts**: `Alt+B` = Back, `Alt+H` = Home, `Alt+S` = App Switcher\n"
-                    "• **Zero-Touch Unlock**: Automatically unlocked phone using configured credentials\n"
-                    "• **Keyboard**: Full physical keyboard pass-through\n"
-                    "• **Audio**: Ultra-low latency stereo audio forwarded to laptop speakers"
-                )
-            }
+            from lexi_drop import PhoneMirrorManager
+            return PhoneMirrorManager.get().start_mirror(
+                stay_awake=stay_awake,
+                turn_screen_off=turn_screen_off
+            )
         except Exception as e:
             return {"success": False, "message": f"Failed to launch phone mirror: {e}"}
 
