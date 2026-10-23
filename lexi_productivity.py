@@ -194,22 +194,10 @@ class ClipboardManager:
             pass
 
     def start_listener(self):
-        with self._state_lock:
-            if self._running:
-                return
-            self._running = True
-            self._thread = threading.Thread(target=self._poll_loop, daemon=True, name="LexiClipboardPoll")
-            self._thread.start()
+        # Clipboard background listener permanently disabled per user configuration
+        return
 
     def _get_raw_clipboard(self) -> str:
-        for cmd in (["wl-paste", "--no-newline"], ["xclip", "-selection", "clipboard", "-o"], ["xsel", "--clipboard", "--output"]):
-            if shutil.which(cmd[0]):
-                try:
-                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=0.8)
-                    if r.returncode == 0 and r.stdout:
-                        return r.stdout
-                except Exception:
-                    pass
         return ""
 
     def _classify_type(self, text: str) -> str:
@@ -247,11 +235,7 @@ class ClipboardManager:
             self._save()
 
     def _poll_loop(self):
-        while self._running:
-            raw = self._get_raw_clipboard()
-            if raw and raw.strip():
-                self.record_text(raw)
-            time.sleep(1.2)
+        return
 
     def get_history(self, limit: int = 10) -> List[dict]:
         with self._state_lock:
@@ -293,3 +277,60 @@ class ClipboardManager:
             lines.append(f"{i}. {icon} `{preview}`")
         lines.append("\n*Say “copy item <number>” to restore any snippet to your clipboard.*")
         return "\n".join(lines)
+
+
+class QuickNotesManager:
+    """
+    Minimalist distraction-free quick scratchpad & note taker.
+    Persists to ~/.local/share/mochi-copilot/quick_notes.md
+    """
+    _instance = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = QuickNotesManager()
+            return cls._instance
+
+    def __init__(self):
+        self.notes_path = os.path.expanduser("~/.local/share/mochi-copilot/quick_notes.md")
+        self._lock = threading.Lock()
+
+    def add_note(self, text: str) -> str:
+        clean = (text or "").strip()
+        if not clean:
+            return "Note cannot be empty."
+        timestamp = time.strftime("%b %d, %I:%M %p")
+        line = f"- **[{timestamp}]** {clean}\n"
+        with self._lock:
+            os.makedirs(os.path.dirname(self.notes_path), exist_ok=True)
+            with open(self.notes_path, "a", encoding="utf-8") as f:
+                f.write(line)
+        return f"📝 Note saved: “{clean[:60]}”"
+
+    def list_notes(self, limit: int = 5) -> str:
+        if not os.path.exists(self.notes_path):
+            return "📝 Your quick notes are empty. Say “add note <text>” to write one."
+        with self._lock:
+            try:
+                with open(self.notes_path, "r", encoding="utf-8") as f:
+                    lines = [ln.strip() for ln in f.readlines() if ln.strip()]
+            except Exception:
+                return "📝 Couldn't read your notes file."
+        if not lines:
+            return "📝 Your quick notes are empty."
+        recent = lines[-limit:]
+        recent.reverse()
+        formatted = "\n".join(recent)
+        return f"📝 **Recent Notes ({len(lines)} total)**:\n{formatted}\n\n*Say “clear notes” to wipe, or “add note <text>” to add.*"
+
+    def clear_notes(self) -> str:
+        with self._lock:
+            if os.path.exists(self.notes_path):
+                try:
+                    os.remove(self.notes_path)
+                except Exception:
+                    pass
+        return "📝 All quick notes have been cleared."

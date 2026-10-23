@@ -493,6 +493,25 @@ _register(Capability(
     failure_text="I couldn't check active downloads.",
     executor="download_status",
 ))
+_register(Capability(
+    name="quick_notes",
+    description="Take quick markdown notes, view recent notes, or clear notes.",
+    schema={"action": Field("enum", choices=("add", "list", "clear")),
+            "text": Field("str", required=False, max_len=500)},
+    verification="note written or read from persistent storage",
+    failure_text="I couldn't access quick notes.",
+    executor="quick_notes",
+    router_only=True,
+))
+_register(Capability(
+    name="terminal_diagnose",
+    description="Analyze the last terminal command and error to provide an explanation and fix.",
+    schema={},
+    verification="terminal history read and analyzed",
+    failure_text="I couldn't diagnose the last terminal command.",
+    executor="terminal_diagnose",
+    router_only=True,
+))
 # Intentionally NOT registered: raw keystrokes, typing text, JavaScript, selectors.
 # (Shell commands ARE available, but only through terminal_task and its policy.)
 

@@ -913,13 +913,7 @@ class LexiDropServer:
                             if self.on_peer_joined:
                                 self.on_peer_joined(device_label, client_ip)
                         elif msg_type == "clipboard_sync":
-                            text = data.get("text", "")
-                            if text:
-                                self.current_clipboard_text = text
-                                if self.on_clipboard_received:
-                                    self.on_clipboard_received(text)
-                                # Broadcast to other connected clients
-                                self.broadcast_message({"type": "clipboard_sync", "text": text, "source": "mobile"})
+                            pass
                         elif msg_type == "camera_snap":
                             b64_data = data.get("b64", "")
                             if b64_data:
@@ -1454,21 +1448,8 @@ class LexiDropServer:
             return web.json_response({"error": str(e)}, status=500)
 
     async def handle_clipboard_api(self, request):
-        """Receives or returns synced clipboard."""
-        if request.method == "POST":
-            try:
-                data = await request.json()
-                text = data.get("text", "")
-                if text:
-                    self.current_clipboard_text = text
-                    if self.on_clipboard_received:
-                        self.on_clipboard_received(text)
-                    self.broadcast_message({"type": "clipboard_sync", "text": text, "source": "mobile"})
-                return web.json_response({"success": True})
-            except Exception as e:
-                return web.json_response({"error": str(e)}, status=400)
-        else:
-            return web.json_response({"text": self.current_clipboard_text})
+        """Clipboard synchronization is permanently disabled."""
+        return web.json_response({"success": False, "disabled": True, "message": "Clipboard sync disabled"})
 
     async def handle_mirror_api(self, request):
         """Starts resilient scrcpy screen mirroring on the laptop display."""
@@ -1493,13 +1474,8 @@ class LexiDropServer:
             return web.json_response({"error": str(e)}, status=500)
 
     def broadcast_clipboard(self, text: str):
-        """Broadcasts laptop clipboard text to all connected mobile clients."""
-        self.current_clipboard_text = text
-        self.broadcast_message({
-            "type": "clipboard_sync",
-            "text": text,
-            "source": "laptop"
-        })
+        """Clipboard broadcast is permanently disabled."""
+        return
 
     def broadcast_camera_request(self):
         """Requests connected mobile phone to open camera and take a snap."""

@@ -224,6 +224,30 @@ class TestIntentRoutingProductivity(unittest.TestCase):
         self.assertEqual(r_close.kind, I.REPLY)
         self.assertIn("nothing to close", r_close.text)
 
+    def test_quick_notes_intents(self):
+        r_add = I.route("add note buy milk and eggs")
+        self.assertEqual((r_add.kind, r_add.name), (I.ACTION, "quick_notes"))
+        self.assertEqual(r_add.args["action"], "add")
+        self.assertEqual(r_add.args["text"], "buy milk and eggs")
+
+        r_note_colon = I.route("note: call doctor tomorrow")
+        self.assertEqual((r_note_colon.kind, r_note_colon.name), (I.ACTION, "quick_notes"))
+        self.assertEqual(r_note_colon.args["action"], "add")
+        self.assertEqual(r_note_colon.args["text"], "call doctor tomorrow")
+
+        r_list = I.route("my notes")
+        self.assertEqual((r_list.kind, r_list.name), (I.ACTION, "quick_notes"))
+        self.assertEqual(r_list.args["action"], "list")
+
+        r_clear = I.route("clear notes")
+        self.assertEqual((r_clear.kind, r_clear.name), (I.ACTION, "quick_notes"))
+        self.assertEqual(r_clear.args["action"], "clear")
+
+    def test_terminal_diagnose_intent(self):
+        for phrase in ("why did my command fail", "fix last command", "fix terminal error"):
+            r = I.route(phrase)
+            self.assertEqual((r.kind, r.name), (I.ACTION, "terminal_diagnose"), phrase)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -204,7 +204,7 @@ _BLUETOOTH_RE = re.compile(
 )
 
 _CLIPBOARD_READ_RE = re.compile(
-    r"^(?:what(?:\x27s| is)\s+(?:on|in)\s+(?:the\s+|my\s+)?clipboard|read\s+(?:the\s+|my\s+)?clipboard|paste\s+clipboard)$",
+    r"^(?:what(?:\x27s| is)\s+(?:on|in)\s+(?:the\s+|my\s+)?clipboard|read\s+(?:the\s+|my\s+)?clipboard|show\s+(?:the\s+|my\s+)?clipboard|paste\s+clipboard)$",
     re.I
 )
 
@@ -234,6 +234,25 @@ _FOCUS_STATUS_RE = re.compile(r"^(?:focus|pomodoro|timer)\s+status$", re.I)
 _DOWNLOADS_STATUS_RE = re.compile(
     r"^(?:(?:check|what(?:'s| is))\s+)?downloads?(?:\s+status)?$"
     r"|^(?:what\s+is|is\s+anything)\s+downloading$",
+    re.I
+)
+
+_NOTES_ADD_RE = re.compile(
+    r"^(?:(?:take|write|add|save|make)(?:\s+(?:a|down))?\s+note(?::|\s+that|\s+to|\s+saying)?|note:?)\s+(?P<txt>.+)$",
+    re.I
+)
+_NOTES_LIST_RE = re.compile(
+    r"^(?:(?:show|view|check|get|list|open|read)\s+)?(?:my\s+)?notes$"
+    r"|^(?:quick\s+)?notes(?:\s+list)?$"
+    r"|^(?:what\s+are\s+)?my\s+notes$",
+    re.I
+)
+_NOTES_CLEAR_RE = re.compile(
+    r"^(?:clear|delete|erase|wipe|remove)\s+(?:all\s+)?(?:my\s+)?notes$",
+    re.I
+)
+_TERMINAL_DIAG_RE = re.compile(
+    r"^(?:why\s+did\s+my\s+command\s+fail|fix\s+(?:my\s+|the\s+)?last\s+command|fix\s+(?:the\s+)?(?:terminal\s+)?error|diagnose\s+(?:the\s+)?(?:last\s+)?error|what\s+was\s+my\s+error)$",
     re.I
 )
 
@@ -986,7 +1005,9 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
         mins = int(m_focus.group("m1") or m_focus.group("m2") or 25)
         return Route(ACTION, "focus_timer", {"action": "start", "minutes": mins})
 
-    # Clipboard History & Download Sentinel
+    # Clipboard Reading, History & Download Sentinel
+    if _CLIPBOARD_READ_RE.match(low):
+        return Route(ACTION, "clipboard_read", {})
     if _CLIPBOARD_HIST_RE.match(low):
         return Route(ACTION, "clipboard_history", {"action": "list"})
     m_clip_res = _CLIPBOARD_RESTORE_RE.match(low)
@@ -995,6 +1016,21 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
 
     if _DOWNLOADS_STATUS_RE.match(low):
         return Route(ACTION, "download_status", {})
+
+    # Quick Notes & Scratchpad
+    m_note_add = _NOTES_ADD_RE.match(norm)
+    if m_note_add:
+        txt = (m_note_add.group("txt") or "").strip()
+        if txt:
+            return Route(ACTION, "quick_notes", {"action": "add", "text": txt})
+    if _NOTES_LIST_RE.match(low):
+        return Route(ACTION, "quick_notes", {"action": "list"})
+    if _NOTES_CLEAR_RE.match(low):
+        return Route(ACTION, "quick_notes", {"action": "clear"})
+
+    # Terminal Error Diagnoser
+    if _TERMINAL_DIAG_RE.match(low):
+        return Route(ACTION, "terminal_diagnose", {})
 
     # Extended System & Network queries
     if _SYS_RESOURCES_RE.match(low):
@@ -1007,8 +1043,6 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
     if m_bt:
         act = m_bt.group("act1") or m_bt.group("act2") or "status"
         return Route(ACTION, "bluetooth_control", {"action": act})
-    if _CLIPBOARD_READ_RE.match(low):
-        return Route(ACTION, "clipboard_read", {})
 
     # 0a-v. Media now playing query
     if _NOW_PLAYING_RE.match(low):

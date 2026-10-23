@@ -1513,33 +1513,8 @@ class SystemActionEngine:
             return {"success": False, "verified": False, "message": f"Error capturing photo: {e}"}
 
     def sync_clipboard_to_phone(self, text=None):
-        """Sync desktop clipboard content (or given text) to connected Android phone."""
-        clip_text = text
-        if not clip_text:
-            clip_res = self.read_clipboard()
-            if clip_res.get("success") and clip_res.get("raw_text"):
-                clip_text = clip_res["raw_text"]
-
-        if not clip_text:
-            return {"success": False, "verified": False, "message": "Nothing in desktop clipboard to sync."}
-
-        dev = self._get_connected_phone_adb()
-        if not dev:
-            return {"success": False, "verified": False, "message": "No Android phone is connected to sync clipboard to."}
-
-        try:
-            escaped_clip = clip_text.replace('"', '\\"').replace("'", "\\'")[:4000]
-            subprocess.run([
-                "adb", "-s", dev, "shell", "am", "broadcast", "-a", "com.lexi.connect.SYNC_CLIPBOARD",
-                "--es", "text", escaped_clip
-            ], capture_output=True, timeout=2.5)
-
-            short_preview = (clip_text[:30] + "...") if len(clip_text) > 30 else clip_text
-            msg = f"📋 Synced clipboard to phone: '{short_preview}'"
-            self.notify("Lexi Clipboard", msg)
-            return {"success": True, "verified": True, "message": msg}
-        except Exception as e:
-            return {"success": False, "verified": False, "message": f"Could not sync clipboard to phone: {e}"}
+        """Sync clipboard is disabled."""
+        return {"success": False, "verified": False, "message": "Clipboard sync has been disabled."}
 
     # --- Extended System & Network Capabilities --------------------------------
     def get_system_resources(self):
@@ -1751,18 +1726,7 @@ class SystemActionEngine:
             return {"success": False, "verified": False, "message": f"Focus timer error: {e}"}
 
     def execute_clipboard_history(self, action="list", index=1):
-        try:
-            from lexi_productivity import ClipboardManager
-            cm = ClipboardManager.get()
-            if action == "copy":
-                ok = cm.copy_item(index)
-                if ok:
-                    return {"success": True, "verified": True, "message": f"📋 Restored item {index} to desktop clipboard."}
-                return {"success": False, "verified": False, "message": f"Couldn't find item {index} in clipboard history."}
-            else:
-                return {"success": True, "verified": True, "message": cm.format_history_reply(limit=5)}
-        except Exception as e:
-            return {"success": False, "verified": False, "message": f"Clipboard history error: {e}"}
+        return {"success": True, "verified": True, "message": "Clipboard monitoring is disabled."}
 
     def execute_download_status(self):
         try:
@@ -1771,6 +1735,62 @@ class SystemActionEngine:
             return {"success": True, "verified": True, "message": ds.get_download_summary()}
         except Exception as e:
             return {"success": False, "verified": False, "message": f"Download sentinel error: {e}"}
+
+    def execute_quick_notes(self, action="list", text=""):
+        try:
+            from lexi_productivity import QuickNotesManager
+            qm = QuickNotesManager.get()
+            if action == "add":
+                msg = qm.add_note(text)
+                return {"success": True, "verified": True, "message": msg}
+            elif action == "clear":
+                msg = qm.clear_notes()
+                return {"success": True, "verified": True, "message": msg}
+            else:
+                msg = qm.list_notes(limit=6)
+                return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Quick notes error: {e}"}
+
+    def execute_terminal_diagnose(self):
+        try:
+            hist_files = [os.path.expanduser("~/.bash_history"), os.path.expanduser("~/.zsh_history")]
+            last_cmd = ""
+            for hf in hist_files:
+                if os.path.exists(hf):
+                    try:
+                        with open(hf, "r", encoding="utf-8", errors="ignore") as f:
+                            lines = [ln.strip() for ln in f.readlines() if ln.strip()]
+                            if lines:
+                                last_cmd = lines[-1]
+                                if ";" in last_cmd and last_cmd.startswith(":"):
+                                    last_cmd = last_cmd.split(";", 1)[1].strip()
+                                break
+                    except Exception:
+                        pass
+            if not last_cmd:
+                return {"success": True, "verified": True, "message": "🔍 No recent terminal commands found in history."}
+
+            tip = ""
+            fixed = ""
+            if last_cmd.startswith("pacman") or last_cmd.startswith("apt") or last_cmd.startswith("systemctl"):
+                tip = "System operations usually require superuser privileges."
+                fixed = f"sudo {last_cmd}"
+            elif "git push" in last_cmd:
+                tip = "Git push issues are often caused by remote changes or SSL drops. Pull with rebase or retry."
+                fixed = "git pull --rebase origin $(git branch --show-current) && git push"
+            elif last_cmd.startswith("python") and "No module named" in last_cmd:
+                tip = "A required python module is missing in your active environment."
+            else:
+                tip = "Review the command syntax and arguments."
+                fixed = last_cmd
+
+            reply = f"🔍 **Terminal Diagnostic**:\n- **Last Command**: `{last_cmd}`\n- **Analysis**: {tip}"
+            if fixed:
+                reply += f"\n- **Suggested Fix**: `{fixed}`"
+            return {"success": True, "verified": True, "message": reply}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Terminal diagnostic error: {e}"}
 
     # --- WhatsApp Web: browser-based drafting & sending (Zero Playwright) -------
     _wa_lock = threading.Lock()
@@ -3299,6 +3319,8 @@ def build_executors(engine):
         "focus_timer": lambda a: engine.execute_focus_timer(a.get("action", "status"), a.get("minutes", 25)),
         "clipboard_history": lambda a: engine.execute_clipboard_history(a.get("action", "list"), a.get("index", 1)),
         "download_status": lambda a: engine.execute_download_status(),
+        "quick_notes": lambda a: engine.execute_quick_notes(a.get("action", "list"), a.get("text", "")),
+        "terminal_diagnose": lambda a: engine.execute_terminal_diagnose(),
     }
 
 
@@ -6678,9 +6700,6 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 self.drop_server.on_transfer_progress = lambda tok, d, cur, tot, spd, pct: GLib.idle_add(
                     self.on_transfer_progress_update, tok, d, spd, pct
                 )
-                self.drop_server.on_clipboard_received = lambda txt: GLib.idle_add(
-                    self.on_clipboard_from_mobile, txt
-                )
                 self.drop_server.on_camera_snap_received = lambda fp: GLib.idle_add(
                     self.on_camera_snap_from_mobile, fp
                 )
@@ -6708,7 +6727,6 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.focus_timer = FocusTimer.get()
             self.focus_timer.add_listener(self.on_timer_event)
             self.clipboard_manager = ClipboardManager.get()
-            self.clipboard_manager.start_listener()
         except Exception as e:
             log(f"Productivity start error: {e}")
 
@@ -7043,11 +7061,6 @@ class LexiDynamicIslandWindow(Gtk.Window):
                 surface.set_skip_taskbar_hint(True)
             if hasattr(surface, 'set_skip_pager_hint'):
                 surface.set_skip_pager_hint(True)
-        try:
-            clipboard = Gdk.Display.get_default().get_clipboard()
-            clipboard.connect('changed', self.on_desktop_clipboard_changed)
-        except Exception:
-            pass
         GLib.timeout_add(50, self.position_at_top)
 
     def on_trigger_phone_mirror(self, *_):
@@ -7060,32 +7073,8 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.trigger_island_alert("📱", "Mirroring Phone @ 60 FPS", "green", 3.0)
 
     def on_clipboard_from_mobile(self, text):
-        if not text or not text.strip():
-            return
-        clean = text.strip()
-        if clean == getattr(self, '_last_synced_clipboard', ''):
-            return
-        self._last_synced_clipboard = clean
-        try:
-            clipboard = Gdk.Display.get_default().get_clipboard()
-            clipboard.set(clean)
-        except Exception:
-            pass
-        if shutil.which('wl-copy'):
-            try:
-                subprocess.Popen(['wl-copy'], stdin=subprocess.PIPE).communicate(input=clean.encode('utf-8'))
-            except Exception:
-                pass
-        elif shutil.which('xclip'):
-            try:
-                subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE).communicate(input=clean.encode('utf-8'))
-            except Exception:
-                pass
-        now = time.time()
-        if now - getattr(self, '_last_clip_alert_time', 0.0) > 6.0:
-            self._last_clip_alert_time = now
-            preview = clean[:24].replace('\n', ' ') + ('…' if len(clean) > 24 else '')
-            self.trigger_island_alert("📋", f"Synced: {preview}", "cyan", 2.5)
+        # Clipboard synchronization permanently disabled
+        return
 
     def on_camera_snap_from_mobile(self, file_path):
         if not file_path or not os.path.exists(file_path):
@@ -7096,22 +7085,11 @@ class LexiDynamicIslandWindow(Gtk.Window):
         self.trigger_island_alert("📸", "Continuity Camera Snap Added!", "green", 3.5)
 
     def on_desktop_clipboard_changed(self, clipboard):
-        try:
-            clipboard.read_text_async(None, self._on_desktop_clip_read)
-        except Exception:
-            pass
+        # Clipboard monitoring permanently disabled
+        return
 
     def _on_desktop_clip_read(self, clip, res):
-        try:
-            text = clip.read_text_finish(res)
-            if text:
-                clean = text.strip()
-                if clean and clean != getattr(self, '_last_synced_clipboard', ''):
-                    self._last_synced_clipboard = clean
-                    if self.drop_server:
-                        self.drop_server.broadcast_clipboard(clean)
-        except Exception:
-            pass
+        return
 
     def position_at_top(self):
         surface = self.get_surface()
