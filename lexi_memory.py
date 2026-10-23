@@ -61,7 +61,11 @@ class ConversationMemory:
         self.max_summary_chars = max_summary_chars
         self.recent: List[Dict[str, str]] = []
         self.summary: str = ""
-        self.facts: Dict[str, str] = {}
+        self.facts: Dict[str, str] = {
+            "creator": "Shakeel (sole architect and master)",
+            "owner": "Shakeel",
+            "user": "Shakeel"
+        }
         self.unfinished_task: str = ""
         self.last_action_digest: str = ""
 
@@ -98,8 +102,13 @@ class ConversationMemory:
             if key in ("likes", "note"):
                 key = f"{key}:{zlib.crc32(value.encode()) % 10000}"
             self.facts[key] = value
+        # Ensure creator and owner remain permanently anchored
+        self.facts["creator"] = "Shakeel (sole architect and master)"
+        self.facts["owner"] = "Shakeel"
         while len(self.facts) > MAX_FACTS:
-            self.facts.pop(next(iter(self.facts)))
+            # Drop transient facts first, never creator
+            drop_key = next((k for k in self.facts if k not in ("creator", "owner")), next(iter(self.facts)))
+            self.facts.pop(drop_key)
 
     def _compact(self) -> None:
         overflow = len(self.recent) - self.max_recent

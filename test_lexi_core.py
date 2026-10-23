@@ -478,20 +478,24 @@ class CloseTabsIntents(unittest.TestCase):
             self.assertEqual((r.kind, r.name, r.args), (I.ACTION, "close_tabs", {"target": target}), t)
 
     def test_close_all_and_both_need_the_mass_close_action(self):
-        for t in ("close all", "close everything", "close all tabs", "close both",
-                  "close whatsapp and instagram", "close them all", "close all my tabs in chrome"):
+        for t in ("close all tabs", "close both",
+                  "close whatsapp and instagram", "close all my tabs in chrome"):
             r = self.r(t)
             self.assertEqual((r.kind, r.name, r.args), (I.ACTION, "close_tabs_all", {}), t)
+        for t in ("close all", "close everything", "close all apps", "close them all", "close all windows"):
+            r = self.r(t)
+            self.assertEqual((r.kind, r.name, r.args), (I.ACTION, "close_all_apps", {}), t)
 
     def test_unsupported_targets_are_refused_honestly_not_guessed(self):
-        for t in ("close firefox", "close gmail", "close photoshop"):
+        for t in ("close blender", "close gmail", "close photoshop"):
             r = self.r(t)
             self.assertEqual(r.kind, I.REPLY, t)
             self.assertIn("WhatsApp and Instagram", r.text)
 
     def test_known_apps_route_to_close_app(self):
         for t, key in (("close spotify", "spotify"), ("quit the file manager", "files"),
-                       ("close the terminal", "terminal")):
+                       ("close the terminal", "terminal"), ("close firefox", "firefox"),
+                       ("close discord", "discord"), ("close code", "code"), ("quit vlc", "vlc")):
             r = self.r(t)
             self.assertEqual((r.kind, r.name, r.args), (I.ACTION, "close_app", {"name": key}), t)
 
@@ -524,14 +528,14 @@ class CloseTabsFlow(unittest.TestCase):
         self.assertIn("Closed Chrome", reply)
 
     def test_close_all_never_runs_without_explicit_confirmation(self):
-        reply = self.assistant.handle_user_text("close all")
+        reply = self.assistant.handle_user_text("close whatsapp and instagram")
         self.assertEqual(self.closed, [])
         self.assertIn("confirm", reply.lower())
         self.assertIn("only those two sites", reply)
         self.assertEqual(self.assistant.pending.name, "close_tabs_all")
 
     def test_vague_yes_and_send_it_do_not_authorise_close_all(self):
-        self.assistant.handle_user_text("close all")
+        self.assistant.handle_user_text("close whatsapp and instagram")
         for t in ("yes", "ok", "sure", "do it", "go ahead"):
             reply = self.assistant.handle_user_text(t)
             self.assertIn("confirm", reply.lower(), t)
@@ -540,7 +544,7 @@ class CloseTabsFlow(unittest.TestCase):
         self.assertIsNotNone(self.assistant.pending)
 
     def test_confirm_runs_exactly_once(self):
-        self.assistant.handle_user_text("close all")
+        self.assistant.handle_user_text("close whatsapp and instagram")
         reply = self.assistant.handle_user_text("confirm")
         self.assertEqual(self.closed, [("all", {})])
         self.assertIn("Closed", reply)
@@ -549,7 +553,7 @@ class CloseTabsFlow(unittest.TestCase):
         self.assertEqual(len(self.closed), 1)
 
     def test_cancel_closes_nothing_and_does_not_touch_whatsapp_draft_state(self):
-        self.assistant.handle_user_text("close all")
+        self.assistant.handle_user_text("close whatsapp and instagram")
         reply = self.assistant.handle_user_text("cancel")
         self.assertEqual(self.closed, [])
         self.assertIn("open", reply.lower())
@@ -795,6 +799,15 @@ class LocalReplMathAndEtiquette(unittest.TestCase):
         r_who = I.route("who are you")
         self.assertEqual(r_who.kind, I.REPLY)
         self.assertIn("I'm Lexi", r_who.text)
+        self.assertIn("Shakeel", r_who.text)
+
+        r_creator = I.route("who made you")
+        self.assertEqual(r_creator.kind, I.REPLY)
+        self.assertIn("Shakeel", r_creator.text)
+
+        r_shakeel = I.route("who is shakeel")
+        self.assertEqual(r_shakeel.kind, I.REPLY)
+        self.assertIn("creator", r_shakeel.text.lower())
 
         r_help = I.route("help")
         self.assertEqual(r_help.kind, I.REPLY)

@@ -63,6 +63,30 @@ _reg(AppSpec(
     exe_re=r"(?:/usr/(?:lib|libexec)/gnome-terminal-server|gnome-terminal-server|/usr/bin/kgx|/usr/bin/ptyxis|kgx|ptyxis)",
     aliases=("terminal", "gnome terminal", "console"),
 ))
+_reg(AppSpec(
+    key="firefox", label="Firefox",
+    comms=("firefox", "firefox-bin"),
+    exe_re=r"(?:/usr/lib/firefox/firefox|firefox)",
+    aliases=("firefox", "firefox browser"),
+))
+_reg(AppSpec(
+    key="discord", label="Discord",
+    comms=("Discord", "discord"),
+    exe_re=r"(?:/opt/discord/Discord|discord)",
+    aliases=("discord",),
+))
+_reg(AppSpec(
+    key="code", label="VS Code",
+    comms=("code", "code-oss"),
+    exe_re=r"(?:/opt/visual-studio-code/code|code)",
+    aliases=("code", "vscode", "vs code"),
+))
+_reg(AppSpec(
+    key="vlc", label="VLC",
+    comms=("vlc",),
+    exe_re=r"(?:/usr/bin/vlc|vlc)",
+    aliases=("vlc", "vlc media player"),
+))
 
 # Quitting the terminal the user is typing this from would be self-defeating
 # (and Lexi itself may be a child of it); it needs an explicit confirmation.
@@ -200,12 +224,30 @@ class AppController:
 
 
 def quit_app(name: str, controller=None):
+    ctrl = controller or AppController()
     spec = resolve_app(name)
-    if spec is None:
+    if spec is not None:
+        return ctrl.quit(spec)
+    # Dynamic process lookup for any other installed application
+    clean_name = name.strip().lower()
+    procs = ctrl.list_fn()
+    me = os.getpid()
+    matching = [p for p in procs if p.pid != me and (
+        p.comm.lower() == clean_name or
+        p.comm.lower().startswith(clean_name[:15]) or
+        clean_name in p.exe.lower() or
+        (p.argv and clean_name in os.path.basename(p.argv[0]).lower())
+    )]
+    if not matching:
         return {"success": False, "verified": False,
                 "message": f"I don't know how to close \u201c{name}\u201d yet. I can close: "
                            + ", ".join(s.label for s in APPS.values()) + "."}
-    return (controller or AppController()).quit(spec)
+    dynamic_spec = AppSpec(
+        key=clean_name,
+        label=name.title(),
+        comms=tuple({p.comm for p in matching})
+    )
+    return ctrl.quit(dynamic_spec)
 
 
 def list_running(controller=None):

@@ -112,13 +112,24 @@ _CHROME_NAME_RE = re.compile(r"(?:google )?chrome(?: browser)?", re.I)
 _WA_NAME_RE = re.compile(r"\bwhats ?app\b", re.I)
 _IG_NAME_RE = re.compile(r"\binsta(?:gram)?\b", re.I)
 _CLOSE_ALL_RE = re.compile(
-    r"(?:all|everything|both|them all|all of (?:them|it)|all (?:the |my )?(?:tabs|windows|apps|pages|sites))"
-    r"(?: (?:tabs|windows|apps|pages|sites))?(?: (?:in|on) (?:chrome|the browser))?", re.I)
-# Only fires when user explicitly says "running process(es/apps/programs)" — never for plain "close all"
+    r"(?:all|everything|them all|all of (?:them|it)|all (?:the |my )?(?:windows|apps|pages|sites))"
+    r"(?: (?:windows|apps|pages|sites))?", re.I)
+_CLOSE_TABS_ALL_RE = re.compile(
+    r"^(?:(?:both|all|all\s+my|social)\s+tabs"
+    r"|(?:all\s+(?:the\s+|my\s+)?tabs\s+(?:in|on)\s+(?:chrome|the\s+browser|browser))"
+    r"|(?:whats ?app|wa)\s+(?:and|&)\s+insta(?:gram)?"
+    r"|insta(?:gram)?\s+(?:and|&)\s+(?:whats ?app|wa)"
+    r"|(?:both\s+)?(?:whats ?app|wa)\s+(?:and|&)\s+insta(?:gram)?\s+tabs?"
+    r")$",
+    re.I,
+)
 _CLOSE_ALL_APPS_RE = re.compile(
-    r"(?:close|quit|kill)\s+(?:all\s+)?running\s+(?:apps?|processes?|programs?)"
-    r"|(?:close|quit|kill)\s+all\s+(?:my\s+)?(?:apps?|programs?)\s*$"
-    r"|(?:whats|what\s+is|what's)\s+running\s+and\s+close", re.I)
+    r"^(?:(?:close|quit|kill)\s+(?:all\s+)?running\s+(?:apps?|processes?|programs?)"
+    r"|(?:close|quit|kill)\s+(?:all|everything|them\s+all|all\s+of\s+(?:them|it))(?:\s+(?:my\s+)?(?:apps?|windows|programs?))?"
+    r"|(?:close|quit|kill)\s+all\s+(?:the\s+|my\s+)?(?:apps?|windows|programs?)"
+    r"|(?:whats|what\s+is|what's)\s+running\s+and\s+close)$",
+    re.I,
+)
 # Catches "whats running", "what is running"
 _LIST_RUNNING_RE = re.compile(
     r"(?:what(?:'?s| is)\s+(?:running|open|currently\s+running|currently\s+open)"
@@ -129,7 +140,7 @@ CLOSE_ALL_PROMPT = (
     "Say “confirm” to close them, or “cancel”."
 )
 CLOSE_UNSUPPORTED_TEXT = (
-    "I can close Chrome, Spotify, Files and Terminal, plus WhatsApp and Instagram tabs in Chrome. "
+    "I can close Chrome, Spotify, Files, Terminal, Firefox, Discord, VS Code, and VLC, plus WhatsApp and Instagram tabs in Chrome. "
     "I don't have a way to close anything else yet."
 )
 _OPEN_RE = re.compile(
@@ -233,9 +244,16 @@ _SLIDES_RE = re.compile(r"^(?:new|create(?:\s+a)?)\s+(?:google\s+)?slide(?:s)?$"
 _MAPS_RE = re.compile(r"^(?:(?:directions|maps?|navigate)(?:\s+to)?|where\s+is)\s+(?P<dest>.+)$", re.I)
 _WEATHER_RE = re.compile(r"^(?:what(?:\x27s| is)\s+(?:the\s+)?)?weather(?:\s+today)?(?:\s+(?:in|for|at)\s+(?P<loc>.+))?$", re.I)
 _DEFINE_RE = re.compile(r"^(?:define|meaning\s+of)\s+(?P<word>[\w\-]+)$", re.I)
-
 _THANKS_RE = re.compile(r"^(?:thanks|thank\s+you)(?:\s+lexi|\s+so\s+much|\s+a\s+lot)?$", re.I)
-_IDENTITY_RE = re.compile(r"^(?:who\s+are\s+you|what\s+is\s+your\s+name|who\s+made\s+you)$", re.I)
+_CREATOR_RE = re.compile(
+    r"^(?:who\s+(?:made|created|built|designed|developed|programmed)\s+you"
+    r"|who\s+is\s+(?:your\s+)?(?:creator|maker|builder|developer|architect|boss|owner|master)"
+    r"|who\s+is\s+shakeel(?:\s+to\s+you)?"
+    r"|do\s+you\s+know\s+shakeel"
+    r"|who\s+owns\s+you)$",
+    re.I,
+)
+_IDENTITY_RE = re.compile(r"^(?:who\s+are\s+you|what\s+is\s+your\s+name)$", re.I)
 _HELP_RE = re.compile(r"^(?:help|what\s+can\s+you\s+do|capabilities)$", re.I)
 
 # WhatsApp draft requests. Order matters: most specific first.
@@ -624,14 +642,14 @@ def _close_route(norm: str) -> Optional[Route]:
         return Route(ACTION, "close_app", {"name": app.key})
     wa = bool(_WA_NAME_RE.search(t))
     ig = bool(_IG_NAME_RE.search(t))
-    if wa and ig:
+    if (wa and ig) or _CLOSE_TABS_ALL_RE.fullmatch(t) or t.lower() in ("both", "both tabs", "both of them"):
         return Route(ACTION, "close_tabs_all", {})
     if wa:
         return Route(ACTION, "close_tabs", {"target": "whatsapp"})
     if ig:
         return Route(ACTION, "close_tabs", {"target": "instagram"})
     if _CLOSE_ALL_RE.fullmatch(t):
-        return Route(ACTION, "close_tabs_all", {})
+        return Route(ACTION, "close_all_apps", {})
     if _CLOSE_VAGUE_RE.fullmatch(t):
         return Route(CLARIFY, text="Which one should I close: WhatsApp or Instagram?")
     return Route(REPLY, text=CLOSE_UNSUPPORTED_TEXT)
@@ -680,11 +698,13 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
     if r_search:
         return r_search
 
-    # 0a-i. Conversational etiquette: thanks, identity, help
+    # 0a-i. Conversational etiquette: thanks, creator, identity, help
     if _THANKS_RE.match(low):
         return Route(REPLY, text="You're welcome!")
+    if _CREATOR_RE.match(low):
+        return Route(REPLY, text="You are Shakeel, my creator, sole architect, and master. You built me from the ground up to be your autonomous AI companion.")
     if _IDENTITY_RE.match(low):
-        return Route(REPLY, text="I'm Lexi, your personal desktop assistant on Arch Linux.")
+        return Route(REPLY, text="I'm Lexi, your personal desktop AI companion, created and architected by Shakeel.")
     if _HELP_RE.match(low):
         return Route(REPLY, text="I can control volume and brightness, play music on Spotify and YouTube, search the web and ChatGPT, check your battery and media status, take screenshots, open desktop apps, draft WhatsApp messages, lock your screen, and run terminal tasks.")
 
