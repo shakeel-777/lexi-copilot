@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -114,7 +115,22 @@ def _validate_value(key: str, value: Any, spec: Field) -> Any:
     if spec.allow_free_text and ("\x00" in text):
         raise SchemaError(f"'{key}' contains disallowed characters")
     if spec.pattern and not re.fullmatch(spec.pattern, text):
-        raise SchemaError(f"'{key}' has an invalid format")
+        if key == "site":
+            _SITES_MAP = {
+                "web": "google.com", "browser": "google.com", "internet": "google.com",
+                "google": "google.com", "youtube": "youtube.com", "yt": "youtube.com",
+                "gmail": "mail.google.com", "github": "github.com", "reddit": "reddit.com",
+                "twitter": "x.com", "x": "x.com", "instagram": "instagram.com", "insta": "instagram.com",
+                "chatgpt": "chatgpt.com", "claude": "claude.ai", "bookmyshow": "in.bookmyshow.com",
+                "amazon": "amazon.in", "flipkart": "flipkart.com", "netflix": "netflix.com",
+            }
+            low = text.lower()
+            if low in _SITES_MAP:
+                text = _SITES_MAP[low]
+            elif not re.search(r"\.[a-z]{2,}", low):
+                text = f"google.com/search?q={urllib.parse.quote_plus(text)}"
+        if spec.pattern and not re.fullmatch(spec.pattern, text):
+            raise SchemaError(f"'{key}' has an invalid format")
     return text
 
 

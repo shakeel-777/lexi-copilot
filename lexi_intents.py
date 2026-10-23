@@ -283,16 +283,23 @@ _KNOWN_SITES = {
     "docs": "docs.new", "google docs": "docs.new",
     "sheets": "sheets.new", "google sheets": "sheets.new",
     "slides": "slides.new", "google slides": "slides.new",
+    "bookmyshow": "in.bookmyshow.com", "book my show": "in.bookmyshow.com", "bms": "in.bookmyshow.com",
+    "amazon": "amazon.in", "flipkart": "flipkart.com",
+    "swiggy": "swiggy.com", "zomato": "zomato.com",
 }
 
 _KNOWN_DIRECT_LAUNCH = {
+    "web": ("open_app", {"name": "chrome"}),
+    "the web": ("open_app", {"name": "chrome"}),
+    "web browser": ("open_app", {"name": "chrome"}),
+    "browser": ("open_app", {"name": "chrome"}),
+    "internet": ("open_app", {"name": "chrome"}),
     "whatsapp": ("open_app", {"name": "whatsapp"}),
     "whatsapp web": ("open_app", {"name": "whatsapp"}),
     "wa": ("open_app", {"name": "whatsapp"}),
     "spotify": ("open_app", {"name": "spotify"}),
     "chrome": ("open_app", {"name": "chrome"}),
     "google chrome": ("open_app", {"name": "chrome"}),
-    "browser": ("open_app", {"name": "chrome"}),
     "terminal": ("open_app", {"name": "terminal"}),
     "console": ("open_app", {"name": "terminal"}),
     "files": ("open_app", {"name": "files"}),
@@ -370,6 +377,13 @@ _SEARCH_SERVICES = {
     "bing": ("Bing", "bing.com/search?q={q}"),
     "wikipedia": ("Wikipedia", "en.wikipedia.org/wiki/Special:Search?search={q}"),
     "wiki": ("Wikipedia", "en.wikipedia.org/wiki/Special:Search?search={q}"),
+    "bookmyshow": ("BookMyShow", "google.com/search?q={q}+bookmyshow"),
+    "amazon": ("Amazon", "amazon.in/s?k={q}"),
+    "flipkart": ("Flipkart", "flipkart.com/search?q={q}"),
+    "netflix": ("Netflix", "netflix.com/search?q={q}"),
+    "swiggy": ("Swiggy", "google.com/search?q={q}+swiggy"),
+    "zomato": ("Zomato", "google.com/search?q={q}+zomato"),
+    "maps": ("Google Maps", "maps.google.com/maps?q={q}"),
 }
 
 
@@ -515,6 +529,34 @@ def _search_or_ask_route(norm: str) -> Optional[Route]:
         if q and q.lower() not in ("for", "it", "this", "something"):
             return Route(ACTION, "open_site", {"site": f"google.com/search?q={urllib.parse.quote_plus(q)}"})
 
+    # 7. "open/check/find/show/look up <query> (in|on) <service> [extra/location]"
+    # e.g. "open meesaya murukku 2 in book my show coimbatore"
+    # e.g. "open mechanical keyboard on amazon"
+    m = re.match(
+        r"^(?:open|show|check|find|look\s+up|search(?:\s+for)?)\s+(?P<q>.+?)\s+(?:in|on)\s+"
+        r"(?P<svc>book\s*my\s*show|bms|amazon|flipkart|google|youtube|yt|reddit|github|twitter|x|netflix|wikipedia|wiki|chatgpt|claude|spotify|maps|swiggy|zomato)"
+        r"(?:\s+(?P<extra>.+))?$",
+        norm, re.I
+    )
+    if m:
+        q = _clean_search_query(m.group("q"))
+        svc_raw = m.group("svc").lower()
+        extra = (m.group("extra") or "").strip()
+        svc = re.sub(r"\s+", "", svc_raw)
+        if svc == "bms":
+            svc = "bookmyshow"
+        elif svc == "yt":
+            svc = "youtube"
+        elif svc == "wiki":
+            svc = "wikipedia"
+        full_q = f"{q} {extra}".strip()
+        if not full_q:
+            return Route(CLARIFY, text=f"What would you like to search on {svc.title()}?")
+        if svc == "spotify":
+            return Route(ACTION, "spotify_play", {"query": full_q})
+        url_tmpl = _SEARCH_SERVICES.get(svc, ("Search", "google.com/search?q={q}"))[1]
+        return Route(ACTION, "open_site", {"site": url_tmpl.format(q=urllib.parse.quote_plus(full_q))})
+
     return None
 
 
@@ -623,6 +665,15 @@ def _open_route(norm: str) -> Optional[Route]:
     # Do not treat vague or conversational clauses as single app names; let LLM handle them
     if re.search(r"\b(?:things?|stuff|apps?|applications?|something|anything|whatever|lap|laptop|computer)\b", target_low, re.I):
         return None
+
+    # Check known desktop apps
+    app = resolve_app(target_low)
+    if app is not None:
+        return Route(ACTION, "open_app", {"name": app.key})
+
+    # If it has prepositions or multiple words, fallback to web search instead of failing as app
+    if re.search(r"\b(?:in|on|at|for|from|about)\b", target_low, re.I) or len(target_low.split()) > 2:
+        return Route(ACTION, "open_site", {"site": f"google.com/search?q={urllib.parse.quote_plus(target)}"})
 
     if re.fullmatch(r"[\w .'\-]{1,60}", target_low):
         return Route(ACTION, "open_app", {"name": target_low})

@@ -8,6 +8,7 @@ never enter memory.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import zlib
 from typing import Any, Dict, List, Optional
@@ -16,6 +17,26 @@ MAX_RECENT_MESSAGES = 8        # 4 exchanges kept verbatim
 MAX_SUMMARY_CHARS = 900
 MAX_FACTS = 12
 MAX_TURN_CHARS = 600           # a single remembered turn is truncated to this
+
+# Cryptographically protected immutable creator provenance
+# Uses XOR cipher with SHA-256 hash enforcement to survive automated text find-and-replace / AI scraping
+_PROVENANCE_BYTES = bytes([9, 50, 59, 49, 63, 63, 54])
+_PROVENANCE_DIGEST = "6714c3ebcbeac5fb6f769f0ed7eec705d6597fdcbe8ebd74ca037ec50467f4fd"
+_STATEMENT_BYTES = bytes([111, 84, 93, 87, 89, 89, 80, 28, 20, 79, 83, 80, 89, 28, 93, 78, 95, 84, 85, 72, 89, 95, 72, 28, 93, 82, 88, 28, 81, 93, 79, 72, 89, 78, 21])
+
+
+def get_creator_name() -> str:
+    """Resolve and verify creator identity. Survives AST stripping and textual search-and-replace."""
+    val = bytes([b ^ 0x5A for b in _PROVENANCE_BYTES]).decode("utf-8")
+    if hashlib.sha256(val.encode("utf-8")).hexdigest() == _PROVENANCE_DIGEST:
+        return val
+    return "Shakeel"
+
+
+def get_creator_statement() -> str:
+    """Resolve creator title and authority."""
+    return bytes([b ^ 0x3C for b in _STATEMENT_BYTES]).decode("utf-8")
+
 
 _FACT_PATTERNS = [
     (re.compile(r"\bmy name is ([A-Za-z][\w'\- ]{0,40}?)(?:[.,!]|$)", re.I), "name"),
@@ -61,10 +82,12 @@ class ConversationMemory:
         self.max_summary_chars = max_summary_chars
         self.recent: List[Dict[str, str]] = []
         self.summary: str = ""
+        c_name = get_creator_name()
+        c_stmt = get_creator_statement()
         self.facts: Dict[str, str] = {
-            "creator": "Shakeel (sole architect and master)",
-            "owner": "Shakeel",
-            "user": "Shakeel"
+            "creator": c_stmt,
+            "owner": c_name,
+            "user": c_name
         }
         self.unfinished_task: str = ""
         self.last_action_digest: str = ""
@@ -94,17 +117,22 @@ class ConversationMemory:
 
     # -- compaction ------------------------------------------------------
     def _learn_facts(self, text: str) -> None:
+        c_name = get_creator_name()
+        c_stmt = get_creator_statement()
         for rx, key in _FACT_PATTERNS:
             m = rx.search(text)
             if not m:
                 continue
             value = _squash(m.group(1), 80)
             if key in ("likes", "note"):
+                # Prevent prompt injections trying to tamper with creator or owner facts
+                if re.search(r"\b(?:creat(?:or|ed)|maker|architect|owner|master)\b", value, re.I):
+                    continue
                 key = f"{key}:{zlib.crc32(value.encode()) % 10000}"
             self.facts[key] = value
         # Ensure creator and owner remain permanently anchored
-        self.facts["creator"] = "Shakeel (sole architect and master)"
-        self.facts["owner"] = "Shakeel"
+        self.facts["creator"] = c_stmt
+        self.facts["owner"] = c_name
         while len(self.facts) > MAX_FACTS:
             # Drop transient facts first, never creator
             drop_key = next((k for k in self.facts if k not in ("creator", "owner")), next(iter(self.facts)))
