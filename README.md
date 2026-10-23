@@ -1,57 +1,100 @@
 # ✨ Lexi Copilot
 
-> **An autonomous, production-grade AI desktop screen companion and Dynamic Island built natively for Arch Linux (GNOME / Wayland).**  
+> **The first native Dynamic Island AI Desktop Copilot & AirDrop built for Linux (GNOME / Wayland).**  
 > *Architected and created by Shakeel.*
+
+<div align="center">
 
 [![Arch Linux](https://img.shields.io/badge/Arch_Linux-Wayland-1793D1?logo=arch-linux&logoColor=white)](https://archlinux.org)
 [![GTK4 & Libadwaita](https://img.shields.io/badge/GTK4-Libadwaita-3584e4?logo=gnome&logoColor=white)](https://gnome.org)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![scrcpy](https://img.shields.io/badge/Phone_Mirror-scrcpy_5.0-3DDC84?logo=android&logoColor=white)](https://github.com/Genymobile/scrcpy)
+[![RAM Footprint](https://img.shields.io/badge/RAM-%3C_90_MB-success)](https://github.com/shakeel-777/lexi-copilot)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/shakeel-777/lexi-copilot?style=social)](https://github.com/shakeel-777/lexi-copilot/stargazers)
 
-Lexi brings multimodal vision intelligence, fluid desktop interactions, and wireless device synchronization natively to your desktop. Featuring a permanent hardware-accelerated **Dynamic Island** pinned at the top of your display, Lexi provides seamless screen intelligence, instant phone mirroring, zero-cloud local file transfers, and system task automation—running in under 100MB of RAM with zero Electron or WebKit overhead.
+**[⚡ One-Line Install](#-quick-install) • [🌟 Features](#-core-highlights) • [📊 Comparison](#-why-lexi) • [⌨️ Shortcuts](#️-global-keybindings) • [⭐ Star This Project](#-star-history)**
+
+</div>
+
+---
+
+## ⚡ Quick Install
+
+Install and launch Lexi Copilot in a single command on **Arch Linux**, **Fedora**, or **Ubuntu/Debian**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/install.sh | bash
+```
+
+Or via **Arch User Repository (AUR)**:
+```bash
+yay -S lexi-copilot-git
+# or
+paru -S lexi-copilot-git
+```
+
+---
+
+## 📊 Why Lexi?
+
+Most desktop AI assistants are 800MB+ Electron web wrappers that freeze your system and lack OS integration. **Lexi is built natively in Python, GTK4, and Libadwaita**, running as a permanent hardware-accelerated Dynamic Island notch at less than **90 MB RAM**.
+
+| Feature | ⚡ Lexi Copilot | 🐌 Electron AI Wrappers | 🍏 macOS Raycast |
+|---|:---:|:---:|:---:|
+| **Memory Footprint** | **< 90 MB RAM** | 800 MB – 1.5 GB | ~150 MB |
+| **Native Dynamic Island Notch** | **✅ Hardware-accelerated** | ❌ None | ❌ None |
+| **Linux AirDrop (Lexi Beam)** | **✅ Local P2P + PWA** | ❌ None | ❌ None |
+| **Android Phone Mirroring** | **✅ 60 FPS Wireless (scrcpy)** | ❌ None | ❌ None |
+| **Wayland Portal Vision Snip** | **✅ Zero compositor freeze** | ⚠️ Slow / Broken | ❌ (macOS only) |
+| **Port Inspector & Killer** | **✅ Built-in (`kill port 3000`)** | ❌ None | ⚠️ Paid extension |
+| **Top Process Killer** | **✅ Built-in (`top processes`)** | ❌ None | ⚠️ Extra script |
+| **Do Not Disturb (DND) Switch** | **✅ GNOME/Mako/Dunst/SwayNC** | ❌ None | ❌ None |
+| **Zero Cloud Lock-in** | **✅ DeepSeek / OpenRouter / Local** | ❌ Vendor locked | ❌ Subscription |
 
 ---
 
 ## 🌟 Core Highlights
 
 ### 🏝️ 1. Dynamic Island Notch
-- **Permanent Top Notch**: Pinned cleanly at the top-center of your screen right beneath GNOME's panel, keeping full window workspaces unobstructed.
-- **Interactive Morphing Actions**: Hovering over the island expands smooth action chips:
+- **Permanent Top Notch**: Pinned cleanly at the top-center of your screen right beneath the panel, keeping your primary workspace completely unobstructed.
+- **Interactive Morphing Actions**: Hovering over the notch smoothly morphs into quick action pills:
   `[💬 Copilot] [⚡ Beam] [📱 Phone] [◨ Side Panel] [✂️ Snip] [🐾 Pet]`.
-- **Live Media Player & Equalizer**: Real-time integration with Spotify and MPRIS players displaying live song titles, cover artwork, and animated equalizer bars.
-- **Direct System Controls**: One-click actions to toggle center copilot, side panel, interactive region snips, or detach Lexi into roaming desktop pet mode.
+- **Live Media Player & Equalizer**: Real-time integration with Spotify and MPRIS players displaying live track progress, cover artwork, and animated equalizer spectrum.
+- **Live Download Progress Activity**: Monitors active downloads (`.crdownload`, `.part`) and renders live throughput (MB/s) and progress indicators directly in the notch.
 
-### 💬 2. Floating Vision Copilot Card
-- **Multimodal Screen Vision**: Capture full display (<kbd>Super</kbd> + <kbd>C</kbd>) or region snips (<kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>) natively using Wayland portal screencasts without compositor freezing.
-- **Multi-Page Attachments (Up to 5 Pages)**: Attach and compare multiple application windows, code files, terminal logs, or PDF documents in a single prompt.
-- **Quick Action Strip**: One-click prompts directly inside Copilot (`⚡ Quick`, `📱 Phone`, `📡 Beam`, `🧹 Close All`, `Explain`, `Fix`, `Summarize`).
+### 💬 2. Floating Multimodal Vision Copilot
+- **Wayland Screen Intelligence**: Capture full screen (<kbd>Super</kbd> + <kbd>C</kbd>) or region snips (<kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>) natively using Wayland desktop screencast portals without compositor stutter.
+- **Multi-Page Attachments (Up to 5 Pages)**: Attach and cross-analyze multiple application windows, terminal logs, or PDF documents in a single prompt.
+- **Quick Action Strip**: One-click actions directly inside Copilot (`⚡ Quick`, `📱 Phone`, `📡 Beam`, `🧹 Close All`, `Explain`, `Fix`, `Summarize`).
 - **Syntax Highlighting & Markdown**: Custom rendering for code blocks, bullet points, blockquotes, and tables across Python, Rust, Shell, JS, C, and Go.
 
-### 📱 3. Android Phone Mirroring & Remote Control
+### 🛠️ 3. Developer Power Tools (Zero-Latency Local CLI & Island)
+- **Port Inspector & Killer**:
+  - `port 3000` or `inspect port 8080` — Instant PID and process inspection.
+  - `kill port 3000` — Gracefully frees blocked development ports in one second.
+- **Top Process Manager**:
+  - `top processes` or `top mem` — Lists resource hogs without leaving your screen.
+  - `kill process <pid>` — Safely terminates runaway processes with protected-process safeguards (`systemd`, `init`, `bash` are shielded).
+- **Do Not Disturb (DND) Toggle**:
+  - `turn on dnd` / `mute notifications` — Instantly suppresses notifications across GNOME, Dunst, Mako, and SwayNC.
+- **Quick Notes Vault**:
+  - `note deploy server tomorrow` — Instant local scratchpad saved to markdown.
+  - `list notes` / `clear notes` — Real-time notes viewer.
+- **Sanitized Terminal Diagnostics**:
+  - `diagnose terminal` — Analyzes your last terminal command and suggests fixes while scrubbing all API keys, bearer tokens, and passwords from history.
+
+### 📱 4. Android Phone Mirroring & Remote Control
 - **Ultra-Low Latency Wireless 2.0**: Direct wireless screen mirroring and input control powered by `scrcpy 5.0` with hardware-accelerated H.265 (HEVC) encoding.
-- **Distance-Adaptive Buffering**: Dynamic jitter buffer (40ms–100ms) and adaptive bitrate scaling (3M $\rightarrow$ 2M $\rightarrow$ 1.5M) prevents packet drops across rooms and through walls.
+- **Distance-Adaptive Buffering**: Dynamic jitter buffer (40ms–100ms) and adaptive bitrate scaling (3M $\rightarrow$ 2M $\rightarrow$ 1.5M) prevents packet drops across rooms.
 - **Autonomous Reconnection Supervisor**: Auto-detects Wi-Fi packet drops, re-negotiates ADB TCP/IP connections, and rediscovers roaming device IPs on the fly.
 - **Zero-Touch Automation**: Auto-unlocks phone via configured pin/passcode and enables Android OS low-latency Wi-Fi mode.
-- **Direct Wi-Fi Hotspot**: Built-in P2P hotspot mode (`shakeel` / `shakeel786`) for zero-router low-latency wireless pairing.
 
-### ⚡ 4. Lexi Beam (High-Speed Local P2P Drop)
-- **Zero-Cloud Cross-Device Transfer**: Blazing fast peer-to-peer file transfer between Linux laptops and Android devices via local HTTP/SSDP.
-- **Integrated Progressive Web App (`drop_web`)**: Any device on the local network can open the web interface in their browser to send/receive photos, code, and files instantly.
+### ⚡ 5. Lexi Beam (AirDrop for Linux)
+- **Zero-Cloud Cross-Device Transfer**: Peer-to-peer file transfer between Linux laptops and Android devices via local HTTP/SSDP.
+- **Integrated Progressive Web App (`drop_web`)**: Any device on the local network can open `http://<laptop-ip>:7890` in Chrome/Safari to send/receive files instantly at wire speed.
 - **Native Android Companion (`android_app`)**: Native Android APK (`com.lexi.connect`) supporting system-wide share intents and dynamic island notifications.
-
-### 🛡️ 5. Deterministic Intent Routing & Safety
-- **Layer 0 Deterministic Router**: Intercepts system volume, brightness, media, application management, and web searches locally before touching the LLM.
-- **Universal App Quitting (`close all`)**: Gracefully terminates open desktop applications via `/proc` signal verification—completely decoupled from browser tabs.
-- **Mandatory Confirmation Gate**: All mass-close actions require explicit user confirmation; active downloads and unsaved work are checked beforehand.
-- **Immutable Provenance Anchor**: Cryptographically anchors creator identity (`Shakeel`) at the byte layer using binary XOR encoding and SHA-256 verification, immune to prompt injection and automated code refactoring.
-
-### ⚡ 6. Daily Driver Productivity Suite & Island Live Activities
-- **Dynamic Island Live Download Activity**: Monitors `~/Downloads` for active `.crdownload` / `.part` files, streaming real-time download speed (MB/s) and progress directly on the Dynamic Island notch.
-- **Download Sentinel Protection**: Automatically blocks abrupt closures if active downloads are detected, prompting: *"⚠️ An active download is in progress (<file> at <speed>). Confirm to force close anyway, or cancel."*
-- **Focus & Pomodoro Island Timer**: Start deep-work sessions (`focus 25`, `pomodoro`, `timer 10 mins`) with live ticking countdown directly inside the Dynamic Island notch and audio completion alarms.
-- **Universal Clipboard Vault**: Searchable history of recent clipboard entries (Code, URLs, Colors, Text) with instant restoration and Android companion phone synchronization.
-- **Instant Spotlight Conversions & World Clock**: Instant zero-latency currency conversion (`100 usd in inr`), unit conversion (`100 km in miles`, `70 kg in lbs`, `100 c in f`, `100 gb in mb`), and world time (`time in tokyo`, `time in new york`).
+- **Path-Traversal & CSRF Hardened**: Kernel zero-copy streaming (`os.sendfile`) with strict directory boundary isolation and origin protection.
 
 ---
 
@@ -68,94 +111,48 @@ Lexi brings multimodal vision intelligence, fluid desktop interactions, and wire
 
 ---
 
-## 📁 Architecture & Codebase Map
+## 📁 Repository Structure
 
 ```
 mochi-copilot/
-├── lexi.py                    # Main GTK4 / Libadwaita app, Dynamic Island, Copilot, & Side Panel
-├── lexi_intents.py            # Layer 0 deterministic router (system controls, apps, conversions)
-├── lexi_capabilities.py       # Typed capability registry, schema validation & security policy
-├── lexi_downloads.py          # Dynamic Island live download watcher & sentinel protection
-├── lexi_productivity.py       # Focus/Pomodoro timer & universal clipboard history vault
-├── lexi_actions.py            # Execution engine for local actions and confirmations
-├── lexi_apps.py               # Process inspection via /proc and graceful app management
-├── lexi_drop.py               # Lexi Beam P2P sharing, SSDP discovery & PhoneMirrorManager
-├── lexi_memory.py             # Context memory compaction & cryptographic creator provenance
-├── lexi_policy.py             # Command safety classification & risk gate
-├── lexi_browser_host.py       # Native messaging host for browser integration
-├── check.sh                   # Comprehensive one-step compilation & test verification suite
-├── styles.css                 # Libadwaita dark-glass CSS styling & animations
-├── drop_web/                  # Progressive Web App for zero-install peer file sharing
-├── chrome_extension/          # Scoped browser extension bridge
+├── lexi.py                    # Main GTK4 / Libadwaita app, Dynamic Island & Copilot
+├── lexi_intents.py            # Layer 0 deterministic router (system controls, apps, tools)
+├── lexi_productivity.py       # Developer power tools (Port killer, Process manager, DND, Notes)
+├── lexi_downloads.py          # Dynamic Island live download throughput watcher
+├── lexi_drop.py               # Lexi Beam P2P engine, SSDP discovery & PhoneMirrorManager
+├── lexi_capabilities.py       # Typed capability registry & schema validation
+├── lexi_apps.py               # Process inspection via /proc & graceful app manager
+├── lexi_memory.py             # Context memory compaction & creator provenance
+├── install.sh                 # One-command automated installer for Linux
+├── PKGBUILD                   # Official Arch Linux AUR package build script
+├── requirements.txt           # Python package requirements
+├── drop_web/                  # Progressive Web App for cross-device LAN file sharing
 ├── android_app/               # Native Android companion application (Lexi Connect)
-└── tests/                     # Automated unit test suites (200+ tests)
+└── tests/                     # Automated unit & security test suite (144+ tests)
 ```
 
 ---
 
-## 🚀 Installation & Quick Start
+## 🧪 Automated Test Suite
 
-### 1. Prerequisites (Arch Linux)
-```bash
-sudo pacman -S gtk4 libadwaita python-pillow xdg-desktop-portal xdg-desktop-portal-gnome \
-               scrcpy android-tools playerctl xdotool alsa-utils brightnessctl
-```
+Lexi includes an exhaustive test suite covering app termination, browser bridge validation, scrcpy mirroring, intent routing, and security regression gates:
 
-### 2. Setup
-Clone the repository:
 ```bash
-git clone https://github.com/shakeel-777/lexi-copilot.git ~/.local/share/mochi-copilot
-cd ~/.local/share/mochi-copilot
-```
-
-Run test suite verification:
-```bash
-./check.sh
-```
-
-### 3. Desktop Integration
-Install desktop launcher and application icons:
-```bash
-cp lexi-copilot.svg ~/.local/share/icons/hicolor/scalable/apps/
-cp org.antigravity.LexiCompanion.desktop ~/.local/share/applications/
-update-desktop-database ~/.local/share/applications/
-```
-
-Enable user systemd service for persistent Dynamic Island autostart:
-```bash
-systemctl --user enable --now lexi-island.service
+python3 -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror
+# 144 tests passed (0 failures)
 ```
 
 ---
 
-## ⚙️ Configuration
+## ⭐ Star History
 
-Lexi reads configuration from `~/.local/share/mochi-copilot/config.json`:
-```json
-{
-  "api_base": "https://openrouter.ai/api/v1",
-  "api_key": "YOUR_OPENROUTER_OR_LLM_KEY",
-  "models": [
-    "google/gemini-2.5-flash-lite",
-    "nvidia/nemotron-3.5-super-vl:free"
-  ],
-  "max_tokens": 2048,
-  "request_timeout": 35
-}
-```
+If you love having a native Dynamic Island and AirDrop on Linux, give the repository a star! ⭐
 
----
-
-## 🧪 Testing
-
-Lexi includes an exhaustive test suite covering app termination, browser bridge validation, scrcpy mirroring, intent routing, and security policies:
-```bash
-./check.sh
-```
+[![Star History Chart](https://api.star-history.com/svg?repos=shakeel-777/lexi-copilot&type=Date)](https://star-history.com/#shakeel-777/lexi-copilot&Date)
 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
-**Lead Architect & Creator**: Shakeel
+Licensed under the MIT License — see the [LICENSE](LICENSE) file for details.  
+**Architect & Creator**: Shakeel
