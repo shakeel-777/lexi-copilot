@@ -114,29 +114,35 @@ def _validate_value(key: str, value: Any, spec: Field) -> Any:
         raise SchemaError(f"'{key}' contains disallowed characters")
     if spec.allow_free_text and ("\x00" in text):
         raise SchemaError(f"'{key}' contains disallowed characters")
+    if key == "site":
+        _SITES_MAP = {
+            "web": "google.com", "browser": "google.com", "internet": "google.com",
+            "google": "google.com", "youtube": "youtube.com", "yt": "youtube.com",
+            "gmail": "mail.google.com", "github": "github.com", "reddit": "reddit.com",
+            "twitter": "x.com", "x": "x.com", "instagram": "instagram.com", "insta": "instagram.com",
+            "chatgpt": "chatgpt.com", "claude": "claude.ai", "bookmyshow": "in.bookmyshow.com",
+            "amazon": "amazon.in", "flipkart": "flipkart.com", "netflix": "netflix.com",
+        }
+        low = text.lower().strip()
+        clean_site = re.sub(r"^https?://(?:www\.)?", "", text, flags=re.I).strip()
+        clean_low = clean_site.lower()
+        if clean_low in _SITES_MAP:
+            text = _SITES_MAP[clean_low]
+        elif low in _SITES_MAP:
+            text = _SITES_MAP[low]
+        elif not re.search(r"\.[a-z]{2,}", clean_low):
+            text = f"google.com/search?q={urllib.parse.quote_plus(text)}"
+        else:
+            if " " in text:
+                text = text.replace(" ", "+")
     if spec.pattern and not re.fullmatch(spec.pattern, text):
-        if key == "site":
-            _SITES_MAP = {
-                "web": "google.com", "browser": "google.com", "internet": "google.com",
-                "google": "google.com", "youtube": "youtube.com", "yt": "youtube.com",
-                "gmail": "mail.google.com", "github": "github.com", "reddit": "reddit.com",
-                "twitter": "x.com", "x": "x.com", "instagram": "instagram.com", "insta": "instagram.com",
-                "chatgpt": "chatgpt.com", "claude": "claude.ai", "bookmyshow": "in.bookmyshow.com",
-                "amazon": "amazon.in", "flipkart": "flipkart.com", "netflix": "netflix.com",
-            }
-            low = text.lower()
-            if low in _SITES_MAP:
-                text = _SITES_MAP[low]
-            elif not re.search(r"\.[a-z]{2,}", low):
-                text = f"google.com/search?q={urllib.parse.quote_plus(text)}"
-        if spec.pattern and not re.fullmatch(spec.pattern, text):
-            raise SchemaError(f"'{key}' has an invalid format")
+        raise SchemaError(f"'{key}' has an invalid format")
     return text
 
 
 # Contacts / app names: letters, digits, spaces and a few name punctuation marks.
 _NAME_RE = r"[\w .'\-]{1,100}"
-_SITE_RE = r"[\w.\-]{1,100}\.[A-Za-z]{2,24}(?:/[\w\-./%?=&+#~]*)?"
+_SITE_RE = r"(?:https?://)?(?:www\.)?[\w.\-]{1,100}\.[A-Za-z]{2,24}(?:/[\w\-./%?=&+#~]*)?"
 
 REGISTRY: Dict[str, Capability] = {}
 

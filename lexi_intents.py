@@ -477,6 +477,9 @@ _SEARCH_SERVICES = {
     "swiggy": ("Swiggy", "google.com/search?q={q}+swiggy"),
     "zomato": ("Zomato", "google.com/search?q={q}+zomato"),
     "maps": ("Google Maps", "maps.google.com/maps?q={q}"),
+    "chrome": ("Google", "google.com/search?q={q}"),
+    "google-chrome": ("Google", "google.com/search?q={q}"),
+    "browser": ("Google", "google.com/search?q={q}"),
 }
 
 
@@ -658,7 +661,7 @@ def _eval_conversions(text: str) -> Optional[str]:
 def _search_or_ask_route(norm: str) -> Optional[Route]:
     # 1. "open/launch <service> and (ask|prompt|search|tell it) <query>"
     m = re.match(
-        r"^(?:open|launch|go to|pull up)\s+(?P<svc>chatgpt|claude|google|youtube|yt|reddit|github|duckduckgo|ddg|bing|wikipedia|wiki|spotify)\s+"
+        r"^(?:open|launch|go to|pull up)\s+(?P<svc>chatgpt|claude|google|chrome|google-chrome|browser|youtube|yt|reddit|github|duckduckgo|ddg|bing|wikipedia|wiki|spotify)\s+"
         r"(?:and\s+)?(?:ask|prompt|search(?:\s+for)?|tell(?:\s+it)?|query)\s+(?P<q>.+)$",
         norm, re.I
     )
@@ -699,7 +702,7 @@ def _search_or_ask_route(norm: str) -> Optional[Route]:
 
     # 3. "search [on] <service> for <query>"
     m = re.match(
-        r"^search\s+(?:on\s+)?(?P<svc>google|youtube|yt|reddit|github|duckduckgo|ddg|bing|wikipedia|wiki|spotify)\s+for\s+(?P<q>.+)$",
+        r"^search\s+(?:on\s+)?(?P<svc>google|chrome|google-chrome|browser|youtube|yt|reddit|github|duckduckgo|ddg|bing|wikipedia|wiki|spotify)\s+for\s+(?P<q>.+)$",
         norm, re.I
     )
     if m:

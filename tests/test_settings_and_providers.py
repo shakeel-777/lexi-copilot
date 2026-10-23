@@ -125,6 +125,39 @@ class TestProviderIntegration(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue('Connection Refused' in msg or 'Network Error' in msg or 'Error' in msg)
 
+    def test_settings_dialog_instantiation_and_provider_switching(self):
+        """Verifies LexiSettingsDialog instantiates without attribute errors on GTK PasswordEntry."""
+        import lexi
+        d = lexi.LexiSettingsDialog(config=dict(DEFAULT_CONFIG))
+        self.assertIsNotNone(d)
+        for idx in range(len(d.provider_keys)):
+            d.prov_dd.set_selected(idx)
+            self.assertEqual(d.current_provider, d.provider_keys[idx])
+
+    def test_open_site_schema_with_https(self):
+        """Verifies open_site schema accepts https:// and query strings without SchemaError."""
+        from lexi_capabilities import REGISTRY
+        cap = REGISTRY["open_site"]
+        urls = [
+            "https://github.com/search?q=artemus",
+            "https://github.com/artemus",
+            "https://google.com/search?q=artemus+github",
+            "http://example.com/test",
+            "github.com/artemus"
+        ]
+        for u in urls:
+            res = cap.validate({"site": u})
+            self.assertIn("site", res)
+
+    def test_chrome_search_intent_routing(self):
+        """Verifies 'open chrome search <query>' routes directly to open_site."""
+        import lexi_intents as I
+        r = I.route("open chrome search artemus github")
+        self.assertEqual(r.kind, I.ACTION)
+        self.assertEqual(r.name, "open_site")
+        self.assertIn("artemus+github", r.args["site"])
+
 
 if __name__ == '__main__':
     unittest.main()
+

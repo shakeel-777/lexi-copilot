@@ -8979,6 +8979,16 @@ class LexiAvatarDialog(Gtk.Window):
                 m.trigger_walk()
 
 
+def set_entry_placeholder(entry, text):
+    if hasattr(entry, 'set_placeholder_text'):
+        entry.set_placeholder_text(text)
+    elif hasattr(entry, 'set_property'):
+        try:
+            entry.set_property('placeholder-text', text)
+        except Exception:
+            pass
+
+
 class LexiSettingsDialog(Gtk.Window):
     """
     Interactive Settings Dialog for LLM Providers and API Keys.
@@ -9072,7 +9082,7 @@ class LexiSettingsDialog(Gtk.Window):
         self.key_entry = Gtk.PasswordEntry()
         self.key_entry.set_show_peek_icon(True)
         self.key_entry.set_text(active_info['api_key'])
-        self.key_entry.set_placeholder_text(active_info['preset']['key_placeholder'])
+        set_entry_placeholder(self.key_entry, active_info['preset']['key_placeholder'])
         key_box.append(self.key_entry)
         card.append(key_box)
 
@@ -9183,7 +9193,7 @@ class LexiSettingsDialog(Gtk.Window):
             self.base_entry.set_text(self.config.get('api_base') or preset['api_base'])
             self.model_entry.set_text(self.config.get('model') or preset['default_model'])
 
-        self.key_entry.set_placeholder_text(preset['key_placeholder'])
+        set_entry_placeholder(self.key_entry, preset['key_placeholder'])
         self.base_entry.set_placeholder_text(preset['api_base'])
         self.model_entry.set_placeholder_text(preset['default_model'])
         self.test_status.set_text("")
