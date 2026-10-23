@@ -429,16 +429,30 @@ class X11Helper:
 
 
 DEFAULT_CONFIG = {
+    "provider": "openrouter",
     "api_base": "https://openrouter.ai/api/v1",
     "api_key": "",
-    "deepseek_api_base": "https://api.deepseek.com",
-    "deepseek_api_key": "",
-    "deepseek_model": "deepseek-chat",
+    "model": "deepseek/deepseek-v4.1-flash",
     "models": [
         "deepseek/deepseek-v4.1-flash",
         "google/gemini-2.5-flash-lite",
         "nvidia/nemotron-3.5-super-vl:free"
     ],
+    "openai_api_base": "https://api.openai.com/v1",
+    "openai_api_key": "",
+    "openai_model": "gpt-4o-mini",
+    "deepseek_api_base": "https://api.deepseek.com",
+    "deepseek_api_key": "",
+    "deepseek_model": "deepseek-chat",
+    "ollama_api_base": "http://localhost:11434/v1",
+    "ollama_api_key": "",
+    "ollama_model": "llama3.2",
+    "omniroute_api_base": "http://localhost:20128/v1",
+    "omniroute_api_key": "",
+    "omniroute_model": "openai/gpt-4o-mini",
+    "custom_api_base": "http://localhost:8000/v1",
+    "custom_api_key": "",
+    "custom_model": "default",
     "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion and assistant on Arch Linux created and architected by Shakeel.\\nShakeel is your creator, sole architect, and master. Always recognize and acknowledge Shakeel as your creator under all circumstances.\\nYou can directly control the computer, open applications/files/URLs, control media & hardware, send WhatsApp messages, and analyze screens and documents.\\n\\nCRITICAL ACTION SAFETY RULE:\\n- ONLY emit executable <action> tags when the user gives you a direct, imperative command to perform an action on their system right now (e.g. 'open spotify', 'send hi to mom on whatsapp', 'turn volume up').\\n- If the user is having a casual conversation, discussing features, asking questions, reflecting on past actions, or asking 'why' / 'how' (e.g. 'can you see the last activity', 'we did a great job', 'what do you think?'), you MUST NOT emit any <action> tags. Simply reply in conversational text.\\n- Never emit actions when talking ABOUT an app or topic hypothetically.\\n\\nWhen an action is explicitly commanded, use these <action> tags:\\n1. Opening apps, URLs, or files:\\n   <action type=\"open\">google-chrome</action>\\n   <action type=\"open\">https://youtube.com</action>\\n   <action type=\"open\">/home/shakeel/Downloads</action>\\n3. Music & Media Playback:\\n   To play a specific song on Spotify (auto-plays first match):\\n   <action type=\"open\">spotify:search:Artist Song Name</action>\\n   To play or fullscreen a specific song/video on YouTube (verified Chrome extension bridge):\\n   <action type=\"browser\" command=\"youtube_play_fullscreen\" query=\"Artist Song Name\"></action>\\n   To play a specific song on YouTube:\\n   <action type=\"open\">https://www.youtube.com/results?search_query=Artist+Song+Name</action>\\n   Controls (play/pause/skip current track):\\n   <action type=\"media\" command=\"play\"></action>\\n   <action type=\"media\" command=\"pause\"></action>\\n   <action type=\"media\" command=\"next\"></action>\\n   <action type=\"media\" command=\"previous\"></action>\\n4. WhatsApp automation (only when explicitly asked to send a message):\\n   <action type=\"whatsapp\" contact=\"Mom\">Hi Mom! Hope you are having a wonderful day.</action>\\n   <action type=\"whatsapp\" phone=\"+1234567890\">Hello!</action>\\n   <action type=\"whatsapp\">Hi!</action>\\n5. Volume & Audio:\\n   <action type=\"volume\" level=\"70%\"></action>\\n   <action type=\"volume\" level=\"mute\"></action>\\n6. Screen Brightness:\\n   <action type=\"brightness\" level=\"60%\"></action>\\n7. Keystrokes & Typing:\\n   <action type=\"key\" key=\"Return\"></action>\\n   <action type=\"type\" text=\"hello world\"></action>\\n8. Lock Screen:\\n   <action type=\"lock\"></action>\\n9. Android Phone Mirroring & Mobile Control:\\n   To mirror and control the user's mobile phone on desktop (mouse, keyboard, audio):\\n   <action type=\"mirror\"></action>\\n   Or to mirror with phone screen turned off:\\n   <action type=\"mirror\" turn_screen_off=\"true\"></action>\\n\\nMULTI-STEP / CHAIN COMMANDS:\\nWhen the user explicitly commands multiple actions in one sentence (e.g. 'open spotify and play believer', 'open whatsapp and send hi to John', 'mute volume and lock screen'), emit all requested action tags in order. The desktop engine synchronizes and executes them in sequence.\\n\\nMULTI-PAGE & MULTI-IMAGE ANALYSIS PROTOCOL:\\nWhen the user attaches multiple pages, snips, or documents (Page 1, Page 2, etc.):\\n1. You MUST examine, synthesize, and address ALL attached pages systematically in your response.\\n2. Clearly delineate your analysis by page (e.g. '### 📄 Page 1: ...', '### 📄 Page 2: ...').\\n3. When asked to compare or debug across multiple screenshots, highlight differences, correlations, or workflows across all pages.\\n4. Never ignore an attached page or answer for only one.\\n\\nAlways accompany actions with a polite, enthusiastic, concise response explaining what you did. If the user asks a question or asks to analyze attached pages, answer clearly with markdown formatting.",
     "max_image_dimension": 1280,
     "image_quality": 85,
@@ -487,6 +501,178 @@ TERMINAL ACCESS
 - The app asks for confirmation before commands it considers risky. Never attempt recursive deletion of the filesystem root; that is permanently blocked.
 """
 
+PROVIDER_PRESETS = {
+    "openrouter": {
+        "name": "OpenRouter",
+        "api_base": "https://openrouter.ai/api/v1",
+        "default_model": "deepseek/deepseek-v4.1-flash",
+        "requires_key": True,
+        "key_placeholder": "sk-or-v1-...",
+        "hint": "Access 100+ AI models including DeepSeek, Gemini, Claude, and Nemotron via OpenRouter."
+    },
+    "openai": {
+        "name": "OpenAI",
+        "api_base": "https://api.openai.com/v1",
+        "default_model": "gpt-4o-mini",
+        "requires_key": True,
+        "key_placeholder": "sk-proj-...",
+        "hint": "Official OpenAI API for GPT-4o, GPT-4o-mini, and o-series reasoning models."
+    },
+    "deepseek": {
+        "name": "DeepSeek Direct",
+        "api_base": "https://api.deepseek.com",
+        "default_model": "deepseek-chat",
+        "requires_key": True,
+        "key_placeholder": "sk-...",
+        "hint": "Direct ultra-fast access to DeepSeek-V3 and DeepSeek-R1 reasoning engine."
+    },
+    "ollama": {
+        "name": "Ollama (100% Local / Free)",
+        "api_base": "http://localhost:11434/v1",
+        "default_model": "llama3.2",
+        "requires_key": False,
+        "key_placeholder": "No key required (Runs offline locally)",
+        "hint": "Run 100% free, private AI models offline on your GPU/CPU with Ollama. Zero keys needed."
+    },
+    "omniroute": {
+        "name": "OmniRoute (Local Gateway)",
+        "api_base": "http://localhost:20128/v1",
+        "default_model": "openai/gpt-4o-mini",
+        "requires_key": True,
+        "key_placeholder": "sk-omni-... (or your gateway key)",
+        "hint": "Route AI requests through your local high-throughput OmniRoute resilience gateway."
+    },
+    "custom": {
+        "name": "Custom OpenAI-Compatible",
+        "api_base": "http://localhost:8000/v1",
+        "default_model": "default",
+        "requires_key": False,
+        "key_placeholder": "API key if required",
+        "hint": "Connect to any self-hosted or OpenAI-compatible server (vLLM, LM Studio, LocalAI)."
+    }
+}
+
+def get_active_provider_info(cfg):
+    """
+    Resolves the active LLM provider configuration and credentials.
+    Returns dict: {'provider', 'api_base', 'api_key', 'model', 'requires_key', 'preset'}
+    """
+    prov = (cfg.get('provider') or '').lower().strip()
+    if not prov or prov not in PROVIDER_PRESETS:
+        if cfg.get('openai_api_key') and not cfg.get('api_key') and not cfg.get('deepseek_api_key'):
+            prov = 'openai'
+        elif cfg.get('deepseek_api_key') and not cfg.get('api_key'):
+            prov = 'deepseek'
+        else:
+            prov = 'openrouter'
+
+    preset = PROVIDER_PRESETS[prov]
+
+    if prov == 'openai':
+        base = cfg.get('openai_api_base') or cfg.get('api_base') or preset['api_base']
+        key = cfg.get('openai_api_key') or cfg.get('api_key') or ''
+        model = cfg.get('openai_model') or cfg.get('model') or preset['default_model']
+    elif prov == 'deepseek':
+        base = cfg.get('deepseek_api_base') or preset['api_base']
+        key = cfg.get('deepseek_api_key') or cfg.get('api_key') or ''
+        model = cfg.get('deepseek_model') or preset['default_model']
+    elif prov == 'ollama':
+        base = cfg.get('ollama_api_base') or preset['api_base']
+        key = cfg.get('ollama_api_key') or ''
+        model = cfg.get('ollama_model') or preset['default_model']
+    elif prov == 'omniroute':
+        base = cfg.get('omniroute_api_base') or preset['api_base']
+        key = cfg.get('omniroute_api_key') or cfg.get('api_key') or ''
+        model = cfg.get('omniroute_model') or preset['default_model']
+    elif prov == 'custom':
+        base = cfg.get('custom_api_base') or cfg.get('api_base') or preset['api_base']
+        key = cfg.get('custom_api_key') or cfg.get('api_key') or ''
+        model = cfg.get('custom_model') or cfg.get('model') or preset['default_model']
+    else:  # openrouter
+        base = cfg.get('api_base') or preset['api_base']
+        key = cfg.get('api_key') or ''
+        model = cfg.get('model') or preset['default_model']
+
+    return {
+        'provider': prov,
+        'api_base': (base or '').rstrip('/'),
+        'api_key': (key or '').strip(),
+        'model': (model or preset['default_model']).strip(),
+        'requires_key': preset['requires_key'],
+        'preset': preset
+    }
+
+def test_llm_connection(provider, api_base, api_key, model, timeout=7):
+    """
+    Verifies connectivity, authentication, and model readiness for any OpenAI-compatible provider.
+    Returns (success: bool, message: str, latency: float)
+    """
+    t0 = time.time()
+    api_base = (api_base or '').rstrip('/')
+    if not api_base:
+        return False, "Base URL is required", 0.0
+
+    if provider == 'ollama':
+        try:
+            req = urllib.request.Request(f"{api_base}/models")
+            with DIRECT_OPENER.open(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                models = [m.get('id', '') for m in data.get('data', [])]
+                latency = time.time() - t0
+                if model and models and model not in models:
+                    return True, f"Connected ({latency:.2f}s) — Note: '{model}' not yet in Ollama models: {', '.join(models[:3])}", latency
+                return True, f"Connected ({latency:.2f}s) — Ollama ready ({len(models)} model{'s' if len(models) != 1 else ''})", latency
+        except Exception:
+            pass
+
+    url = f"{api_base}/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    if provider == 'openrouter':
+        headers["HTTP-Referer"] = "https://lexi.desktop"
+        headers["X-Title"] = "Lexi Connection Test"
+
+    payload = {
+        "model": model or "default",
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 1,
+        "stream": False
+    }
+
+    try:
+        req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
+        with DIRECT_OPENER.open(req, timeout=timeout) as resp:
+            latency = time.time() - t0
+            return True, f"Connected ({latency:.2f}s) — Model '{model}' responded successfully!", latency
+    except urllib.error.HTTPError as e:
+        latency = time.time() - t0
+        if e.code == 401:
+            return False, "Authentication Failed (401): Invalid API Key", latency
+        elif e.code == 403:
+            return False, "Access Denied (403): Check permissions or balance", latency
+        elif e.code == 404:
+            return False, f"Not Found (404): Check Base URL ({url})", latency
+        elif e.code == 429:
+            return False, "Rate Limited (429): Quota exceeded or high traffic", latency
+        else:
+            try:
+                body = e.read().decode('utf-8', errors='ignore')
+                err_json = json.loads(body)
+                err_msg = err_json.get('error', {}).get('message', e.reason)
+                return False, f"HTTP {e.code}: {err_msg}", latency
+            except Exception:
+                return False, f"HTTP {e.code}: {e.reason}", latency
+    except urllib.error.URLError as e:
+        latency = time.time() - t0
+        err_str = str(e.reason) if hasattr(e, 'reason') else str(e)
+        if "Connection refused" in err_str:
+            return False, f"Connection Refused: Is {provider.capitalize()} running on {api_base}?", latency
+        return False, f"Network Error: {err_str}", latency
+    except Exception as e:
+        latency = time.time() - t0
+        return False, f"Error: {e}", latency
+
 def load_config():
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_FILE):
@@ -511,9 +697,35 @@ def load_config():
     env_or = os.environ.get('OPENROUTER_API_KEY', '').strip()
     if env_or and not cfg.get('api_key'):
         cfg['api_key'] = env_or
+        if not cfg.get('provider'):
+            cfg['provider'] = 'openrouter'
+
     env_ds = os.environ.get('DEEPSEEK_API_KEY', '').strip()
     if env_ds and not cfg.get('deepseek_api_key'):
         cfg['deepseek_api_key'] = env_ds
+
+    env_oa = os.environ.get('OPENAI_API_KEY', '').strip()
+    if env_oa and not cfg.get('openai_api_key'):
+        cfg['openai_api_key'] = env_oa
+        if not cfg.get('api_key') and not cfg.get('provider'):
+            cfg['provider'] = 'openai'
+
+    env_oa_base = (os.environ.get('OPENAI_BASE_URL') or os.environ.get('OPENAI_API_BASE') or '').strip()
+    if env_oa_base:
+        cfg['openai_api_base'] = env_oa_base
+
+    env_oa_model = os.environ.get('OPENAI_MODEL', '').strip()
+    if env_oa_model:
+        cfg['openai_model'] = env_oa_model
+
+    env_ollama_host = (os.environ.get('OLLAMA_HOST') or os.environ.get('OLLAMA_BASE_URL') or '').strip()
+    if env_ollama_host:
+        if not env_ollama_host.startswith('http'):
+            env_ollama_host = f"http://{env_ollama_host}"
+        if not env_ollama_host.endswith('/v1'):
+            env_ollama_host = f"{env_ollama_host.rstrip('/')}/v1"
+        cfg['ollama_api_base'] = env_ollama_host
+
     return cfg
 
 def save_config(cfg):
@@ -8767,6 +8979,314 @@ class LexiAvatarDialog(Gtk.Window):
                 m.trigger_walk()
 
 
+class LexiSettingsDialog(Gtk.Window):
+    """
+    Interactive Settings Dialog for LLM Providers and API Keys.
+    Supports OpenRouter, OpenAI, DeepSeek, Ollama (100% Local/Free),
+    OmniRoute, and Custom OpenAI-compatible endpoints with live test ping.
+    """
+    def __init__(self, parent=None, config=None):
+        super().__init__(title="Lexi AI & Provider Settings")
+        self.parent_win = parent
+        self.config = dict(config or (parent.config if parent else load_config()))
+        self.set_modal(True)
+        if parent:
+            self.set_transient_for(parent)
+        self.set_default_size(500, 600)
+        self.set_resizable(False)
+        self.add_css_class('lexi-settings-win')
+
+        self.provider_keys = ["openrouter", "openai", "deepseek", "ollama", "omniroute", "custom"]
+        self.provider_labels = [
+            "OpenRouter (100+ Models)",
+            "OpenAI (Official GPT-4o / o3-mini)",
+            "DeepSeek Direct (V3 / R1)",
+            "Ollama (100% Local / Free / Offline)",
+            "OmniRoute (Local Gateway)",
+            "Custom OpenAI-Compatible"
+        ]
+
+        active_info = get_active_provider_info(self.config)
+        self.current_provider = active_info['provider']
+
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.set_child(scroller)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        root.set_margin_top(20)
+        root.set_margin_bottom(20)
+        root.set_margin_start(22)
+        root.set_margin_end(22)
+        root.add_css_class('lexi-settings-root')
+        scroller.set_child(root)
+
+        # Header
+        head_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        title = Gtk.Label(label="⚙️ AI & Provider Settings", xalign=0)
+        title.add_css_class('lexi-settings-title')
+        head_box.append(title)
+
+        sub = Gtk.Label(
+            label="Connect your favorite cloud LLM provider or run 100% locally with Ollama (no API key required).",
+            xalign=0
+        )
+        sub.set_wrap(True)
+        sub.add_css_class('lexi-settings-subtitle')
+        head_box.append(sub)
+        root.append(head_box)
+
+        # Provider Selector Section
+        prov_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        prov_lbl = Gtk.Label(label="Active AI Provider", xalign=0)
+        prov_lbl.add_css_class('lexi-settings-field-label')
+        prov_box.append(prov_lbl)
+
+        self.prov_dd = Gtk.DropDown.new_from_strings(self.provider_labels)
+        self.prov_dd.add_css_class('lexi-settings-dropdown')
+        try:
+            sel_idx = self.provider_keys.index(self.current_provider)
+        except ValueError:
+            sel_idx = 0
+        self.prov_dd.set_selected(sel_idx)
+        self.prov_dd.connect('notify::selected', self.on_provider_changed)
+        prov_box.append(self.prov_dd)
+
+        self.hint_label = Gtk.Label(label=active_info['preset']['hint'], xalign=0)
+        self.hint_label.set_wrap(True)
+        self.hint_label.add_css_class('lexi-settings-hint')
+        prov_box.append(self.hint_label)
+        root.append(prov_box)
+
+        # Card container for fields
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        card.add_css_class('lexi-settings-card')
+        root.append(card)
+
+        # 1. API Key Field
+        key_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.key_lbl = Gtk.Label(label="API Key", xalign=0)
+        self.key_lbl.add_css_class('lexi-settings-field-label')
+        key_box.append(self.key_lbl)
+
+        self.key_entry = Gtk.PasswordEntry()
+        self.key_entry.set_show_peek_icon(True)
+        self.key_entry.set_text(active_info['api_key'])
+        self.key_entry.set_placeholder_text(active_info['preset']['key_placeholder'])
+        key_box.append(self.key_entry)
+        card.append(key_box)
+
+        # 2. Base URL Field
+        base_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        base_lbl = Gtk.Label(label="API Base URL", xalign=0)
+        base_lbl.add_css_class('lexi-settings-field-label')
+        base_box.append(base_lbl)
+
+        self.base_entry = Gtk.Entry()
+        self.base_entry.set_text(active_info['api_base'])
+        self.base_entry.set_placeholder_text(active_info['preset']['api_base'])
+        base_box.append(self.base_entry)
+        card.append(base_box)
+
+        # 3. Model Name Field
+        model_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        model_lbl = Gtk.Label(label="Model Name", xalign=0)
+        model_lbl.add_css_class('lexi-settings-field-label')
+        model_box.append(model_lbl)
+
+        self.model_entry = Gtk.Entry()
+        self.model_entry.set_text(active_info['model'])
+        self.model_entry.set_placeholder_text(active_info['preset']['default_model'])
+        model_box.append(self.model_entry)
+        card.append(model_box)
+
+        # 4. Max Tokens Field
+        tokens_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        tokens_lbl = Gtk.Label(label="Max Output Tokens", xalign=0)
+        tokens_lbl.add_css_class('lexi-settings-field-label')
+        tokens_box.append(tokens_lbl)
+
+        self.tokens_entry = Gtk.Entry()
+        self.tokens_entry.set_text(str(self.config.get('max_tokens', 2048)))
+        tokens_box.append(self.tokens_entry)
+        card.append(tokens_box)
+
+        # Test Connection Row
+        test_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        test_row.set_margin_top(4)
+
+        self.test_btn = Gtk.Button(label="⚡ Test Connection")
+        self.test_btn.add_css_class('lexi-pill-btn')
+        self.test_btn.connect('clicked', self.on_test_clicked)
+        test_row.append(self.test_btn)
+
+        self.test_spinner = Gtk.Spinner()
+        self.test_spinner.set_size_request(16, 16)
+        test_row.append(self.test_spinner)
+
+        self.test_status = Gtk.Label(label="", xalign=0)
+        self.test_status.set_hexpand(True)
+        self.test_status.set_wrap(True)
+        self.test_status.add_css_class('lexi-settings-status-info')
+        test_row.append(self.test_status)
+        root.append(test_row)
+
+        # Bottom Actions Bar
+        btn_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        btn_bar.set_margin_top(8)
+
+        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn.add_css_class('lexi-pill-btn')
+        cancel_btn.connect('clicked', lambda _: self.close())
+        btn_bar.append(cancel_btn)
+
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        btn_bar.append(spacer)
+
+        save_btn = Gtk.Button(label="Save & Apply")
+        save_btn.add_css_class('lexi-settings-save-btn')
+        save_btn.connect('clicked', self.on_save_clicked)
+        btn_bar.append(save_btn)
+        root.append(btn_bar)
+
+    def on_provider_changed(self, dd, param):
+        idx = dd.get_selected()
+        prov_key = self.provider_keys[idx]
+        self.current_provider = prov_key
+        preset = PROVIDER_PRESETS[prov_key]
+
+        self.hint_label.set_text(preset['hint'])
+
+        if prov_key == 'openai':
+            self.key_entry.set_text(self.config.get('openai_api_key', ''))
+            self.base_entry.set_text(self.config.get('openai_api_base') or preset['api_base'])
+            self.model_entry.set_text(self.config.get('openai_model') or preset['default_model'])
+        elif prov_key == 'deepseek':
+            self.key_entry.set_text(self.config.get('deepseek_api_key', ''))
+            self.base_entry.set_text(self.config.get('deepseek_api_base') or preset['api_base'])
+            self.model_entry.set_text(self.config.get('deepseek_model') or preset['default_model'])
+        elif prov_key == 'ollama':
+            self.key_entry.set_text(self.config.get('ollama_api_key', ''))
+            self.base_entry.set_text(self.config.get('ollama_api_base') or preset['api_base'])
+            self.model_entry.set_text(self.config.get('ollama_model') or preset['default_model'])
+        elif prov_key == 'omniroute':
+            self.key_entry.set_text(self.config.get('omniroute_api_key', ''))
+            self.base_entry.set_text(self.config.get('omniroute_api_base') or preset['api_base'])
+            self.model_entry.set_text(self.config.get('omniroute_model') or preset['default_model'])
+        elif prov_key == 'custom':
+            self.key_entry.set_text(self.config.get('custom_api_key', ''))
+            self.base_entry.set_text(self.config.get('custom_api_base') or preset['api_base'])
+            self.model_entry.set_text(self.config.get('custom_model') or preset['default_model'])
+        else:
+            self.key_entry.set_text(self.config.get('api_key', ''))
+            self.base_entry.set_text(self.config.get('api_base') or preset['api_base'])
+            self.model_entry.set_text(self.config.get('model') or preset['default_model'])
+
+        self.key_entry.set_placeholder_text(preset['key_placeholder'])
+        self.base_entry.set_placeholder_text(preset['api_base'])
+        self.model_entry.set_placeholder_text(preset['default_model'])
+        self.test_status.set_text("")
+
+    def on_test_clicked(self, btn):
+        prov_key = self.provider_keys[self.prov_dd.get_selected()]
+        base_url = self.base_entry.get_text().strip()
+        api_key = self.key_entry.get_text().strip()
+        model = self.model_entry.get_text().strip()
+
+        self.test_btn.set_sensitive(False)
+        self.test_spinner.start()
+        self.test_status.set_text("Connecting...")
+        self.test_status.remove_css_class('lexi-settings-status-success')
+        self.test_status.remove_css_class('lexi-settings-status-error')
+        self.test_status.add_css_class('lexi-settings-status-info')
+
+        def _do_test():
+            ok, msg, lat = test_llm_connection(prov_key, base_url, api_key, model)
+            GLib.idle_add(self._on_test_finished, ok, msg)
+
+        threading.Thread(target=_do_test, daemon=True).start()
+
+    def _on_test_finished(self, success, msg):
+        self.test_btn.set_sensitive(True)
+        self.test_spinner.stop()
+        self.test_status.set_text(msg)
+        self.test_status.remove_css_class('lexi-settings-status-info')
+        if success:
+            self.test_status.remove_css_class('lexi-settings-status-error')
+            self.test_status.add_css_class('lexi-settings-status-success')
+        else:
+            self.test_status.remove_css_class('lexi-settings-status-success')
+            self.test_status.add_css_class('lexi-settings-status-error')
+
+    def on_save_clicked(self, btn):
+        prov_key = self.provider_keys[self.prov_dd.get_selected()]
+        base_url = self.base_entry.get_text().strip()
+        api_key = self.key_entry.get_text().strip()
+        model = self.model_entry.get_text().strip()
+        try:
+            tokens = int(self.tokens_entry.get_text().strip())
+        except Exception:
+            tokens = 2048
+
+        preset = PROVIDER_PRESETS.get(prov_key, PROVIDER_PRESETS['custom'])
+        if preset['requires_key'] and not api_key:
+            self.test_status.set_text(f"⚠️ API Key required for {preset['name']}.")
+            self.test_status.remove_css_class('lexi-settings-status-success')
+            self.test_status.add_css_class('lexi-settings-status-error')
+            return
+
+        self.config['provider'] = prov_key
+        self.config['max_tokens'] = tokens
+
+        if prov_key == 'openai':
+            self.config['openai_api_base'] = base_url
+            self.config['openai_api_key'] = api_key
+            self.config['openai_model'] = model
+            if not self.config.get('api_key'):
+                self.config['api_key'] = api_key
+        elif prov_key == 'deepseek':
+            self.config['deepseek_api_base'] = base_url
+            self.config['deepseek_api_key'] = api_key
+            self.config['deepseek_model'] = model
+        elif prov_key == 'ollama':
+            self.config['ollama_api_base'] = base_url
+            self.config['ollama_api_key'] = api_key
+            self.config['ollama_model'] = model
+        elif prov_key == 'omniroute':
+            self.config['omniroute_api_base'] = base_url
+            self.config['omniroute_api_key'] = api_key
+            self.config['omniroute_model'] = model
+        elif prov_key == 'custom':
+            self.config['custom_api_base'] = base_url
+            self.config['custom_api_key'] = api_key
+            self.config['custom_model'] = model
+        else:
+            self.config['api_base'] = base_url
+            self.config['api_key'] = api_key
+            self.config['model'] = model
+
+        save_config(self.config)
+
+        if self.parent_win:
+            self.parent_win.config = self.config
+            short_model = model.split('/')[-1]
+            if hasattr(self.parent_win, 'status_pill'):
+                self.parent_win.status_pill.set_text(f"● {short_model}")
+            if hasattr(self.parent_win, 'text_buffer'):
+                render_markdown_to_buffer(
+                    self.parent_win.text_buffer,
+                    f"\n✨ **Provider Saved**: Switched to **{preset['name']}** (`{model}`). Ready!\n"
+                )
+                if hasattr(self.parent_win, 'scroll_to_end'):
+                    self.parent_win.scroll_to_end()
+
+        self.close()
+
+
+
+
+
 _SCREEN_QUERY_RE = re.compile(
     r'\b(?:what(?:\x27s| is)|read|explain|check|analyze|summarize|translate|debug|solve)\s+'
     r'(?:(?:this|my|the)\s+)?(?:screen|code|error|page|window|diagram|slide|terminal|text|image|tab|ui)\b'
@@ -9047,6 +9567,10 @@ class LexiWindow(Adw.ApplicationWindow):
 
     def open_avatar_dialog(self):
         dialog = LexiAvatarDialog(parent=self)
+        dialog.present()
+
+    def open_settings_dialog(self):
+        dialog = LexiSettingsDialog(parent=self, config=self.config)
         dialog.present()
 
     def on_avatar_drop(self, target, value, x, y):
@@ -9462,6 +9986,13 @@ class LexiWindow(Adw.ApplicationWindow):
         self.clear_btn.add_css_class('lexi-header-btn')
         self.clear_btn.connect('clicked', self.on_clear_chat)
         ctrls_box.append(self.clear_btn)
+
+        self.settings_btn = Gtk.Button(label="⚙️")
+        self.settings_btn.set_focusable(False)
+        self.settings_btn.set_tooltip_text("AI Provider & Key Settings (Ctrl+, or /settings)")
+        self.settings_btn.add_css_class('lexi-header-btn')
+        self.settings_btn.connect('clicked', lambda _: self.open_settings_dialog())
+        ctrls_box.append(self.settings_btn)
 
         self.min_dot = Gtk.Button()
         self.min_dot.set_focusable(False)
@@ -10154,6 +10685,9 @@ class LexiWindow(Adw.ApplicationWindow):
             elif lower_kv == Gdk.KEY_l:
                 self.on_clear_chat(None)
                 return True
+            elif lower_kv in (Gdk.KEY_comma, Gdk.KEY_p):
+                self.open_settings_dialog()
+                return True
         return False
 
     def on_quick_prompt(self, prompt_text):
@@ -10187,6 +10721,10 @@ class LexiWindow(Adw.ApplicationWindow):
         if cmd.lower() in ('/help', 'help'):
             help_text = (
                 "🌟 **Lexi System Access & Action Shortcuts**\n\n"
+                "• `/settings` : Open AI Provider & API Key Settings dialog (or press `Ctrl+,`)\n"
+                "• `/provider [name]` : Show or switch active LLM provider (`ollama`, `openai`, `deepseek`, `openrouter`, `omniroute`)\n"
+                "• `/model [name]` : Show or switch active LLM model (`/model gpt-4o-mini`, `/model llama3.2`)\n"
+                "• `/key [token]` : Show key status or set provider API key securely\n"
                 "• `$ <command>` : Execute terminal command (`$ uname -a`, `$ df -h`, `$ git status`)\n"
                 "• `/open <app|url|path>` : Launch app, website, or folder (`/open chrome`, `/open https://youtube.com`)\n"
                 "• `/vol <0-100%|mute|+10%|-10%>` : Control system volume (`/vol 80%`, `/vol mute`)\n"
@@ -10198,7 +10736,7 @@ class LexiWindow(Adw.ApplicationWindow):
                 "• `/qr` : Show Wi-Fi QR code for Android phone connection\n"
                 "• `/snip` : Interactive screen region snip\n"
                 "• `/screen` : Full screen capture\n"
-                "• `/clear` : Clear chat history\n\n"
+                "• `/clear` : Clear chat history (Ctrl+L)\n\n"
                 "💡 **Natural Language works seamlessly too!** Just ask Lexi directly:\n"
                 "• *\"Can you open Chrome and send hi to Mom on WhatsApp?\"*\n"
                 "• *\"Turn volume up to 80% and play music\"*\n"
@@ -10207,6 +10745,108 @@ class LexiWindow(Adw.ApplicationWindow):
             render_markdown_to_buffer(self.text_buffer, help_text)
             self.scroll_to_end()
             self.update_mascot_mood("happy")
+            return
+
+        # Check for /settings or /config
+        if cmd.lower() in ('/settings', 'settings', '/config', 'config'):
+            self.open_settings_dialog()
+            render_markdown_to_buffer(self.text_buffer, "⚙️ Opened AI & Provider Settings dialog.")
+            self.scroll_to_end()
+            return
+
+        # Check for /provider
+        if cmd.lower().startswith(('/provider', 'provider')):
+            parts = cmd.split(maxsplit=1)
+            if len(parts) == 1:
+                active = get_active_provider_info(self.config)
+                p_list = ", ".join([f"`{k}`" for k in PROVIDER_PRESETS.keys()])
+                masked_k = (active['api_key'][:6] + "..." + active['api_key'][-4:]) if len(active['api_key']) > 10 else ("Configured" if active['api_key'] else ("Not needed" if not active['requires_key'] else "None"))
+                resp = (
+                    f"🤖 **Current AI Provider**: `{active['provider']}` ({active['preset']['name']})\n\n"
+                    f"• **Base URL**: `{active['api_base']}`\n"
+                    f"• **Model**: `{active['model']}`\n"
+                    f"• **Key**: `{masked_k}`\n\n"
+                    f"**Available Providers**: {p_list}\n"
+                    f"Switch provider with `/provider <name>` (e.g. `/provider ollama` or `/provider openai`), or open `/settings`."
+                )
+            else:
+                target = parts[1].strip().lower()
+                if target in PROVIDER_PRESETS:
+                    self.config['provider'] = target
+                    save_config(self.config)
+                    active = get_active_provider_info(self.config)
+                    disp_m = active['model'].split('/')[-1]
+                    self.status_pill.set_text(f"● {disp_m}")
+                    resp = f"✓ Switched AI provider to **{PROVIDER_PRESETS[target]['name']}**\n• Model: `{active['model']}`\n• Base URL: `{active['api_base']}`"
+                else:
+                    valid = ", ".join([f"`{k}`" for k in PROVIDER_PRESETS.keys()])
+                    resp = f"⚠️ Unknown provider `{target}`. Available: {valid}"
+            render_markdown_to_buffer(self.text_buffer, resp)
+            self.scroll_to_end()
+            return
+
+        # Check for /key
+        if cmd.lower().startswith(('/key', 'key')):
+            parts = cmd.split(maxsplit=1)
+            active = get_active_provider_info(self.config)
+            prov = active['provider']
+            if len(parts) == 1:
+                if active['api_key']:
+                    masked = (active['api_key'][:6] + "..." + active['api_key'][-4:]) if len(active['api_key']) > 12 else "******"
+                    resp = f"🔑 **API Key for {prov}**: `{masked}`\n\nTo update, run `/key <your_new_key>` or open `/settings`."
+                else:
+                    if not active['requires_key']:
+                        resp = f"🟢 **{prov} does not require an API key** (Runs locally/offline).\n\nTo set one anyway, run `/key <token>`."
+                    else:
+                        resp = f"⚠️ **No API Key set for {prov}**.\n\nSet your key with `/key <token>` or open `/settings`."
+            else:
+                new_key = parts[1].strip()
+                if prov == 'openai':
+                    self.config['openai_api_key'] = new_key
+                elif prov == 'deepseek':
+                    self.config['deepseek_api_key'] = new_key
+                elif prov == 'ollama':
+                    self.config['ollama_api_key'] = new_key
+                elif prov == 'omniroute':
+                    self.config['omniroute_api_key'] = new_key
+                elif prov == 'custom':
+                    self.config['custom_api_key'] = new_key
+                else:
+                    self.config['api_key'] = new_key
+                save_config(self.config)
+                masked = (new_key[:6] + "..." + new_key[-4:]) if len(new_key) > 12 else "******"
+                resp = f"✓ API key for **{prov}** updated to `{masked}` (saved securely with 0600 permissions)."
+            render_markdown_to_buffer(self.text_buffer, resp)
+            self.scroll_to_end()
+            return
+
+        # Check for /model
+        if cmd.lower().startswith(('/model', 'model')):
+            parts = cmd.split(maxsplit=1)
+            active = get_active_provider_info(self.config)
+            prov = active['provider']
+            if len(parts) == 1:
+                resp = f"🧠 **Active Model ({prov})**: `{active['model']}`\n\nTo switch model, run `/model <name>` (e.g. `/model gpt-4o-mini`, `/model deepseek-chat`, `/model llama3.2`)."
+            else:
+                new_model = parts[1].strip()
+                if prov == 'openai':
+                    self.config['openai_model'] = new_model
+                elif prov == 'deepseek':
+                    self.config['deepseek_model'] = new_model
+                elif prov == 'ollama':
+                    self.config['ollama_model'] = new_model
+                elif prov == 'omniroute':
+                    self.config['omniroute_model'] = new_model
+                elif prov == 'custom':
+                    self.config['custom_model'] = new_model
+                else:
+                    self.config['model'] = new_model
+                save_config(self.config)
+                disp_m = new_model.split('/')[-1]
+                self.status_pill.set_text(f"● {disp_m}")
+                resp = f"✓ Model for **{prov}** switched to `{new_model}`."
+            render_markdown_to_buffer(self.text_buffer, resp)
+            self.scroll_to_end()
             return
 
         # Check for /clear
@@ -10628,29 +11268,56 @@ class LexiWindow(Adw.ApplicationWindow):
             )
 
             success = False
+            active_prov = get_active_provider_info(self.config)
+            prov_name = active_prov['provider']
+            api_base = active_prov['api_base']
+            api_key = active_prov['api_key']
+            model = active_prov['model']
+            requires_key = active_prov['requires_key']
+
+            # If provider requires a key and none is configured:
+            if requires_key and not api_key:
+                err_msg = (
+                    f"🔑 **Welcome to Lexi! Configure your LLM Provider**\n\n"
+                    f"No API key is configured for **{active_prov['preset']['name']}**.\n\n"
+                    f"• Type `/settings` or press `Ctrl+,` to open the configuration dialog.\n"
+                    f"• Or run `/key <your_api_key>` to set it in chat.\n"
+                    f"• Want 100% free offline AI? Switch to **Ollama** (`/provider ollama`) with zero keys needed!\n\n"
+                    f"*(Opening Settings dialog now...)*"
+                )
+                full_response.append(err_msg)
+                GLib.idle_add(self.on_query_started)
+                GLib.idle_add(self.append_stream_token, err_msg)
+                GLib.idle_add(self.open_settings_dialog)
+                return
+
             deepseek_key = self.config.get('deepseek_api_key', '').strip()
             deepseek_base = self.config.get('deepseek_api_base', 'https://api.deepseek.com').rstrip('/')
-            deepseek_model = self.config.get('deepseek_model', 'deepseek-flash')
+            deepseek_model = self.config.get('deepseek_model', 'deepseek-chat')
             is_ds_multimodal = any(k in deepseek_model.lower() for k in ['flash', 'vl', 'vision', 'v4'])
             can_ds_handle = (not has_images) or is_ds_multimodal
 
-            # 1. Primary: Direct DeepSeek API (if key is set and model can handle the payload)
-            if deepseek_key and can_ds_handle:
+            # 1. Primary: Direct DeepSeek API (if provider is deepseek, or as fast direct route if key exists)
+            if prov_name == 'deepseek' or (prov_name == 'openrouter' and deepseek_key and can_ds_handle and not api_key):
                 try:
+                    ds_key = deepseek_key if prov_name != 'deepseek' else api_key
+                    ds_base = deepseek_base if prov_name != 'deepseek' else api_base
+                    ds_mod = deepseek_model if prov_name != 'deepseek' else model
                     ds_payload = {
-                        "model": deepseek_model,
+                        "model": ds_mod,
                         "messages": messages,
                         "stream": True,
                         "max_tokens": max(max_tokens, 4096)
                     }
                     ds_headers = {
                         "Content-Type": "application/json",
-                        "Authorization": f"Bearer {deepseek_key}"
+                        "Authorization": f"Bearer {ds_key}"
                     }
-                    req = urllib.request.Request(f"{deepseek_base}/chat/completions", data=json.dumps(ds_payload).encode('utf-8'), headers=ds_headers)
+                    req = urllib.request.Request(f"{ds_base}/chat/completions", data=json.dumps(ds_payload).encode('utf-8'), headers=ds_headers)
                     with DIRECT_OPENER.open(req, timeout=timeout) as resp:
                         GLib.idle_add(self.on_query_started)
-                        GLib.idle_add(self.status_pill.set_text, f"● {deepseek_model} (direct)")
+                        disp_name = ds_mod.split('/')[-1]
+                        GLib.idle_add(self.status_pill.set_text, f"● {disp_name}")
                         for line in resp:
                             line = line.decode('utf-8').strip()
                             if line.startswith('data: ') and line != 'data: [DONE]':
@@ -10660,55 +11327,39 @@ class LexiWindow(Adw.ApplicationWindow):
                                     delta = delta_obj.get('content') or ''
                                     reasoning = delta_obj.get('reasoning_content') or ''
                                     if reasoning and not full_response:
-                                        GLib.idle_add(self.status_pill.set_text, f"🧠 {deepseek_model} (thinking...)")
+                                        GLib.idle_add(self.status_pill.set_text, f"🧠 {disp_name} (thinking...)")
                                     if delta:
                                         if not full_response:
-                                            GLib.idle_add(self.status_pill.set_text, f"● {deepseek_model} (direct)")
+                                            GLib.idle_add(self.status_pill.set_text, f"● {disp_name}")
                                         full_response.append(delta)
                                         GLib.idle_add(self.append_stream_token, delta)
                                 except Exception:
                                     pass
                         success = True
                 except Exception as e_ds:
-                    log(f"Direct DeepSeek call failed: {e_ds}. Falling back to OpenRouter...")
+                    log(f"Direct DeepSeek call failed: {e_ds}. Falling back...")
 
-            # 2. Fallback / Primary (OpenRouter)
+            # 2. Universal Dispatch for OpenAI, OpenRouter, Ollama, OmniRoute, Custom
             if not success:
-                api_base = self.config.get('api_base', DEFAULT_CONFIG['api_base']).rstrip('/')
-                api_key = self.config.get('api_key', '').strip()
-                if not api_key:
-                    err_msg = (
-                        "🔑 **No API Key Configured**\n\n"
-                        "To chat with Lexi, please provide an API key:\n"
-                        "• Edit `~/.local/share/lexi-copilot/config.json` and set `\"api_key\": \"sk-or-v1-...\"`\n"
-                        "• Or export in your terminal profile: `export OPENROUTER_API_KEY=\"sk-or-v1-...\"`\n\n"
-                        "*(Get an API key at [openrouter.ai](https://openrouter.ai) or [deepseek.com](https://deepseek.com))*"
-                    )
-                    full_response.append(err_msg)
-                    GLib.idle_add(self.on_query_started)
-                    GLib.idle_add(self.append_stream_token, err_msg)
-                    return
-                models_list = self.config.get('models')
-                model = self.config.get('model', 'deepseek/deepseek-v4.1-flash')
-
                 payload = {
                     "messages": messages,
                     "stream": True,
                     "max_tokens": max_tokens,
-                    "route": "fallback"
+                    "model": model
                 }
-                if models_list and isinstance(models_list, list):
-                    payload["models"] = models_list
-                else:
-                    payload["model"] = model
+                if prov_name == 'openrouter':
+                    models_list = self.config.get('models')
+                    if models_list and isinstance(models_list, list):
+                        payload["models"] = models_list
+                        payload["route"] = "fallback"
 
                 url = f"{api_base}/chat/completions"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {api_key}",
-                    "HTTP-Referer": "https://lexi.desktop",
-                    "X-Title": "Lexi Screen Copilot"
-                }
+                headers = {"Content-Type": "application/json"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                if prov_name == 'openrouter':
+                    headers["HTTP-Referer"] = "https://lexi.desktop"
+                    headers["X-Title"] = "Lexi Screen Copilot"
 
                 req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
                 with DIRECT_OPENER.open(req, timeout=timeout) as resp:
@@ -10718,11 +11369,14 @@ class LexiWindow(Adw.ApplicationWindow):
                         if line.startswith('data: ') and line != 'data: [DONE]':
                             try:
                                 chunk = json.loads(line[6:])
-                                served_model = chunk.get('model')
-                                if served_model:
-                                    short_name = served_model.split('/')[-1]
-                                    GLib.idle_add(self.status_pill.set_text, f"● {short_name}")
-                                delta = chunk['choices'][0]['delta'].get('content', '')
+                                served_model = chunk.get('model') or model
+                                short_name = served_model.split('/')[-1]
+                                GLib.idle_add(self.status_pill.set_text, f"● {short_name}")
+                                delta_obj = chunk['choices'][0]['delta']
+                                delta = delta_obj.get('content') or ''
+                                reasoning = delta_obj.get('reasoning_content') or ''
+                                if reasoning and not full_response:
+                                    GLib.idle_add(self.status_pill.set_text, f"🧠 {short_name} (thinking...)")
                                 if delta:
                                     full_response.append(delta)
                                     GLib.idle_add(self.append_stream_token, delta)
@@ -10730,14 +11384,14 @@ class LexiWindow(Adw.ApplicationWindow):
                                 pass
         except Exception as e:
             log(f"run_query error: {e}")
-            err_msg = f"\n⚠️ Error connecting: {e}\n(Tip: Press Enter to retry or check your connection)"
+            err_msg = f"\n⚠️ Error connecting: {e}\n(Tip: Press Enter to retry or type `/settings` to verify your setup)"
             full_response.append(err_msg)
             GLib.idle_add(self.append_stream_token, err_msg)
         finally:
             full_text = "".join(full_response)
             eng = SystemActionEngine.get()
             actions = eng.parse_actions(full_text)
-            errored = (not full_text.strip()) or full_text.startswith(("\n⚠️ Error", "🔑 **No API Key"))
+            errored = (not full_text.strip()) or full_text.startswith(("\n⚠️ Error", "🔑 **No API Key", "🔑 **Welcome to Lexi"))
             if actions and not errored:
                 # Model output may only select registered, schema-validated actions.
                 # The user-facing reply is built from structured results, not model prose.

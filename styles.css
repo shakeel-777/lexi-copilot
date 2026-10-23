@@ -1187,3 +1187,95 @@ window.lexi-beam-win,
     box-shadow: 0 0 10px rgba(168, 85, 247, 0.3);
 }
 
+/* Lexi Settings Dialog & Provider Configuration */
+window.lexi-settings-win {
+    background: transparent;
+}
+
+.lexi-settings-root {
+    background: rgba(14, 16, 22, 0.98);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.85);
+}
+
+.lexi-settings-title {
+    font-size: 16.5px;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: -0.3px;
+}
+
+.lexi-settings-subtitle {
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+.lexi-settings-dropdown {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    color: #f1f5f9;
+    padding: 6px 10px;
+}
+
+.lexi-settings-dropdown:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.lexi-settings-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+
+.lexi-settings-field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #cbd5e1;
+    margin-bottom: 2px;
+}
+
+.lexi-settings-hint {
+    font-size: 10.5px;
+    color: #64748b;
+    line-height: 1.35;
+}
+
+.lexi-settings-status-success {
+    font-size: 11px;
+    font-weight: 600;
+    color: #34d399;
+}
+
+.lexi-settings-status-error {
+    font-size: 11px;
+    font-weight: 500;
+    color: #f87171;
+}
+
+.lexi-settings-status-info {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.lexi-settings-save-btn {
+    background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    color: #ffffff;
+    font-weight: 600;
+    border-radius: 10px;
+    padding: 6px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    transition: all 140ms ease;
+}
+
+.lexi-settings-save-btn:hover {
+    background: linear-gradient(135deg, #9333ea 0%, #4f46e5 100%);
+    box-shadow: 0 6px 16px rgba(139, 92, 246, 0.45);
+}
+
+

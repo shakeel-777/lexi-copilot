@@ -96,6 +96,22 @@ Most desktop AI assistants are 800MB+ Electron web wrappers that freeze your sys
 - **Native Android Companion (`android_app`)**: Native Android APK (`com.lexi.connect`) supporting system-wide share intents and dynamic island notifications.
 - **Path-Traversal & CSRF Hardened**: Kernel zero-copy streaming (`os.sendfile`) with strict directory boundary isolation and origin protection.
 
+### 🤖 6. Universal Multi-Provider AI (Cloud & 100% Free Local Mode)
+- **Interactive Provider Settings Dialog**: Accessible anytime via <kbd>Ctrl</kbd> + <kbd>,</kbd> or the `⚙️` header button.
+- **Zero-Friction Provider Presets**:
+  - **Ollama (100% Local / Free / Offline)**: Run offline on your CPU/GPU with zero API keys required (`llama3.2`, `qwen2.5`, `mistral`).
+  - **OpenRouter**: Access 100+ models with multi-model fallback (`deepseek-v4.1-flash`, `gemini-2.5-flash`, `nemotron`).
+  - **OpenAI Official**: Direct GPT-4o, GPT-4o-mini, and o-series reasoning models.
+  - **DeepSeek Direct**: High-throughput access to DeepSeek-V3 and DeepSeek-R1 with live reasoning indicators.
+  - **OmniRoute**: Local resilient multi-provider gateway integration.
+  - **Custom OpenAI-Compatible**: Connect to self-hosted vLLM, LM Studio, or LocalAI endpoints.
+- **Non-Blocking Connection Tester**: Test latency and verify authentication live before saving.
+- **Seamless In-Chat Slash Commands**:
+  - `/settings` — Open provider settings modal.
+  - `/provider <name>` — Switch between `ollama`, `openai`, `deepseek`, `openrouter`, or `omniroute` on the fly.
+  - `/model <name>` — Change the active model instantly.
+  - `/key <token>` — Securely update credentials (stored locally with `0600` permissions).
+
 ---
 
 ## ⌨️ Global Keybindings
@@ -104,9 +120,13 @@ Most desktop AI assistants are 800MB+ Electron web wrappers that freeze your sys
 |---|---|
 | <kbd>Super</kbd> + <kbd>C</kbd> | Open Full-Screen Vision Copilot |
 | <kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> | Interactive Region Snip |
+| <kbd>Ctrl</kbd> + <kbd>,</kbd> / <kbd>Ctrl</kbd> + <kbd>P</kbd> | Open AI & Provider Settings Dialog |
+| <kbd>Ctrl</kbd> + <kbd>L</kbd> | Clear Chat History |
+| <kbd>Ctrl</kbd> + <kbd>B</kbd> | Toggle Vertical Side Panel Mode |
+| <kbd>Ctrl</kbd> + <kbd>D</kbd> | Detach Lexi to Roam Desktop |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd> | Alternative Copilot Toggle |
-| <kbd>Ctrl</kbd> + <kbd>M</kbd> | Minimize Active Window |
-| <kbd>Esc</kbd> | Dismiss / Close Active Overlay |
+| <kbd>Ctrl</kbd> + <kbd>M</kbd> | Collapse to Dynamic Island Notch |
+| <kbd>Esc</kbd> | Dismiss / Collapse to Notch |
 | <kbd>Enter</kbd> | Submit Question / Prompt |
 
 ---
@@ -128,18 +148,18 @@ mochi-copilot/
 ├── requirements.txt           # Python package requirements
 ├── drop_web/                  # Progressive Web App for cross-device LAN file sharing
 ├── android_app/               # Native Android companion application (Lexi Connect)
-└── tests/                     # Automated unit & security test suite (144+ tests)
+└── tests/                     # Automated unit & security test suite (151+ tests)
 ```
 
 ---
 
 ## 🧪 Automated Test Suite
 
-Lexi includes an exhaustive test suite covering app termination, browser bridge validation, scrcpy mirroring, intent routing, and security regression gates:
+Lexi includes an exhaustive test suite covering app termination, browser bridge validation, scrcpy mirroring, intent routing, provider resolution, and security regression gates:
 
 ```bash
-python3 -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror
-# 144 tests passed (0 failures)
+python3 -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers
+# 151 tests passed (0 failures)
 ```
 
 ---
