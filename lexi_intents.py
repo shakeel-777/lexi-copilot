@@ -63,6 +63,10 @@ def normalise(text: str) -> str:
     for _ in range(2):                       # "hey lexi, can you please ..."
         t = _LEAD_RE.sub("", t, count=1).strip()
     t = _TRAIL_RE.sub("", t).strip()
+    # Normalise common fused typing errors: "openc hrome" -> "open chrome", "openchrome" -> "open chrome"
+    t = re.sub(r"\bopenc\s*hrome\b", "open chrome", t, flags=re.I)
+    t = re.sub(r"\bopen([a-z]+)\b", lambda m: f"open {m.group(1)}" if m.group(1).lower() in ("chrome", "spotify", "firefox", "discord", "files", "terminal", "vlc") else m.group(0), t, flags=re.I)
+    t = re.sub(r"\bclose([a-z]+)\b", lambda m: f"close {m.group(1)}" if m.group(1).lower() in ("chrome", "spotify", "firefox", "discord", "files", "terminal", "vlc") else m.group(0), t, flags=re.I)
     return t
 
 
@@ -200,13 +204,18 @@ _BLUETOOTH_RE = re.compile(
 )
 
 _CLIPBOARD_READ_RE = re.compile(
-    r"^(?:what(?:\x27s| is)\s+(?:on|in)\s+(?:the\s+|my\s+)?clipboard|read\s+(?:the\s+|my\s+)?clipboard|show\s+(?:the\s+|my\s+)?clipboard|paste\s+clipboard)$",
+    r"^(?:what(?:\x27s| is)\s+(?:on|in)\s+(?:the\s+|my\s+)?clipboard|read\s+(?:the\s+|my\s+)?clipboard|paste\s+clipboard)$",
     re.I
 )
 
 _CLIPBOARD_HIST_RE = re.compile(
-    r"^(?:(?:show|view|check|get|list)\s+)?clipboard\s+history$"
-    r"|^(?:recent|last)\s+(?:copied|clipboard)(?:\s+(?:items|snippets|history))?$",
+    r"^(?:(?:show|view|check|get|list|open)\s+)?(?:the\s+|my\s+)?clipboard(?:\s+history|\s+vault)?$"
+    r"|^(?:recent|last)\s+(?:copied|clipboard)(?:\s+(?:items|snippets|history))?$"
+    r"|^clipboard$",
+    re.I
+)
+_CLIPBOARD_CLOSE_RE = re.compile(
+    r"^(?:close|quit|hide|dismiss)\s+(?:the\s+|my\s+)?clipboard(?:\s+history|\s+vault)?$",
     re.I
 )
 _CLIPBOARD_RESTORE_RE = re.compile(
@@ -794,6 +803,8 @@ def _open_route(norm: str) -> Optional[Route]:
     target_low = re.sub(r"\s+(?:app|application|website|site|page|tab|window)$", "", target_low).strip()
     if not target_low:
         return Route(CLARIFY, text="What should I open?")
+    if target_low in ("clipboard", "clipboard history", "clipboard vault"):
+        return Route(ACTION, "clipboard_history", {"action": "list"})
     if target_low in ("whatsapp", "whatsapp web", "wa"):
         return Route(ACTION, "open_app", {"name": "whatsapp"})
     if target_low in _KNOWN_DIRECT_LAUNCH:
@@ -827,12 +838,33 @@ def _open_route(norm: str) -> Optional[Route]:
     return Route(CLARIFY, text="I can open apps and websites by name. Which one do you mean?")
 
 
-def _close_route(norm: str) -> Optional[Route]:
+def _close_route(norm: str, last: Optional[ActionRecord] = None) -> Optional[Route]:
     """Route supported close commands without guessing arbitrary desktop windows."""
     m = _CLOSE_RE.match(norm)
     if not m:
         return None
     t = m.group("t").strip().strip("\"'")
+    low_t = t.lower()
+
+    # Pronoun resolution: "close it", "quit it", "close that", "kill it"
+    if low_t in ("it", "that", "this", "the app", "this app"):
+        if last is not None and last.name in ("open_app", "open_site"):
+            if last.name == "open_app":
+                app_target = last.args.get("name", "")
+                if _CHROME_NAME_RE.fullmatch(app_target):
+                    return Route(ACTION, "close_chrome", {})
+                resolved = resolve_app(app_target)
+                if resolved is not None and resolved.key != "chrome":
+                    return Route(ACTION, "close_app", {"name": resolved.key})
+                return Route(ACTION, "close_app", {"name": app_target})
+            elif last.name == "open_site":
+                return Route(ACTION, "close_chrome", {})
+        return Route(CLARIFY, text="Close what? Tell me which app or window you want to close.")
+
+    # Clipboard close
+    if low_t in ("clipboard", "clipboard history", "clipboard vault", "my clipboard"):
+        return Route(REPLY, text="Clipboard history is just a list in our conversation — nothing to close.")
+
     if _CHROME_NAME_RE.fullmatch(t):
         return Route(ACTION, "close_chrome", {})
     app = resolve_app(t)
@@ -840,7 +872,7 @@ def _close_route(norm: str) -> Optional[Route]:
         return Route(ACTION, "close_app", {"name": app.key})
     wa = bool(_WA_NAME_RE.search(t))
     ig = bool(_IG_NAME_RE.search(t))
-    if (wa and ig) or _CLOSE_TABS_ALL_RE.fullmatch(t) or t.lower() in ("both", "both tabs", "both of them"):
+    if (wa and ig) or _CLOSE_TABS_ALL_RE.fullmatch(t) or low_t in ("both", "both tabs", "both of them"):
         return Route(ACTION, "close_tabs_all", {})
     if wa:
         return Route(ACTION, "close_tabs", {"target": "whatsapp"})
@@ -885,9 +917,21 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
     if not norm:
         return Route(LLM)
 
-    # 0. Close commands take priority before general sequence splitting
+    # 0. Intercept bare close commands & pronouns: never guess or kill apps from previous memory
+    if low in ("close", "quit", "kill", "exit", "close it", "close that", "close app", "close the app", "close window", "close the window"):
+        if low in ("close it", "close that", "close the app") and last_action is not None and last_action.name in ("open_app", "open_site"):
+            r_close = _close_route("close it", last_action)
+            if r_close:
+                return r_close
+        return Route(CLARIFY, text="Close what? Tell me which app or window you want to close.")
+
+    # Close clipboard command
+    if _CLIPBOARD_CLOSE_RE.match(low):
+        return Route(REPLY, text="Clipboard history is just a list in our conversation — nothing to close.")
+
+    # Close commands take priority before general sequence splitting
     if re.match(r"^(?:close|quit|kill)\s+", low):
-        r_close = _close_route(low)
+        r_close = _close_route(low, last_action)
         if r_close:
             return r_close
 
@@ -1026,7 +1070,20 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
                 return Route(ACTION, "youtube_play", {"query": q})
             # General 2-step sequence
             r1 = route(p1, last_action, pending)
-            r2 = route(p2, last_action, pending)
+            r1_rec = ActionRecord(name=r1.name, args=r1.args, started=time.time()) if r1.kind == ACTION else last_action
+            r2 = route(p2, r1_rec, pending)
+
+            # Contradiction check: opening and immediately closing the same target in one command
+            is_r1_open = r1.kind == ACTION and r1.name in ("open_app", "open_site")
+            is_r2_close = r2.kind == ACTION and r2.name in ("close_app", "close_chrome", "close_tabs", "close_all_apps")
+            if is_r1_open and is_r2_close:
+                target1 = r1.args.get("name") or ("chrome" if "chrome" in str(r1.args.get("site", "")) else r1.args.get("site"))
+                target2 = "chrome" if r2.name == "close_chrome" else r2.args.get("name")
+                t1_s = str(target1 or "").lower()
+                t2_s = str(target2 or "").lower()
+                if t1_s and t2_s and (t1_s == t2_s or t1_s in t2_s or t2_s in t1_s or t2_s in ("it", "that", "the app")):
+                    return Route(REPLY, text=f"I won't open and immediately close {t1_s.title()} in the same command.")
+
             if r1.kind == ACTION and r2.kind == ACTION:
                 return Route(SEQUENCE, steps=[r1, r2])
 

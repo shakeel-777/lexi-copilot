@@ -194,6 +194,36 @@ class TestIntentRoutingProductivity(unittest.TestCase):
         self.assertEqual(r_dl.kind, I.ACTION)
         self.assertEqual(r_dl.name, "download_status")
 
+    def test_bare_close_clarifies_and_never_kills_unprompted(self):
+        for term in ("close", "quit", "kill", "exit"):
+            r = I.route(term)
+            self.assertEqual(r.kind, I.CLARIFY, f"'{term}' must clarify, never kill an app blindly")
+            self.assertIn("Close what?", r.text)
+
+    def test_contradictory_open_and_close_sequence_rejected(self):
+        # Normalised typo: "openc hrome then close it"
+        r1 = I.route("openc hrome then close it")
+        self.assertEqual(r1.kind, I.REPLY)
+        self.assertIn("I won't open and immediately close", r1.text)
+
+        r2 = I.route("open chrome and close chrome")
+        self.assertEqual(r2.kind, I.REPLY)
+        self.assertIn("I won't open and immediately close", r2.text)
+
+    def test_clipboard_intents_safe_routing(self):
+        # Bare clipboard
+        r_bare = I.route("clipboard")
+        self.assertEqual((r_bare.kind, r_bare.name, r_bare.args), (I.ACTION, "clipboard_history", {"action": "list"}))
+
+        # Open clipboard
+        r_open = I.route("open clipboard")
+        self.assertEqual((r_open.kind, r_open.name, r_open.args), (I.ACTION, "clipboard_history", {"action": "list"}))
+
+        # Close clipboard
+        r_close = I.route("close clipboard")
+        self.assertEqual(r_close.kind, I.REPLY)
+        self.assertIn("nothing to close", r_close.text)
+
 
 if __name__ == "__main__":
     unittest.main()

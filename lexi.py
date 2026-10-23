@@ -6722,10 +6722,16 @@ class LexiDynamicIslandWindow(Gtk.Window):
             fname = data.get("filename", "File")
             sz = data.get("size_str", "")
             GLib.idle_add(self.trigger_island_alert, "✅", f"Downloaded {fname[:16]} ({sz})", "green", 5.0)
+            GLib.idle_add(self.status_label.set_text, "✨ Lexi")
         elif ev == "progress" and data:
             first = data[0]
-            txt = f"{first['filename'][:14]} · {first['size_str']} · {first['speed_str']}"
-            GLib.idle_add(self.trigger_island_alert, "⬇️", txt, "cyan", 2.0)
+            spd = first.get('speed_str', '')
+            # Update notch text compactly without disruptive alert animation cycles
+            if self.current_mode == "compact":
+                GLib.idle_add(self.status_label.set_text, f"⬇️ {spd}")
+        elif ev == "idle":
+            if self.current_mode == "compact":
+                GLib.idle_add(self.status_label.set_text, "✨ Lexi")
 
     def on_timer_event(self, payload):
         ev = payload.get("event")
@@ -7054,26 +7060,32 @@ class LexiDynamicIslandWindow(Gtk.Window):
             self.trigger_island_alert("📱", "Mirroring Phone @ 60 FPS", "green", 3.0)
 
     def on_clipboard_from_mobile(self, text):
-        if not text:
+        if not text or not text.strip():
             return
-        self._last_synced_clipboard = text
+        clean = text.strip()
+        if clean == getattr(self, '_last_synced_clipboard', ''):
+            return
+        self._last_synced_clipboard = clean
         try:
             clipboard = Gdk.Display.get_default().get_clipboard()
-            clipboard.set(text)
+            clipboard.set(clean)
         except Exception:
             pass
         if shutil.which('wl-copy'):
             try:
-                subprocess.Popen(['wl-copy'], stdin=subprocess.PIPE).communicate(input=text.encode('utf-8'))
+                subprocess.Popen(['wl-copy'], stdin=subprocess.PIPE).communicate(input=clean.encode('utf-8'))
             except Exception:
                 pass
         elif shutil.which('xclip'):
             try:
-                subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE).communicate(input=text.encode('utf-8'))
+                subprocess.Popen(['xclip', '-selection', 'clipboard'], stdin=subprocess.PIPE).communicate(input=clean.encode('utf-8'))
             except Exception:
                 pass
-        preview = text[:24].replace('\n', ' ') + ('…' if len(text) > 24 else '')
-        self.trigger_island_alert("📋", f"Synced: {preview}", "cyan", 3.0)
+        now = time.time()
+        if now - getattr(self, '_last_clip_alert_time', 0.0) > 6.0:
+            self._last_clip_alert_time = now
+            preview = clean[:24].replace('\n', ' ') + ('…' if len(clean) > 24 else '')
+            self.trigger_island_alert("📋", f"Synced: {preview}", "cyan", 2.5)
 
     def on_camera_snap_from_mobile(self, file_path):
         if not file_path or not os.path.exists(file_path):
@@ -7092,10 +7104,12 @@ class LexiDynamicIslandWindow(Gtk.Window):
     def _on_desktop_clip_read(self, clip, res):
         try:
             text = clip.read_text_finish(res)
-            if text and text != getattr(self, '_last_synced_clipboard', ''):
-                self._last_synced_clipboard = text
-                if self.drop_server:
-                    self.drop_server.broadcast_clipboard(text)
+            if text:
+                clean = text.strip()
+                if clean and clean != getattr(self, '_last_synced_clipboard', ''):
+                    self._last_synced_clipboard = clean
+                    if self.drop_server:
+                        self.drop_server.broadcast_clipboard(clean)
         except Exception:
             pass
 

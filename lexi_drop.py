@@ -613,11 +613,13 @@ class LexiPeerBeacon:
             try:
                 data, addr = sock.recvfrom(2048)
                 peer_ip = addr[0]
-                if peer_ip == self.local_ip:
+                if peer_ip == self.local_ip or peer_ip in ("127.0.0.1", "localhost"):
                     continue  # Ignore self
                 msg = json.loads(data.decode('utf-8'))
                 if msg.get("type") == "lexi_peer":
                     peer_host = msg.get("hostname", peer_ip)
+                    if peer_host == self.hostname:
+                        continue  # Ignore self announcement on different interface
                     now = time.time()
                     with self.lock:
                         is_new = peer_ip not in self.lan_peers

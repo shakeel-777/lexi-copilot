@@ -165,6 +165,24 @@ class LexiAssistant:
     def handle_model_actions(self, parsed_actions: List[Dict[str, Any]], user_text: str = "") -> str:
         """Validate and run actions the model asked for; reply from structured results only."""
         accepted, rejected = model_actions_to_plan(parsed_actions)
+
+        # Contradiction filter: never open and immediately close the same target in the same batch
+        opened_targets = set()
+        for name, args in accepted:
+            if name == "open_app":
+                opened_targets.add(str(args.get("name", "")).lower())
+            elif name == "open_site" and "chrome" in str(args.get("site", "")).lower():
+                opened_targets.add("chrome")
+
+        filtered_accepted = []
+        for name, args in accepted:
+            target_name = "chrome" if name == "close_chrome" else str(args.get("name", "")).lower() if name == "close_app" else ""
+            if target_name and target_name in opened_targets:
+                rejected.append(f"cannot open and immediately close {target_name.title()} in the same command")
+                continue
+            filtered_accepted.append((name, args))
+        accepted = filtered_accepted
+
         replies: List[str] = []
         for name, args in accepted[:MAX_MODEL_ACTIONS]:
             if self.pending is not None and name != "whatsapp_send":
