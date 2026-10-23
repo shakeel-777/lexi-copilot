@@ -76,6 +76,9 @@ def auto_unlock_phone(device_id: str):
     Zero-touch automated unlock sequence for Android device over ADB.
     Loads password from config.json ('phone_password') and handles wake + swipe + PIN.
     """
+    if not device_id or not re.match(r'^[a-zA-Z0-9_\.:\-]+$', device_id):
+        return
+
     try:
         time.sleep(0.5)  # Wait for scrcpy video stream initialization
         app_dir = Path(__file__).parent
@@ -87,11 +90,9 @@ def auto_unlock_phone(device_id: str):
                 password = data.get("phone_password")
 
         # Check keyguard / sleep state
-        check = subprocess.run(
-            ['adb', '-s', device_id, 'shell', 'dumpsys window | grep isKeyguardShowing; dumpsys power | grep mWakefulness='],
-            capture_output=True, text=True, timeout=3
-        )
-        out = check.stdout.lower()
+        check1 = subprocess.run(['adb', '-s', device_id, 'shell', 'dumpsys', 'window', 'policy'], capture_output=True, text=True, timeout=2)
+        check2 = subprocess.run(['adb', '-s', device_id, 'shell', 'dumpsys', 'power'], capture_output=True, text=True, timeout=2)
+        out = (check1.stdout + check2.stdout).lower()
         if 'iskeyguardshowing=true' in out or 'asleep' in out or 'dozing' in out:
             # 1. Wake screen up
             subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'keyevent', '224'], timeout=2)
