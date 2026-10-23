@@ -126,7 +126,7 @@ class TestSecurityRemediation(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(restored_mode, 0o600)
 
     def test_terminal_diagnose_secret_redaction(self):
-        raw_cmd = 'curl -H "Authorization: Bearer sk-secret123456789" https://api.openai.com/v1 -d "token=abc987xyz"'
+        raw_cmd = 'curl -H "Authorization: Bearer test_dummy_bearer_token" https://api.example.com/v1 -d "token=test_dummy_secret_value"'
         temp_hist = self.dir_path / "mock_history"
         temp_hist.write_text(raw_cmd + "\n")
 
@@ -134,8 +134,8 @@ class TestSecurityRemediation(unittest.IsolatedAsyncioTestCase):
             diag = lexi.SystemActionEngine().execute_terminal_diagnose()
             self.assertTrue(diag["success"])
             msg = diag["message"]
-            self.assertNotIn("sk-secret123456789", msg)
-            self.assertNotIn("abc987xyz", msg)
+            self.assertNotIn("test_dummy_bearer_token", msg)
+            self.assertNotIn("test_dummy_secret_value", msg)
             self.assertIn("***REDACTED***", msg)
 
     def test_p2p_download_scheme_validation(self):
