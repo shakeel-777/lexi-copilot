@@ -95,7 +95,7 @@ class LexiAssistant:
         if r.kind in (CLARIFY, REPLY):
             return r.text
         if r.kind == CANCEL:
-            closing = self.pending is not None and self.pending.name == "close_tabs_all"
+            closing = self.pending is not None and self.pending.name in ("close_tabs_all", "close_all_apps")
             is_power = self.pending is not None and self.pending.name.startswith("system_")
             self._cancel_pending_quietly()
             self.memory.clear_unfinished()
@@ -116,13 +116,16 @@ class LexiAssistant:
                 self._cancel_pending_quietly()      # a new request replaces an unsent draft
             cap = REGISTRY[r.name]
             if cap.confirmation == CONFIRM_REQUIRED:
-                if r.name == "close_tabs_all":
+                if r.name in ("close_tabs_all", "close_all_apps"):
                     # Mass-close always waits for an explicit "confirm" on the next turn.
+                    if r.name == "close_tabs_all":
+                        prompt = CLOSE_ALL_PROMPT
+                    else:
+                        prompt = "This will close all running desktop apps. Active downloads and unsaved work will be lost. Say “confirm” to close them, or “cancel”."
                     self.pending = PendingConfirmation(
-                        name="close_tabs_all", args={}, prompt=CLOSE_ALL_PROMPT)
-                    self.memory.set_unfinished(
-                        "Close-all (WhatsApp + Instagram tabs) is waiting for the user to say 'confirm' or 'cancel'")
-                    return CLOSE_ALL_PROMPT
+                        name=r.name, args=r.args, prompt=prompt)
+                    self.memory.set_unfinished(prompt)
+                    return prompt
                 if r.name in ("system_sleep", "system_restart", "system_poweroff"):
                     action_word = "put your computer to sleep" if r.name == "system_sleep" else "restart your computer" if r.name == "system_restart" else "shut down your computer"
                     prompt = f"Are you sure you want to {action_word}? Say “confirm” to proceed, or “cancel”."

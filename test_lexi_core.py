@@ -515,6 +515,7 @@ class CloseTabsFlow(unittest.TestCase):
         self.assistant, self.calls = make_assistant(**{
             "close_tabs": lambda a: (self.closed.append(("one", dict(a))) or ok("Closed 1 WhatsApp tab.")),
             "close_tabs_all": lambda a: (self.closed.append(("all", dict(a))) or ok("Closed 2 tabs.")),
+            "close_all_apps": lambda a: (self.closed.append(("all", dict(a))) or ok("Closed all apps.")),
         })
 
     def test_single_site_close_runs_immediately_with_enum_arg(self):

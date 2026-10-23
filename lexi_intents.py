@@ -868,7 +868,7 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
 
     # 1. A pending confirmation owns the next turn.
     if pending is not None and not pending.expired():
-        closing = pending.name == "close_tabs_all"
+        closing = pending.name in ("close_tabs_all", "close_all_apps")
         is_power = pending.name.startswith("system_")
         if (_CONFIRM_CLOSE_RE if (closing or is_power) else _CONFIRM_RE).fullmatch(low):
             return Route(CONFIRM, pending.name, dict(pending.args))

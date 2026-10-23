@@ -12,4 +12,7 @@ android_app/*.zip
 android_app/*.apk
 android_app/*.idsig
 android_app/debug.keystore
+conversation_history.json
 backups/
+.tempmediaStorage/
+*.log

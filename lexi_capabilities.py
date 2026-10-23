@@ -309,11 +309,13 @@ _register(Capability(
 ))
 _register(Capability(
     name="close_all_apps",
-    description="Close every currently-running known desktop app (Chrome, Spotify, Files, Terminal).",
+    description="Close every currently-running known desktop app (Chrome, Spotify, Files, Terminal). Requires explicit confirmation.",
     schema={},
+    confirmation=CONFIRM_REQUIRED,
     verification="each app's process table entry is verified gone after close",
     failure_text="I couldn't close all apps.",
     retry_safe=False,
+    sensitive=True,
     executor="close_all_apps",
     router_only=True,
 ))
