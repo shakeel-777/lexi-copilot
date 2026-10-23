@@ -121,7 +121,20 @@ class LexiAssistant:
                     if r.name == "close_tabs_all":
                         prompt = CLOSE_ALL_PROMPT
                     else:
-                        prompt = "This will close all running desktop apps. Active downloads and unsaved work will be lost. Say “confirm” to close them, or “cancel”."
+                        try:
+                            from lexi_downloads import DownloadSentinel
+                            ds = DownloadSentinel.get()
+                            if ds.has_active_downloads():
+                                act_dl = ds.get_active_downloads()[0]
+                                prompt = (
+                                    f"⚠️ An active download is in progress: {act_dl['filename']} "
+                                    f"({act_dl['size_str']} at {act_dl['speed_str']}). "
+                                    f"Closing will cancel this download. Say “confirm” to force close anyway, or “cancel”."
+                                )
+                            else:
+                                prompt = "This will close all running desktop apps. Active downloads and unsaved work will be lost. Say “confirm” to close them, or “cancel”."
+                        except Exception:
+                            prompt = "This will close all running desktop apps. Active downloads and unsaved work will be lost. Say “confirm” to close them, or “cancel”."
                     self.pending = PendingConfirmation(
                         name=r.name, args=r.args, prompt=prompt)
                     self.memory.set_unfinished(prompt)

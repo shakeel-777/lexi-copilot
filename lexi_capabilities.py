@@ -467,6 +467,32 @@ _register(Capability(
     failure_text="I couldn't read your clipboard.",
     executor="clipboard_read",
 ))
+_register(Capability(
+    name="focus_timer",
+    description="Start, stop, or check status of the Dynamic Island focus / pomodoro timer.",
+    schema={"action": Field("enum", choices=("start", "stop", "status")),
+            "minutes": Field("int", required=False)},
+    verification="timer state recorded and ticking",
+    failure_text="I couldn't update the focus timer.",
+    executor="focus_timer",
+))
+_register(Capability(
+    name="clipboard_history",
+    description="View clipboard history or copy an item back to the desktop clipboard.",
+    schema={"action": Field("enum", choices=("list", "copy", "clear")),
+            "index": Field("int", required=False)},
+    verification="clipboard history queried or restored",
+    failure_text="I couldn't access clipboard history.",
+    executor="clipboard_history",
+))
+_register(Capability(
+    name="download_status",
+    description="Check the status and speed of active file downloads in ~/Downloads.",
+    schema={},
+    verification="download directory scanned",
+    failure_text="I couldn't check active downloads.",
+    executor="download_status",
+))
 # Intentionally NOT registered: raw keystrokes, typing text, JavaScript, selectors.
 # (Shell commands ARE available, but only through terminal_task and its policy.)
 

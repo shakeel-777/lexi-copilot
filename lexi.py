@@ -1736,6 +1736,42 @@ class SystemActionEngine:
         msg = f"📋 Desktop Clipboard ({len(clean_text)} characters):\n```\n{preview}\n```"
         return {"success": True, "verified": True, "message": msg, "raw_text": clean_text}
 
+    def execute_focus_timer(self, action="status", minutes=25):
+        try:
+            from lexi_productivity import FocusTimer
+            timer = FocusTimer.get()
+            if action == "start":
+                return timer.start(minutes=minutes)
+            elif action == "stop":
+                return timer.stop()
+            else:
+                st = timer.status()
+                return {"success": True, "verified": True, "message": st["message"] if not st.get("active") else f"⏳ Focus timer active: {st['formatted']} remaining ({st['label']})."}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Focus timer error: {e}"}
+
+    def execute_clipboard_history(self, action="list", index=1):
+        try:
+            from lexi_productivity import ClipboardManager
+            cm = ClipboardManager.get()
+            if action == "copy":
+                ok = cm.copy_item(index)
+                if ok:
+                    return {"success": True, "verified": True, "message": f"📋 Restored item {index} to desktop clipboard."}
+                return {"success": False, "verified": False, "message": f"Couldn't find item {index} in clipboard history."}
+            else:
+                return {"success": True, "verified": True, "message": cm.format_history_reply(limit=5)}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Clipboard history error: {e}"}
+
+    def execute_download_status(self):
+        try:
+            from lexi_downloads import DownloadSentinel
+            ds = DownloadSentinel.get()
+            return {"success": True, "verified": True, "message": ds.get_download_summary()}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Download sentinel error: {e}"}
+
     # --- WhatsApp Web: browser-based drafting & sending (Zero Playwright) -------
     _wa_lock = threading.Lock()
     _wa_draft_data = None
@@ -3260,6 +3296,9 @@ def build_executors(engine):
         "wifi_list": lambda a: engine.list_wifi_networks(),
         "bluetooth_control": lambda a: engine.control_bluetooth(action=a.get("action", "status")),
         "clipboard_read": lambda a: engine.read_clipboard(),
+        "focus_timer": lambda a: engine.execute_focus_timer(a.get("action", "status"), a.get("minutes", 25)),
+        "clipboard_history": lambda a: engine.execute_clipboard_history(a.get("action", "list"), a.get("index", 1)),
+        "download_status": lambda a: engine.execute_download_status(),
     }
 
 
@@ -6655,8 +6694,54 @@ class LexiDynamicIslandWindow(Gtk.Window):
             except Exception as e:
                 log(f"Failed to start Lexi Drop server: {e}")
 
+        # Start Download Sentinel & Productivity Suite
+        try:
+            from lexi_downloads import DownloadSentinel
+            self.download_sentinel = DownloadSentinel.get()
+            self.download_sentinel.add_listener(self.on_download_event)
+            self.download_sentinel.start()
+        except Exception as e:
+            log(f"DownloadSentinel start error: {e}")
+
+        try:
+            from lexi_productivity import FocusTimer, ClipboardManager
+            self.focus_timer = FocusTimer.get()
+            self.focus_timer.add_listener(self.on_timer_event)
+            self.clipboard_manager = ClipboardManager.get()
+            self.clipboard_manager.start_listener()
+        except Exception as e:
+            log(f"Productivity start error: {e}")
+
         self._last_synced_clipboard = ""
         self.connect('realize', self.on_realize)
+
+    def on_download_event(self, payload):
+        ev = payload.get("event")
+        data = payload.get("data")
+        if ev == "completed":
+            fname = data.get("filename", "File")
+            sz = data.get("size_str", "")
+            GLib.idle_add(self.trigger_island_alert, "✅", f"Downloaded {fname[:16]} ({sz})", "green", 5.0)
+        elif ev == "progress" and data:
+            first = data[0]
+            txt = f"{first['filename'][:14]} · {first['size_str']} · {first['speed_str']}"
+            GLib.idle_add(self.trigger_island_alert, "⬇️", txt, "cyan", 2.0)
+
+    def on_timer_event(self, payload):
+        ev = payload.get("event")
+        if ev == "complete":
+            label = payload.get("label", "Focus")
+            GLib.idle_add(self.trigger_island_alert, "🔔", f"{label} Complete! Great work!", "purple", 6.0)
+            GLib.idle_add(self.status_label.set_text, "✨ Lexi")
+        elif ev == "tick" and payload.get("active"):
+            rem = payload.get("formatted", "00:00")
+            GLib.idle_add(self.update_timer_notch, rem)
+        elif ev == "stop":
+            GLib.idle_add(self.status_label.set_text, "✨ Lexi")
+
+    def update_timer_notch(self, rem):
+        if self.current_mode == "compact":
+            self.status_label.set_text(f"⏳ {rem}")
 
     def update_input_region(self, mode="compact"):
         surface = self.get_surface()

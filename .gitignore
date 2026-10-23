@@ -16,3 +16,4 @@ conversation_history.json
 backups/
 .tempmediaStorage/
 *.log
+clipboard_history.json

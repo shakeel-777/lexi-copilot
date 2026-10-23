@@ -43,8 +43,15 @@ Lexi brings multimodal vision intelligence, fluid desktop interactions, and wire
 ### 🛡️ 5. Deterministic Intent Routing & Safety
 - **Layer 0 Deterministic Router**: Intercepts system volume, brightness, media, application management, and web searches locally before touching the LLM.
 - **Universal App Quitting (`close all`)**: Gracefully terminates open desktop applications via `/proc` signal verification—completely decoupled from browser tabs.
-- **Sandboxed Execution Policy**: High-impact bash operations (`rm`, `sudo`, `dd`) require explicit GUI confirmation; wiping the filesystem root is permanently blocked.
+- **Mandatory Confirmation Gate**: All mass-close actions require explicit user confirmation; active downloads and unsaved work are checked beforehand.
 - **Immutable Provenance Anchor**: Cryptographically anchors creator identity (`Shakeel`) at the byte layer using binary XOR encoding and SHA-256 verification, immune to prompt injection and automated code refactoring.
+
+### ⚡ 6. Daily Driver Productivity Suite & Island Live Activities
+- **Dynamic Island Live Download Activity**: Monitors `~/Downloads` for active `.crdownload` / `.part` files, streaming real-time download speed (MB/s) and progress directly on the Dynamic Island notch.
+- **Download Sentinel Protection**: Automatically blocks abrupt closures if active downloads are detected, prompting: *"⚠️ An active download is in progress (<file> at <speed>). Confirm to force close anyway, or cancel."*
+- **Focus & Pomodoro Island Timer**: Start deep-work sessions (`focus 25`, `pomodoro`, `timer 10 mins`) with live ticking countdown directly inside the Dynamic Island notch and audio completion alarms.
+- **Universal Clipboard Vault**: Searchable history of recent clipboard entries (Code, URLs, Colors, Text) with instant restoration and Android companion phone synchronization.
+- **Instant Spotlight Conversions & World Clock**: Instant zero-latency currency conversion (`100 usd in inr`), unit conversion (`100 km in miles`, `70 kg in lbs`, `100 c in f`, `100 gb in mb`), and world time (`time in tokyo`, `time in new york`).
 
 ---
 
@@ -66,8 +73,10 @@ Lexi brings multimodal vision intelligence, fluid desktop interactions, and wire
 ```
 mochi-copilot/
 ├── lexi.py                    # Main GTK4 / Libadwaita app, Dynamic Island, Copilot, & Side Panel
-├── lexi_intents.py            # Layer 0 deterministic router (system controls, apps, search)
+├── lexi_intents.py            # Layer 0 deterministic router (system controls, apps, conversions)
 ├── lexi_capabilities.py       # Typed capability registry, schema validation & security policy
+├── lexi_downloads.py          # Dynamic Island live download watcher & sentinel protection
+├── lexi_productivity.py       # Focus/Pomodoro timer & universal clipboard history vault
 ├── lexi_actions.py            # Execution engine for local actions and confirmations
 ├── lexi_apps.py               # Process inspection via /proc and graceful app management
 ├── lexi_drop.py               # Lexi Beam P2P sharing, SSDP discovery & PhoneMirrorManager
@@ -79,7 +88,7 @@ mochi-copilot/
 ├── drop_web/                  # Progressive Web App for zero-install peer file sharing
 ├── chrome_extension/          # Scoped browser extension bridge
 ├── android_app/               # Native Android companion application (Lexi Connect)
-└── tests/                     # Automated unit test suites (180+ tests)
+└── tests/                     # Automated unit test suites (200+ tests)
 ```
 
 ---

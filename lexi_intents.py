@@ -204,6 +204,30 @@ _CLIPBOARD_READ_RE = re.compile(
     re.I
 )
 
+_CLIPBOARD_HIST_RE = re.compile(
+    r"^(?:(?:show|view|check|get|list)\s+)?clipboard\s+history$"
+    r"|^(?:recent|last)\s+(?:copied|clipboard)(?:\s+(?:items|snippets|history))?$",
+    re.I
+)
+_CLIPBOARD_RESTORE_RE = re.compile(
+    r"^(?:copy|restore)\s+(?:clipboard\s+)?item\s+(?P<idx>\d+)$",
+    re.I
+)
+
+_FOCUS_RE = re.compile(
+    r"^(?:(?:start\s+)?(?:focus|pomodoro)(?:\s+(?:mode|session|timer))?(?:\s+(?:for\s+)?(?P<m1>\d+)\s*(?:mins?|minutes?|m)?)?"
+    r"|timer\s+(?P<m2>\d+)\s*(?:mins?|minutes?|m)?)$",
+    re.I
+)
+_FOCUS_STOP_RE = re.compile(r"^(?:stop|cancel|end)\s+(?:focus|pomodoro|timer)$", re.I)
+_FOCUS_STATUS_RE = re.compile(r"^(?:focus|pomodoro|timer)\s+status$", re.I)
+
+_DOWNLOADS_STATUS_RE = re.compile(
+    r"^(?:(?:check|what(?:'s| is))\s+)?downloads?(?:\s+status)?$"
+    r"|^(?:what\s+is|is\s+anything)\s+downloading$",
+    re.I
+)
+
 _BATTERY_RE = re.compile(
     r"^(?:(?:what(?:\x27s| is)|check)\s+(?:the\s+|my\s+)?)?battery(?:\s+(?:percentage|level|status|life|health))?$"
     r"|^(?:how\s+much\s+)?battery(?:\s+do\s+i\s+have)?$"
@@ -437,6 +461,129 @@ def _eval_math(text: str) -> Optional[str]:
         return "Division by zero is undefined."
     except Exception:
         return None
+
+
+_CURRENCY_RATES = {
+    "usd": 1.0,
+    "inr": 84.4,
+    "eur": 0.92,
+    "gbp": 0.77,
+    "jpy": 152.0,
+    "cad": 1.38,
+    "aud": 1.51,
+    "aed": 3.67,
+}
+
+_UNIT_CATEGORIES = {
+    # length (base: meters)
+    "m": ("length", 1.0, "m", "📏"), "meter": ("length", 1.0, "meters", "📏"), "meters": ("length", 1.0, "meters", "📏"),
+    "km": ("length", 1000.0, "km", "📏"), "kms": ("length", 1000.0, "km", "📏"), "kilometer": ("length", 1000.0, "km", "📏"), "kilometers": ("length", 1000.0, "km", "📏"),
+    "mi": ("length", 1609.344, "miles", "📏"), "mile": ("length", 1609.344, "miles", "📏"), "miles": ("length", 1609.344, "miles", "📏"),
+    "ft": ("length", 0.3048, "ft", "📏"), "feet": ("length", 0.3048, "ft", "📏"), "foot": ("length", 0.3048, "ft", "📏"),
+    "in": ("length", 0.0254, "inches", "📏"), "inch": ("length", 0.0254, "inches", "📏"), "inches": ("length", 0.0254, "inches", "📏"),
+    "cm": ("length", 0.01, "cm", "📏"), "centimeter": ("length", 0.01, "cm", "📏"), "centimeters": ("length", 0.01, "cm", "📏"),
+    # mass (base: grams)
+    "g": ("mass", 1.0, "g", "⚖️"), "gram": ("mass", 1.0, "grams", "⚖️"), "grams": ("mass", 1.0, "grams", "⚖️"),
+    "kg": ("mass", 1000.0, "kg", "⚖️"), "kgs": ("mass", 1000.0, "kg", "⚖️"), "kilogram": ("mass", 1000.0, "kg", "⚖️"), "kilograms": ("mass", 1000.0, "kg", "⚖️"),
+    "lb": ("mass", 453.59237, "lbs", "⚖️"), "lbs": ("mass", 453.59237, "lbs", "⚖️"), "pound": ("mass", 453.59237, "lbs", "⚖️"), "pounds": ("mass", 453.59237, "lbs", "⚖️"),
+    "oz": ("mass", 28.3495, "oz", "⚖️"), "ounce": ("mass", 28.3495, "oz", "⚖️"), "ounces": ("mass", 28.3495, "oz", "⚖️"),
+    # data (base: bytes)
+    "b": ("data", 1, "B", "💾"), "byte": ("data", 1, "bytes", "💾"), "bytes": ("data", 1, "bytes", "💾"),
+    "kb": ("data", 1024, "KB", "💾"), "kilobyte": ("data", 1024, "KB", "💾"), "kilobytes": ("data", 1024, "KB", "💾"),
+    "mb": ("data", 1024**2, "MB", "💾"), "megabyte": ("data", 1024**2, "MB", "💾"), "megabytes": ("data", 1024**2, "MB", "💾"),
+    "gb": ("data", 1024**3, "GB", "💾"), "gigabyte": ("data", 1024**3, "GB", "💾"), "gigabytes": ("data", 1024**3, "GB", "💾"),
+    "tb": ("data", 1024**4, "TB", "💾"), "terabyte": ("data", 1024**4, "TB", "💾"), "terabytes": ("data", 1024**4, "TB", "💾"),
+}
+
+_CITY_TIMEZONES = {
+    "tokyo": ("Tokyo", 9.0, "JST"),
+    "japan": ("Tokyo", 9.0, "JST"),
+    "london": ("London", 0.0, "GMT/BST"),
+    "uk": ("London", 0.0, "GMT/BST"),
+    "new york": ("New York", -5.0, "EST/EDT"),
+    "ny": ("New York", -5.0, "EST/EDT"),
+    "sydney": ("Sydney", 11.0, "AEDT"),
+    "australia": ("Sydney", 11.0, "AEDT"),
+    "dubai": ("Dubai", 4.0, "GST"),
+    "uae": ("Dubai", 4.0, "GST"),
+    "paris": ("Paris", 1.0, "CET"),
+    "france": ("Paris", 1.0, "CET"),
+    "berlin": ("Berlin", 1.0, "CET"),
+    "germany": ("Berlin", 1.0, "CET"),
+    "singapore": ("Singapore", 8.0, "SGT"),
+    "los angeles": ("Los Angeles", -8.0, "PST/PDT"),
+    "la": ("Los Angeles", -8.0, "PST/PDT"),
+    "san francisco": ("San Francisco", -8.0, "PST/PDT"),
+    "california": ("San Francisco", -8.0, "PST/PDT"),
+    "toronto": ("Toronto", -5.0, "EST/EDT"),
+    "canada": ("Toronto", -5.0, "EST/EDT"),
+    "mumbai": ("Mumbai", 5.5, "IST"),
+    "delhi": ("Delhi", 5.5, "IST"),
+    "india": ("India", 5.5, "IST"),
+    "beijing": ("Beijing", 8.0, "CST"),
+    "china": ("Beijing", 8.0, "CST"),
+    "utc": ("UTC", 0.0, "UTC"),
+    "gmt": ("GMT", 0.0, "GMT"),
+}
+
+
+def _eval_conversions(text: str) -> Optional[str]:
+    clean = text.strip().lower()
+
+    # 1. World Time / Timezones
+    m_tz = re.match(r"^(?:(?:what(?:\x27s| is)\s+(?:the\s+)?)?time\s+(?:in|at)\s+|time\s+)(?P<city>[a-zA-Z\s]+)$", clean)
+    if m_tz:
+        city_key = m_tz.group("city").strip().lower()
+        if city_key in _CITY_TIMEZONES:
+            city_name, offset, tz_abbr = _CITY_TIMEZONES[city_key]
+            now_utc = datetime.datetime.now(datetime.timezone.utc)
+            city_time = now_utc + datetime.timedelta(hours=offset)
+            time_str = city_time.strftime("%I:%M %p").lstrip("0")
+            date_str = city_time.strftime("%A, %B %d")
+            return f"🕒 The current time in {city_name} is {time_str} ({tz_abbr}, {date_str})."
+
+    # 2. Currency Conversions (e.g. "100 usd in inr", "50 eur to usd")
+    m_curr = re.match(r"^(?:convert\s+)?(?P<val>\d+(?:\.\d+)?)\s*(?P<from>[a-zA-Z]{3})\s+(?:in|to|into)\s+(?P<to>[a-zA-Z]{3})$", clean)
+    if m_curr:
+        c_from = m_curr.group("from").lower()
+        c_to = m_curr.group("to").lower()
+        if c_from in _CURRENCY_RATES and c_to in _CURRENCY_RATES:
+            val = float(m_curr.group("val"))
+            rate_from = _CURRENCY_RATES[c_from]
+            rate_to = _CURRENCY_RATES[c_to]
+            converted = (val / rate_from) * rate_to
+            eff_rate = rate_to / rate_from
+            return f"💱 {val:g} {c_from.upper()} ≈ {converted:,.2f} {c_to.upper()} (approx. rate ~{eff_rate:,.2f})"
+
+    # 3. Temperature Conversions (e.g. "100 c in f", "86 f in c")
+    m_temp = re.match(r"^(?:convert\s+)?(?P<val>-?\d+(?:\.\d+)?)\s*(?:°\s*)?(?P<from>c|celsius|f|fahrenheit)\s+(?:in|to|into)\s+(?:°\s*)?(?P<to>c|celsius|f|fahrenheit)$", clean)
+    if m_temp:
+        val = float(m_temp.group("val"))
+        t_from = m_temp.group("from")[0]
+        t_to = m_temp.group("to")[0]
+        if t_from == "c" and t_to == "f":
+            res = (val * 9.0 / 5.0) + 32.0
+            return f"🌡️ {val:g}°C = {res:g}°F"
+        elif t_from == "f" and t_to == "c":
+            res = (val - 32.0) * 5.0 / 9.0
+            return f"🌡️ {val:g}°F = {res:g}°C"
+
+    # 4. Units & Data (e.g. "100 km in miles", "10 kg in lbs", "100 gb in mb")
+    m_unit = re.match(r"^(?:convert\s+)?(?P<val>\d+(?:\.\d+)?)\s*(?P<from>[a-zA-Z]+)\s+(?:in|to|into)\s+(?P<to>[a-zA-Z]+)$", clean)
+    if m_unit:
+        u_from = m_unit.group("from").lower()
+        u_to = m_unit.group("to").lower()
+        if u_from in _UNIT_CATEGORIES and u_to in _UNIT_CATEGORIES:
+            cat1, factor1, name1, sym = _UNIT_CATEGORIES[u_from]
+            cat2, factor2, name2, _ = _UNIT_CATEGORIES[u_to]
+            if cat1 == cat2:
+                val = float(m_unit.group("val"))
+                converted = (val * factor1) / factor2
+                if cat1 == "data" and converted >= 1:
+                    return f"{sym} {val:g} {name1} = {int(converted):,d} {name2}"
+                return f"{sym} {val:g} {name1} = {converted:,.2f} {name2}"
+
+    return None
 
 
 def _search_or_ask_route(norm: str) -> Optional[Route]:
@@ -764,10 +911,13 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
         now_str = datetime.datetime.now().strftime("It's %I:%M %p on %A, %B %d, %Y.").replace(" 0", " ")
         return Route(REPLY, text=now_str)
 
-    # 0a-iii. Safe Local Math & Percentage Calculation
+    # 0a-iii. Safe Local Math, Conversions & World Time
     math_res = _eval_math(norm)
     if math_res:
         return Route(REPLY, text=math_res)
+    conv_res = _eval_conversions(norm)
+    if conv_res:
+        return Route(REPLY, text=conv_res)
 
     # 0a-iv. Phone & Battery queries
     if _PHONE_BATTERY_RE.match(low):
@@ -781,6 +931,26 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
 
     if _BATTERY_RE.match(low):
         return Route(ACTION, "system_battery", {})
+
+    # Focus & Pomodoro Timer
+    if _FOCUS_STOP_RE.match(low):
+        return Route(ACTION, "focus_timer", {"action": "stop"})
+    if _FOCUS_STATUS_RE.match(low):
+        return Route(ACTION, "focus_timer", {"action": "status"})
+    m_focus = _FOCUS_RE.match(low)
+    if m_focus:
+        mins = int(m_focus.group("m1") or m_focus.group("m2") or 25)
+        return Route(ACTION, "focus_timer", {"action": "start", "minutes": mins})
+
+    # Clipboard History & Download Sentinel
+    if _CLIPBOARD_HIST_RE.match(low):
+        return Route(ACTION, "clipboard_history", {"action": "list"})
+    m_clip_res = _CLIPBOARD_RESTORE_RE.match(low)
+    if m_clip_res:
+        return Route(ACTION, "clipboard_history", {"action": "copy", "index": int(m_clip_res.group("idx"))})
+
+    if _DOWNLOADS_STATUS_RE.match(low):
+        return Route(ACTION, "download_status", {})
 
     # Extended System & Network queries
     if _SYS_RESOURCES_RE.match(low):
