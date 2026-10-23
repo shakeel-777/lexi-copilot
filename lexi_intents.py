@@ -256,6 +256,47 @@ _TERMINAL_DIAG_RE = re.compile(
     re.I
 )
 
+_PORT_KILL_RE = re.compile(
+    r"^(?:kill|free|terminate|close|clear)\s+port\s+(?P<port>\d+)$",
+    re.I
+)
+_PORT_INSPECT_RE = re.compile(
+    r"^(?:(?:check|inspect|who\s+is\s+using|what\s+is\s+on|what(?:\x27s| is)\s+running\s+on)\s+)?port\s+(?P<port>\d+)$"
+    r"|^(?:who|what)\s+is\s+using\s+port\s+(?P<port2>\d+)$",
+    re.I
+)
+
+_TOP_PROCS_RE = re.compile(
+    r"^(?:(?:show|list|get|check)\s+)?top\s+(?P<sort>cpu|ram|memory)?\s*processes$"
+    r"|^(?:what(?:\x27s| is)\s+(?:eating|using|consuming)\s+(?:my\s+)?(?P<sort2>cpu|ram|memory|pc))$"
+    r"|^(?:what(?:\x27s| is)\s+lagging\s+(?:my\s+)?(?:pc|laptop|system))$"
+    r"|^(?P<sort3>cpu|ram|memory)\s+hogs$"
+    r"|^top\s+processes$",
+    re.I
+)
+_KILL_PROC_RE = re.compile(
+    r"^(?:kill|terminate|stop)\s+(?:process|pid)\s+(?P<target>[a-zA-Z0-9_\-\.]+)$",
+    re.I
+)
+
+_DND_ON_RE = re.compile(
+    r"^(?:turn\s+on|enable|activate|start)\s+(?:dnd|do\s+not\s+disturb)$"
+    r"|^(?:dnd|do\s+not\s+disturb)\s+on$"
+    r"|^mute\s+notifications$"
+    r"|^dnd$",
+    re.I
+)
+_DND_OFF_RE = re.compile(
+    r"^(?:turn\s+off|disable|deactivate|stop)\s+(?:dnd|do\s+not\s+disturb)$"
+    r"|^(?:dnd|do\s+not\s+disturb)\s+off$"
+    r"|^unmute\s+notifications$",
+    re.I
+)
+_DND_STATUS_RE = re.compile(
+    r"^(?:check\s+)?dnd\s+status$|^(?:is\s+)?dnd\s+(?:on|active)\??$",
+    re.I
+)
+
 _BATTERY_RE = re.compile(
     r"^(?:(?:what(?:\x27s| is)|check)\s+(?:the\s+|my\s+)?)?battery(?:\s+(?:percentage|level|status|life|health))?$"
     r"|^(?:how\s+much\s+)?battery(?:\s+do\s+i\s+have)?$"
@@ -859,6 +900,16 @@ def _open_route(norm: str) -> Optional[Route]:
 
 def _close_route(norm: str, last: Optional[ActionRecord] = None) -> Optional[Route]:
     """Route supported close commands without guessing arbitrary desktop windows."""
+    # Port killer
+    m_pkill = _PORT_KILL_RE.match(norm)
+    if m_pkill:
+        return Route(ACTION, "port_control", {"action": "kill", "port": int(m_pkill.group("port"))})
+
+    # Process killer
+    m_kproc = _KILL_PROC_RE.match(norm)
+    if m_kproc:
+        return Route(ACTION, "top_processes", {"action": "kill", "target": m_kproc.group("target")})
+
     m = _CLOSE_RE.match(norm)
     if not m:
         return None
@@ -1031,6 +1082,33 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
     # Terminal Error Diagnoser
     if _TERMINAL_DIAG_RE.match(low):
         return Route(ACTION, "terminal_diagnose", {})
+
+    # Port Inspector & Killer
+    m_pkill = _PORT_KILL_RE.match(low)
+    if m_pkill:
+        return Route(ACTION, "port_control", {"action": "kill", "port": int(m_pkill.group("port"))})
+    m_pinsp = _PORT_INSPECT_RE.match(low)
+    if m_pinsp:
+        port_num = int(m_pinsp.group("port") or m_pinsp.group("port2"))
+        return Route(ACTION, "port_control", {"action": "inspect", "port": port_num})
+
+    # Top Resource Consumers & Process Killer
+    m_kproc = _KILL_PROC_RE.match(low)
+    if m_kproc:
+        return Route(ACTION, "top_processes", {"action": "kill", "target": m_kproc.group("target")})
+    m_tprocs = _TOP_PROCS_RE.match(low)
+    if m_tprocs:
+        sort_kind = (m_tprocs.group("sort") or m_tprocs.group("sort2") or m_tprocs.group("sort3") or "").lower()
+        sort_by = "mem" if sort_kind in ("ram", "memory") else "cpu"
+        return Route(ACTION, "top_processes", {"action": "list", "sort_by": sort_by})
+
+    # Do Not Disturb (DND) Control
+    if _DND_ON_RE.match(low):
+        return Route(ACTION, "dnd_control", {"action": "on"})
+    if _DND_OFF_RE.match(low):
+        return Route(ACTION, "dnd_control", {"action": "off"})
+    if _DND_STATUS_RE.match(low):
+        return Route(ACTION, "dnd_control", {"action": "status"})
 
     # Extended System & Network queries
     if _SYS_RESOURCES_RE.match(low):

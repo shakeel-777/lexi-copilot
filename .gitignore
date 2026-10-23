@@ -17,3 +17,5 @@ backups/
 .tempmediaStorage/
 *.log
 clipboard_history.json
+dnd_state.json
+quick_notes.md

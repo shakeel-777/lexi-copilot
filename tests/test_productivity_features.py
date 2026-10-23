@@ -248,6 +248,76 @@ class TestIntentRoutingProductivity(unittest.TestCase):
             r = I.route(phrase)
             self.assertEqual((r.kind, r.name), (I.ACTION, "terminal_diagnose"), phrase)
 
+    def test_port_control_intents(self):
+        r1 = I.route("port 3000")
+        self.assertEqual((r1.kind, r1.name, r1.args), (I.ACTION, "port_control", {"action": "inspect", "port": 3000}))
+
+        r2 = I.route("what is running on port 8080")
+        self.assertEqual((r2.kind, r2.name, r2.args), (I.ACTION, "port_control", {"action": "inspect", "port": 8080}))
+
+        r3 = I.route("kill port 3000")
+        self.assertEqual((r3.kind, r3.name, r3.args), (I.ACTION, "port_control", {"action": "kill", "port": 3000}))
+
+        r4 = I.route("free port 5173")
+        self.assertEqual((r4.kind, r4.name, r4.args), (I.ACTION, "port_control", {"action": "kill", "port": 5173}))
+
+    def test_top_processes_intents(self):
+        r1 = I.route("top processes")
+        self.assertEqual((r1.kind, r1.name, r1.args), (I.ACTION, "top_processes", {"action": "list", "sort_by": "cpu"}))
+
+        r2 = I.route("what is eating my ram")
+        self.assertEqual((r2.kind, r2.name, r2.args), (I.ACTION, "top_processes", {"action": "list", "sort_by": "mem"}))
+
+        r3 = I.route("memory hogs")
+        self.assertEqual((r3.kind, r3.name, r3.args), (I.ACTION, "top_processes", {"action": "list", "sort_by": "mem"}))
+
+        r4 = I.route("kill process 9999")
+        self.assertEqual((r4.kind, r4.name, r4.args), (I.ACTION, "top_processes", {"action": "kill", "target": "9999"}))
+
+    def test_dnd_intents(self):
+        r_on1 = I.route("turn on dnd")
+        self.assertEqual((r_on1.kind, r_on1.name, r_on1.args), (I.ACTION, "dnd_control", {"action": "on"}))
+
+        r_on2 = I.route("mute notifications")
+        self.assertEqual((r_on2.kind, r_on2.name, r_on2.args), (I.ACTION, "dnd_control", {"action": "on"}))
+
+        r_off = I.route("turn off dnd")
+        self.assertEqual((r_off.kind, r_off.name, r_off.args), (I.ACTION, "dnd_control", {"action": "off"}))
+
+        r_st = I.route("dnd status")
+        self.assertEqual((r_st.kind, r_st.name, r_st.args), (I.ACTION, "dnd_control", {"action": "status"}))
+
+
+class TestNewPowerManagers(unittest.TestCase):
+
+    def test_port_manager_inspects_free_port(self):
+        from lexi_productivity import PortManager
+        pm = PortManager()
+        # Port 64999 is almost certainly free
+        res = pm.inspect_port(64999)
+        self.assertTrue(res["success"])
+        self.assertTrue(res["verified"])
+        self.assertIn("Port 64999", res["message"])
+
+    def test_process_manager_returns_top_processes(self):
+        from lexi_productivity import ProcessManager
+        pm = ProcessManager()
+        res = pm.get_top_processes(sort_by="cpu", limit=3)
+        self.assertTrue(res["success"])
+        self.assertTrue(res["verified"])
+        self.assertIn("Top 3 CPU Consumers", res["message"])
+
+    def test_dnd_manager_toggles_state(self):
+        from lexi_productivity import DndManager
+        dm = DndManager()
+        st_on = dm.set_dnd(True)
+        self.assertTrue(st_on["success"])
+        self.assertTrue(st_on["active"])
+
+        st_off = dm.set_dnd(False)
+        self.assertTrue(st_off["success"])
+        self.assertFalse(st_off["active"])
+
 
 if __name__ == "__main__":
     unittest.main()

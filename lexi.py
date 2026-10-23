@@ -1792,6 +1792,52 @@ class SystemActionEngine:
         except Exception as e:
             return {"success": False, "verified": False, "message": f"Terminal diagnostic error: {e}"}
 
+    def execute_port_control(self, action="inspect", port=3000):
+        try:
+            from lexi_productivity import PortManager
+            pm = PortManager.get()
+            if action == "kill":
+                return pm.kill_port(int(port))
+            else:
+                return pm.inspect_port(int(port))
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Port control error: {e}"}
+
+    def execute_top_processes(self, action="list", sort_by="cpu", target=""):
+        try:
+            from lexi_productivity import ProcessManager
+            pm = ProcessManager.get()
+            if action == "kill":
+                return pm.kill_process(target)
+            else:
+                return pm.get_top_processes(sort_by=sort_by)
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Process manager error: {e}"}
+
+    def execute_dnd_control(self, action="status"):
+        try:
+            from lexi_productivity import DndManager
+            dm = DndManager.get()
+            if action == "on":
+                return dm.set_dnd(True)
+            elif action == "off":
+                return dm.set_dnd(False)
+            elif action == "toggle":
+                curr = dm.status().get("active", False)
+                return dm.set_dnd(not curr)
+            else:
+                return dm.status()
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"DND error: {e}"}
+
+    def execute_weather_report(self, location=""):
+        try:
+            from lexi_productivity import WeatherManager
+            wm = WeatherManager.get()
+            return wm.get_weather(location=location)
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Weather error: {e}"}
+
     # --- WhatsApp Web: browser-based drafting & sending (Zero Playwright) -------
     _wa_lock = threading.Lock()
     _wa_draft_data = None
@@ -3321,6 +3367,9 @@ def build_executors(engine):
         "download_status": lambda a: engine.execute_download_status(),
         "quick_notes": lambda a: engine.execute_quick_notes(a.get("action", "list"), a.get("text", "")),
         "terminal_diagnose": lambda a: engine.execute_terminal_diagnose(),
+        "port_control": lambda a: engine.execute_port_control(a.get("action", "inspect"), a.get("port", 3000)),
+        "top_processes": lambda a: engine.execute_top_processes(a.get("action", "list"), a.get("sort_by", "cpu"), a.get("target", "")),
+        "dnd_control": lambda a: engine.execute_dnd_control(a.get("action", "status")),
     }
 
 

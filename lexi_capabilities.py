@@ -512,6 +512,36 @@ _register(Capability(
     executor="terminal_diagnose",
     router_only=True,
 ))
+_register(Capability(
+    name="port_control",
+    description="Inspect which process is using a network port, or kill/free the port.",
+    schema={"action": Field("enum", choices=("inspect", "kill")),
+            "port": Field("int")},
+    verification="network sockets queried via ss/lsof",
+    failure_text="I couldn't inspect or free that port.",
+    executor="port_control",
+    router_only=True,
+))
+_register(Capability(
+    name="top_processes",
+    description="List top CPU/RAM consuming processes or terminate a runaway process.",
+    schema={"action": Field("enum", choices=("list", "kill"), required=False),
+            "sort_by": Field("enum", choices=("cpu", "mem"), required=False),
+            "target": Field("str", required=False)},
+    verification="process table queried or signal dispatched",
+    failure_text="I couldn't inspect or manage processes.",
+    executor="top_processes",
+    router_only=True,
+))
+_register(Capability(
+    name="dnd_control",
+    description="Enable, disable, or query Do Not Disturb (DND) mode.",
+    schema={"action": Field("enum", choices=("on", "off", "status", "toggle"))},
+    verification="notification service state updated",
+    failure_text="I couldn't change Do Not Disturb mode.",
+    executor="dnd_control",
+    router_only=True,
+))
 # Intentionally NOT registered: raw keystrokes, typing text, JavaScript, selectors.
 # (Shell commands ARE available, but only through terminal_task and its policy.)
 

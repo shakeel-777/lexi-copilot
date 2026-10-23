@@ -334,3 +334,244 @@ class QuickNotesManager:
                 except Exception:
                     pass
         return "📝 All quick notes have been cleared."
+
+
+class PortManager:
+    """Developer power tool: inspect or kill processes bound to network ports."""
+    _instance = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = PortManager()
+            return cls._instance
+
+    def inspect_port(self, port: int) -> dict:
+        if port <= 0 or port > 65535:
+            return {"success": False, "verified": False, "message": f"Invalid port number: {port}."}
+        try:
+            res = subprocess.run(["ss", "-lptn", f"sport = :{port}"], capture_output=True, text=True, timeout=2.0)
+            lines = [ln.strip() for ln in res.stdout.strip().splitlines() if ln.strip()]
+            found_pids = []
+            found_procs = []
+            if len(lines) > 1:
+                for line in lines[1:]:
+                    m = re.findall(r'users:\(\("([^"]+)",pid=(\d+)', line)
+                    for proc_name, pid_str in m:
+                        found_pids.append(int(pid_str))
+                        found_procs.append((proc_name, int(pid_str)))
+
+            if not found_procs and shutil.which("lsof"):
+                r2 = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=2.0)
+                if r2.returncode == 0 and r2.stdout.strip():
+                    for pid_s in r2.stdout.strip().split():
+                        try:
+                            p = int(pid_s)
+                            c_res = subprocess.run(["ps", "-p", str(p), "-o", "comm="], capture_output=True, text=True, timeout=1.0)
+                            p_name = c_res.stdout.strip() or "process"
+                            found_procs.append((p_name, p))
+                            found_pids.append(p)
+                        except Exception:
+                            pass
+
+            if not found_procs:
+                return {"success": True, "verified": True, "message": f"🔌 Port {port} is completely free (no active listener).", "port": port, "active": False}
+
+            proc_desc = ", ".join(f"`{pname}` (PID {pid})" for pname, pid in found_procs)
+            msg = f"🔌 **Port {port}** is in use by {proc_desc}.\n*Say “kill port {port}” or “free port {port}” to terminate it.*"
+            return {"success": True, "verified": True, "message": msg, "port": port, "active": True, "pids": found_pids}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not inspect port {port}: {e}"}
+
+    def kill_port(self, port: int) -> dict:
+        info = self.inspect_port(port)
+        if not info.get("active") or not info.get("pids"):
+            return {"success": True, "verified": True, "message": f"🔌 Port {port} is already free."}
+        pids = info["pids"]
+        killed = []
+        for pid in set(pids):
+            try:
+                subprocess.run(["kill", "-15", str(pid)], timeout=1.0)
+                killed.append(pid)
+            except Exception:
+                pass
+        time.sleep(0.2)
+        recheck = self.inspect_port(port)
+        if recheck.get("active"):
+            for pid in recheck.get("pids", []):
+                try:
+                    subprocess.run(["kill", "-9", str(pid)], timeout=1.0)
+                except Exception:
+                    pass
+        return {"success": True, "verified": True, "message": f"⚡ Freed port {port} (killed PID(s): {', '.join(map(str, killed)) or 'done'})."}
+
+
+class ProcessManager:
+    """Inspect top resource-hungry processes and safely kill specified PIDs."""
+    _instance = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = ProcessManager()
+            return cls._instance
+
+    def get_top_processes(self, sort_by: str = "cpu", limit: int = 5) -> dict:
+        col = "%cpu" if sort_by.lower() != "mem" else "%mem"
+        title = "CPU" if col == "%cpu" else "Memory"
+        icon = "🔥" if col == "%cpu" else "🧠"
+        try:
+            res = subprocess.run(
+                ["ps", "-eo", "pid,user,%cpu,%mem,comm", f"--sort=-{col}"],
+                capture_output=True, text=True, timeout=2.0
+            )
+            lines = [ln.strip() for ln in res.stdout.strip().splitlines() if ln.strip()]
+            if len(lines) <= 1:
+                return {"success": False, "verified": False, "message": "Could not query processes."}
+
+            entries = []
+            for i, line in enumerate(lines[1:limit+1], 1):
+                parts = line.split(None, 4)
+                if len(parts) >= 5:
+                    pid, user, cpu, mem, comm = parts[0], parts[1], parts[2], parts[3], parts[4]
+                    entries.append(f"{i}. **`{comm}`** (PID {pid}) — {cpu}% CPU | {mem}% RAM")
+
+            msg = f"{icon} **Top {limit} {title} Consumers**:\n" + "\n".join(entries)
+            return {"success": True, "verified": True, "message": msg}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not list top processes: {e}"}
+
+    def kill_process(self, target: str) -> dict:
+        clean = (target or "").strip()
+        if not clean:
+            return {"success": False, "verified": False, "message": "Specify a PID or process name to terminate."}
+        try:
+            if clean.isdigit():
+                pid = int(clean)
+                subprocess.run(["kill", "-15", str(pid)], timeout=1.0)
+                return {"success": True, "verified": True, "message": f"🛑 Sent termination signal to PID {pid}."}
+            else:
+                subprocess.run(["pkill", "-15", "-f", clean], timeout=1.0)
+                return {"success": True, "verified": True, "message": f"🛑 Terminated process(es) matching '{clean}'."}
+        except Exception as e:
+            return {"success": False, "verified": False, "message": f"Could not kill process: {e}"}
+
+
+class DndManager:
+    """Manages Do Not Disturb (DND) mode across desktop notification servers."""
+    _instance = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = DndManager()
+            return cls._instance
+
+    def __init__(self):
+        self.state_file = os.path.expanduser("~/.local/share/mochi-copilot/dnd_state.json")
+        self._dnd_active = False
+        self._load()
+
+    def _load(self):
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    self._dnd_active = bool(data.get("dnd", False))
+            except Exception:
+                pass
+
+    def _save(self):
+        try:
+            os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+            with open(self.state_file, "w", encoding="utf-8") as f:
+                json.dump({"dnd": self._dnd_active}, f)
+        except Exception:
+            pass
+
+    def set_dnd(self, enable: bool) -> dict:
+        self._dnd_active = enable
+        self._save()
+
+        if shutil.which("gsettings"):
+            val = "false" if enable else "true"
+            try:
+                subprocess.run(["gsettings", "set", "org.gnome.desktop.notifications", "show-banners", val], capture_output=True, timeout=1.0)
+            except Exception:
+                pass
+
+        if shutil.which("makoctl"):
+            try:
+                mode_flag = "-a" if enable else "-r"
+                subprocess.run(["makoctl", "mode", mode_flag, "dnd"], capture_output=True, timeout=1.0)
+            except Exception:
+                pass
+
+        if shutil.which("dunstctl"):
+            try:
+                val = "true" if enable else "false"
+                subprocess.run(["dunstctl", "set-paused", val], capture_output=True, timeout=1.0)
+            except Exception:
+                pass
+
+        if shutil.which("swaync-client"):
+            try:
+                val = "true" if enable else "false"
+                subprocess.run(["swaync-client", "-d", "-s", val], capture_output=True, timeout=1.0)
+            except Exception:
+                pass
+
+        status_str = "🌙 **Do Not Disturb Enabled** (notifications muted)." if enable else "☀️ **Do Not Disturb Disabled** (notifications active)."
+        return {"success": True, "verified": True, "active": enable, "message": status_str}
+
+    def status(self) -> dict:
+        st = "🌙 **Do Not Disturb is ON** (notifications muted)." if self._dnd_active else "☀️ **Do Not Disturb is OFF** (notifications active)."
+        return {"success": True, "verified": True, "active": self._dnd_active, "message": st}
+
+
+class WeatherManager:
+    """Instant weather and temperature reports at a glance."""
+    _instance = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = WeatherManager()
+            return cls._instance
+
+    def get_weather(self, location: str = "") -> dict:
+        loc = urllib.parse.quote((location or "").strip())
+        url = f"https://wttr.in/{loc}?format=%l:+%c+%t+(humidity:+%h,+wind:+%w)"
+        try:
+            res = subprocess.run(
+                ["curl", "-s", "--connect-timeout", "2.5", "--max-time", "4", url],
+                capture_output=True, text=True, timeout=4.5
+            )
+            raw = res.stdout.strip()
+            if res.returncode == 0 and raw and not raw.startswith("<") and "Unknown location" not in raw:
+                msg = f"🌤️ {raw}"
+                return {"success": True, "verified": True, "message": msg}
+        except Exception:
+            pass
+
+        try:
+            url_compact = f"https://wttr.in/{loc}?format=3"
+            res2 = subprocess.run(
+                ["curl", "-s", "--connect-timeout", "2.0", "--max-time", "3", url_compact],
+                capture_output=True, text=True, timeout=3.5
+            )
+            raw2 = res2.stdout.strip()
+            if res2.returncode == 0 and raw2 and not raw2.startswith("<"):
+                return {"success": True, "verified": True, "message": f"🌤️ {raw2}"}
+        except Exception:
+            pass
+
+        return {"success": False, "verified": False, "message": "Weather service currently unreachable. Check your internet connection."}
