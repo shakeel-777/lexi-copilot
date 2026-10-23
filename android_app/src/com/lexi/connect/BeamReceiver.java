@@ -16,9 +16,17 @@ public class BeamReceiver extends BroadcastReceiver {
     public static final String ACTION_SET_HOST = "com.lexi.connect.SET_HOST";
     public static final String ACTION_BEAM_RECEIVED = "com.lexi.connect.BEAM_RECEIVED";
     public static final String ACTION_RING_PHONE = "com.lexi.connect.RING_PHONE";
-    public static final String ACTION_SYNC_CLIPBOARD = "com.lexi.connect.SYNC_CLIPBOARD";
     private static final String NOTIF_CHANNEL_ID = "lexi_beam_channel";
     private static final int NOTIF_ID = 9902;
+
+    private static boolean isValidHost(String host) {
+        if (host == null || host.trim().isEmpty()) return false;
+        String clean = host.trim();
+        if ("localhost".equalsIgnoreCase(clean)) return true;
+        if (clean.matches("^(\\d{1,3}\\.){3}\\d{1,3}$")) return true;
+        if (clean.matches("^[a-zA-Z0-9.-]+\\.local$")) return true;
+        return false;
+    }
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -29,8 +37,11 @@ public class BeamReceiver extends BroadcastReceiver {
             String host = intent.getStringExtra("host");
             int port = intent.getIntExtra("port", LexiApi.DEFAULT_PORT);
             if (host != null && !host.trim().isEmpty()) {
-                LexiApi.setHost(context, host.trim());
-                LexiApi.setPort(context, port);
+                String cleanHost = host.trim();
+                if (isValidHost(cleanHost) && port > 0 && port <= 65535) {
+                    LexiApi.setHost(context, cleanHost);
+                    LexiApi.setPort(context, port);
+                }
             }
         } else if (ACTION_BEAM_RECEIVED.equals(action)) {
             String filename = intent.getStringExtra("filename");
@@ -66,17 +77,6 @@ public class BeamReceiver extends BroadcastReceiver {
                 );
                 if (r != null) r.play();
             } catch (Exception ignored) {}
-        } else if (ACTION_SYNC_CLIPBOARD.equals(action)) {
-            String text = intent.getStringExtra("text");
-            if (text != null && !text.isEmpty()) {
-                try {
-                    android.content.ClipboardManager cm = (android.content.ClipboardManager) context.getSystemService(Context.CLIPBOARD_SERVICE);
-                    if (cm != null) {
-                        cm.setPrimaryClip(android.content.ClipData.newPlainText("Lexi Copilot", text));
-                        vibrate(context, 50);
-                    }
-                } catch (Exception ignored) {}
-            }
         }
     }
 

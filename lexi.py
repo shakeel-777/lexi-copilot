@@ -491,6 +491,13 @@ def load_config():
     cfg = dict(DEFAULT_CONFIG)
     if os.path.exists(CONFIG_FILE):
         try:
+            # Enforce 0600 (owner read/write only) on sensitive configuration file
+            curr_mode = os.stat(CONFIG_FILE).st_mode & 0o777
+            if curr_mode != 0o600:
+                os.chmod(CONFIG_FILE, 0o600)
+        except Exception:
+            pass
+        try:
             with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                 file_cfg = json.load(f)
                 cfg.update(file_cfg)
@@ -511,8 +518,17 @@ def load_config():
 
 def save_config(cfg):
     try:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        temp_file = f"{CONFIG_FILE}.tmp.{os.getpid()}"
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        mode = 0o600
+        fd = os.open(temp_file, flags, mode)
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(cfg, f, indent=4)
+        os.replace(temp_file, CONFIG_FILE)
+        try:
+            os.chmod(CONFIG_FILE, 0o600)
+        except Exception:
+            pass
         return True
     except Exception as e:
         log(f"Error saving config: {e}")
@@ -1771,6 +1787,22 @@ class SystemActionEngine:
             if not last_cmd:
                 return {"success": True, "verified": True, "message": "🔍 No recent terminal commands found in history."}
 
+            def redact_secrets(cmd_text: str) -> str:
+                if not cmd_text:
+                    return ""
+                s = cmd_text
+                # Redact key/secret/password/token assignments
+                s = re.sub(
+                    r'(?i)(token|key|secret|password|bearer|auth|pwd|access_key|api_key)([=\s:]+)([\'"]?)([^\s\'"&]{4,})([\'"]?)',
+                    r'\1\2\3***REDACTED***\5',
+                    s
+                )
+                # Redact HTTP basic auth credentials in URLs
+                s = re.sub(r'(https?://[^:\s]+:)([^@\s]+)(@)', r'\1***REDACTED***\3', s)
+                # Redact explicit CLI password flags
+                s = re.sub(r'(--(?:password|token|secret)=)(\S+)', r'\1***REDACTED***', s)
+                return s
+
             tip = ""
             fixed = ""
             if last_cmd.startswith("pacman") or last_cmd.startswith("apt") or last_cmd.startswith("systemctl"):
@@ -1785,9 +1817,12 @@ class SystemActionEngine:
                 tip = "Review the command syntax and arguments."
                 fixed = last_cmd
 
-            reply = f"🔍 **Terminal Diagnostic**:\n- **Last Command**: `{last_cmd}`\n- **Analysis**: {tip}"
-            if fixed:
-                reply += f"\n- **Suggested Fix**: `{fixed}`"
+            safe_cmd = redact_secrets(last_cmd)
+            safe_fixed = redact_secrets(fixed)
+
+            reply = f"🔍 **Terminal Diagnostic**:\n- **Last Command**: `{safe_cmd}`\n- **Analysis**: {tip}"
+            if safe_fixed:
+                reply += f"\n- **Suggested Fix**: `{safe_fixed}`"
             return {"success": True, "verified": True, "message": reply}
         except Exception as e:
             return {"success": False, "verified": False, "message": f"Terminal diagnostic error: {e}"}

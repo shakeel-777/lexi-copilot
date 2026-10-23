@@ -22,6 +22,8 @@ import subprocess
 import shutil
 import tempfile
 import urllib.request
+import urllib.parse
+import ipaddress
 from pathlib import Path
 from aiohttp import web, WSMsgType
 
@@ -97,11 +99,13 @@ def auto_unlock_phone(device_id: str):
             # 2. Swipe up to reveal lockscreen PIN/password input
             subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'swipe', '540', '1800', '540', '500', '250'], timeout=2)
             time.sleep(0.5)
-            # 3. Enter password if configured
+            # 3. Enter password if configured (sanitize to prevent adb shell injection)
             if password:
-                subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'text', str(password)], timeout=3)
-                time.sleep(0.3)
-                subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'keyevent', '66'], timeout=2)
+                clean_pw = str(password).strip()
+                if re.match(r'^[a-zA-Z0-9_\-\.@#]+$', clean_pw):
+                    subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'text', clean_pw], timeout=3)
+                    time.sleep(0.3)
+                    subprocess.run(['adb', '-s', device_id, 'shell', 'input', 'keyevent', '66'], timeout=2)
     except Exception as e:
         print(f"[LexiDrop] Auto-unlock error: {e}", file=sys.stderr)
 
@@ -171,7 +175,7 @@ class PhoneMirrorManager:
 
             if not attached:
                 candidate_ips = []
-                if preferred_ip and preferred_ip not in ('127.0.0.1', 'localhost'):
+                if preferred_ip and re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', preferred_ip) and not preferred_ip.startswith('127.'):
                     candidate_ips.append(preferred_ip)
                 try:
                     drop = get_lexi_drop_instance()
@@ -461,15 +465,76 @@ class PhoneMirrorManager:
 
 
 def get_unique_destination_path(directory: Path, filename: str) -> Path:
-    """Avoid overwriting existing files by appending incremental counters."""
-    stem = Path(filename).stem
-    suffix = Path(filename).suffix
-    candidate = directory / filename
+    """
+    Sanitizes filename and prevents directory traversal attacks, ensuring the returned path
+    is strictly contained inside `directory`. Avoids overwriting existing files by appending
+    incremental counters.
+    """
+    dir_resolved = directory.resolve()
+
+    # 1. Strip paths, normalize slashes, and extract leaf basename
+    raw_name = (filename or "").strip().replace('\\', '/')
+    clean_name = os.path.basename(raw_name).strip()
+
+    # 2. Neutralize null bytes, control characters, and dangerous traversal tokens
+    clean_name = re.sub(r'[\x00-\x1f\x7f]', '', clean_name)
+    clean_name = clean_name.lstrip('/\\.')
+
+    # 3. Disallow empty or hidden files (prevent overwriting dotfiles e.g. .bashrc, .profile)
+    if not clean_name or clean_name in ('.', '..'):
+        clean_name = f"download_{int(time.time())}.bin"
+    elif clean_name.startswith('.'):
+        clean_name = f"download_{clean_name.lstrip('.')}"
+
+    candidate = (dir_resolved / clean_name).resolve()
+
+    # 4. Strict path traversal verification
+    try:
+        candidate.relative_to(dir_resolved)
+    except ValueError:
+        candidate = dir_resolved / f"safe_download_{int(time.time())}.bin"
+
+    stem = candidate.stem
+    suffix = candidate.suffix
+    final_path = candidate
     counter = 1
-    while candidate.exists():
-        candidate = directory / f"{stem} ({counter}){suffix}"
+    while final_path.exists():
+        final_path = dir_resolved / f"{stem} ({counter}){suffix}"
         counter += 1
-    return candidate
+    return final_path
+
+
+def is_safe_share_path(filepath: str) -> tuple[bool, str]:
+    """
+    Validates whether a file or directory is safe to be shared over Lexi Beam,
+    preventing arbitrary local file exfiltration and traversal of sensitive credentials.
+    """
+    try:
+        real_p = os.path.realpath(os.path.expanduser(filepath))
+        home = os.path.realpath(os.path.expanduser("~"))
+
+        forbidden_system_dirs = ["/etc", "/root", "/proc", "/sys", "/dev", "/boot", "/var"]
+        for fdir in forbidden_system_dirs:
+            if real_p == fdir or real_p.startswith(fdir.rstrip("/") + "/"):
+                return False, f"Access to system directory {fdir} is forbidden"
+
+        sensitive_home_items = [
+            os.path.join(home, ".ssh"),
+            os.path.join(home, ".gnupg"),
+            os.path.join(home, ".bash_history"),
+            os.path.join(home, ".zsh_history"),
+            os.path.join(home, ".bashrc"),
+            os.path.join(home, ".profile"),
+            os.path.join(home, ".local", "share", "mochi-copilot", "config.json"),
+            os.path.join(home, ".config", "mochi-copilot")
+        ]
+        for sitem in sensitive_home_items:
+            if real_p == sitem or real_p.startswith(sitem.rstrip("/") + "/"):
+                return False, "Access to sensitive credentials/configuration is forbidden"
+
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 
 def play_beam_sound(sound_name: str = "complete"):
@@ -947,11 +1012,29 @@ class LexiDropServer:
         total_bytes = 0
         t0 = time.time()
         chunk_size = 4 * 1024 * 1024
+        max_upload_bytes = 10 * 1024 * 1024 * 1024  # 10 GB maximum per transfer
 
-        with open(dest_path, "wb") as f:
-            async for chunk in request.content.iter_chunked(chunk_size):
-                f.write(chunk)
-                total_bytes += len(chunk)
+        part_path = dest_path.with_name(f".{dest_path.name}.lexipart")
+
+        try:
+            with open(part_path, "wb") as f:
+                async for chunk in request.content.iter_chunked(chunk_size):
+                    total_bytes += len(chunk)
+                    if total_bytes > max_upload_bytes:
+                        raise web.HTTPRequestEntityTooLarge(
+                            max_size=max_upload_bytes,
+                            actual_size=total_bytes
+                        )
+                    f.write(chunk)
+
+            os.replace(part_path, dest_path)
+        except Exception:
+            if part_path.exists():
+                try:
+                    part_path.unlink()
+                except Exception:
+                    pass
+            raise
 
         elapsed = max(time.time() - t0, 0.001)
         speed_mbps = (total_bytes / (1024 * 1024)) / elapsed
@@ -1004,10 +1087,21 @@ class LexiDropServer:
 
     async def handle_share_request(self, request):
         try:
+            # 1. Strictly restrict to local loopback (invoked only by desktop Lexi UI)
+            client_ip = request.remote or ""
+            if client_ip not in ("127.0.0.1", "::1", "localhost"):
+                return web.json_response({"error": "Forbidden: Local endpoint only"}, status=403)
+
             data = await request.json()
             filepath = data.get("filepath")
             if not filepath or not os.path.exists(filepath):
                 return web.json_response({"error": "File does not exist"}, status=400)
+
+            # 2. Path validation against sensitive files and system directories
+            is_safe, reason = is_safe_share_path(filepath)
+            if not is_safe:
+                return web.json_response({"error": f"Sharing forbidden: {reason}"}, status=403)
+
             res = self.share_file(filepath)
             return web.json_response(res)
         except Exception as e:
@@ -1102,6 +1196,17 @@ class LexiDropServer:
 
     def _download_peer_file_sync(self, download_url: str, filename: str, expected_size: int, token: str):
         """Pulls the file from the remote peer directly to ~/Downloads with 4MB chunks and atomic commit."""
+        # 1. Validate scheme and netloc to prevent SSRF (file://, dict://, gopher://, etc.)
+        parsed = urllib.parse.urlparse(download_url or "")
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            print(f"[LexiDrop] Blocked unsafe peer download URL: {download_url}")
+            return
+
+        max_allowed_size = 20 * 1024 * 1024 * 1024  # 20 GB safety ceiling
+        if expected_size and expected_size > max_allowed_size:
+            print(f"[LexiDrop] Rejecting download: expected size {expected_size} exceeds 20GB limit")
+            return
+
         dest_path = get_unique_destination_path(DOWNLOADS_DIR, filename)
         part_path = dest_path.with_name(f".{dest_path.name}.lexipart")
         t0 = time.time()
@@ -1116,8 +1221,10 @@ class LexiDropServer:
                     chunk = resp.read(chunk_size)
                     if not chunk:
                         break
-                    f.write(chunk)
                     received += len(chunk)
+                    if received > max_allowed_size:
+                        raise ValueError(f"Peer download exceeded maximum allowed size ({max_allowed_size} bytes)")
+                    f.write(chunk)
 
                     if self.on_transfer_progress and expected_size > 0:
                         pct = int((received / expected_size) * 100)
@@ -1415,11 +1522,17 @@ class LexiDropServer:
 
     async def handle_camera_snap(self, request):
         """Handles Continuity Camera snap from mobile and attaches to Lexi's vision tray."""
+        snap_path = None
         try:
-            ct = request.content_type
-            snap_filename = f"camera_snap_{int(time.time())}.jpg"
-            snap_path = Path("/tmp") / snap_filename
+            max_snap_size = 50 * 1024 * 1024  # 50 MB limit
+            if request.content_length and request.content_length > max_snap_size:
+                return web.json_response({"error": "Payload exceeds 50MB limit"}, status=413)
 
+            ct = request.content_type
+            snap_filename = f"camera_snap_{int(time.time())}_{uuid.uuid4().hex[:6]}.jpg"
+            snap_path = Path(tempfile.gettempdir()) / snap_filename
+
+            total_read = 0
             if "multipart" in ct:
                 reader = await request.multipart()
                 part = await reader.next()
@@ -1429,13 +1542,19 @@ class LexiDropServer:
                             chunk = await part.read_chunk(1024 * 1024)
                             if not chunk:
                                 break
+                            total_read += len(chunk)
+                            if total_read > max_snap_size:
+                                raise web.HTTPRequestEntityTooLarge(max_size=max_snap_size, actual_size=total_read)
                             f.write(chunk)
             else:
-                body = await request.read()
                 with open(snap_path, "wb") as f:
-                    f.write(body)
+                    async for chunk in request.content.iter_chunked(1024 * 1024):
+                        total_read += len(chunk)
+                        if total_read > max_snap_size:
+                            raise web.HTTPRequestEntityTooLarge(max_size=max_snap_size, actual_size=total_read)
+                        f.write(chunk)
 
-            if os.path.exists(snap_path) and os.path.getsize(snap_path) > 0:
+            if snap_path.exists() and os.path.getsize(snap_path) > 0:
                 if self.on_camera_snap_received:
                     self.on_camera_snap_received(str(snap_path))
                 return web.json_response({
@@ -1444,7 +1563,19 @@ class LexiDropServer:
                     "size": os.path.getsize(snap_path)
                 })
             return web.json_response({"error": "Empty capture"}, status=400)
+        except web.HTTPRequestEntityTooLarge:
+            if snap_path and os.path.exists(snap_path):
+                try:
+                    os.remove(snap_path)
+                except Exception:
+                    pass
+            return web.json_response({"error": "Payload exceeds 50MB limit"}, status=413)
         except Exception as e:
+            if snap_path and os.path.exists(snap_path):
+                try:
+                    os.remove(snap_path)
+                except Exception:
+                    pass
             return web.json_response({"error": str(e)}, status=500)
 
     async def handle_clipboard_api(self, request):
@@ -1487,6 +1618,10 @@ class LexiDropServer:
         """Registers a local file or directory for fast sharing and notifies all connected peers via WebSocket."""
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"File not found: {filepath}")
+
+        is_safe, reason = is_safe_share_path(filepath)
+        if not is_safe:
+            raise PermissionError(f"Sharing prohibited: {reason}")
 
         # If directory, bundle into a temporary zip archive
         actual_path = filepath
@@ -1559,7 +1694,46 @@ class LexiDropServer:
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
 
-            self.app = web.Application(client_max_size=10 * 1024 * 1024 * 1024)
+            @web.middleware
+            async def security_origin_middleware(request, handler):
+                """
+                Validates request Origin and Sec-Fetch-Site headers to defeat CSRF, DNS rebinding,
+                and unauthorized cross-site invocations of local APIs.
+                """
+                sec_fetch_site = request.headers.get("Sec-Fetch-Site", "").lower()
+                if sec_fetch_site == "cross-site":
+                    if request.method not in ("GET", "HEAD") or request.path.startswith("/api/"):
+                        return web.Response(status=403, text="Cross-site requests prohibited")
+
+                origin = request.headers.get("Origin")
+                if origin:
+                    try:
+                        parsed = urllib.parse.urlparse(origin)
+                        host = (parsed.hostname or "").lower()
+                        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+                        is_valid_origin = False
+                        if host in ("localhost", "127.0.0.1", "::1") or host.endswith(".local"):
+                            is_valid_origin = (port == self.port)
+                        else:
+                            try:
+                                ip_obj = ipaddress.ip_address(host)
+                                if ip_obj.is_private or ip_obj.is_loopback:
+                                    is_valid_origin = (port == self.port)
+                            except ValueError:
+                                is_valid_origin = False
+
+                        if not is_valid_origin:
+                            return web.Response(status=403, text="Untrusted cross-origin request rejected")
+                    except Exception:
+                        return web.Response(status=403, text="Malformed Origin header")
+
+                return await handler(request)
+
+            self.app = web.Application(
+                middlewares=[security_origin_middleware],
+                client_max_size=10 * 1024 * 1024 * 1024
+            )
             self.app.router.add_get("/", self.handle_index)
             self.app.router.add_get("/manifest.json", self.handle_manifest)
             self.app.router.add_get("/sw.js", self.handle_sw)

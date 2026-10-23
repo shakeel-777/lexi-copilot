@@ -449,13 +449,32 @@ class ProcessManager:
         clean = (target or "").strip()
         if not clean:
             return {"success": False, "verified": False, "message": "Specify a PID or process name to terminate."}
+
+        # Prevent argument injection
+        if clean.startswith("-"):
+            return {"success": False, "verified": False, "message": "Invalid process identifier or argument flag."}
+
         try:
             if clean.isdigit():
                 pid = int(clean)
-                subprocess.run(["kill", "-15", str(pid)], timeout=1.0)
+                if pid <= 1:
+                    return {"success": False, "verified": False, "message": "Refused to terminate critical system PID."}
+                subprocess.run(["kill", "-15", "--", str(pid)], timeout=1.0)
                 return {"success": True, "verified": True, "message": f"🛑 Sent termination signal to PID {pid}."}
             else:
-                subprocess.run(["pkill", "-15", "-f", clean], timeout=1.0)
+                # Validate allowed name characters (alphanumeric, dot, underscore, hyphen)
+                if not re.match(r'^[a-zA-Z0-9_\.\-]+$', clean):
+                    return {"success": False, "verified": False, "message": "Invalid process name format."}
+
+                # Protect essential system processes from accidental disruption
+                protected = {
+                    "init", "systemd", "sshd", "bash", "zsh", "sh", "python", "python3",
+                    "lexi", "xorg", "wayland", "gnome-shell", "hyprland", "sway", "systemd-journald"
+                }
+                if clean.lower() in protected:
+                    return {"success": False, "verified": False, "message": f"Refused to terminate protected core process '{clean}'."}
+
+                subprocess.run(["pkill", "-15", "-f", "--", clean], timeout=1.0)
                 return {"success": True, "verified": True, "message": f"🛑 Terminated process(es) matching '{clean}'."}
         except Exception as e:
             return {"success": False, "verified": False, "message": f"Could not kill process: {e}"}
