@@ -230,7 +230,8 @@ class PhoneMirrorManager:
             print(f"[PhoneMirrorManager] Discovery error: {e}", file=sys.stderr)
             return [], []
 
-    def build_scrcpy_cmd(self, device_id: str, stay_awake: bool = True, turn_screen_off: bool = False, codec: str = "h265") -> list[str]:
+    def build_scrcpy_cmd(self, device_id: str, stay_awake: bool = True, turn_screen_off: bool = False,
+                         codec: str = "h265", bitrate: str = "3M", video_buffer: int = 40, audio_buffer: int = 40) -> list[str]:
         cmd = [
             'scrcpy',
             '-s', device_id,
@@ -247,10 +248,10 @@ class PhoneMirrorManager:
             cmd.extend([
                 f'--video-codec={codec}',
                 '--max-size=1080',
-                '-b', '3M',
+                '-b', bitrate,
                 '--max-fps=60',
-                '--video-buffer=40',
-                '--audio-buffer=40',
+                f'--video-buffer={video_buffer}',
+                f'--audio-buffer={audio_buffer}',
             ])
         else:
             cmd.extend([
@@ -346,10 +347,22 @@ class PhoneMirrorManager:
 
         codec = "h265"
         consecutive_drops = 0
-        max_reconnect_attempts = 12
+        max_reconnect_attempts = 40
 
         while not self._stop_requested:
-            cmd = self.build_scrcpy_cmd(device_id, stay_awake=stay_awake, turn_screen_off=turn_screen_off, codec=codec)
+            # Adaptive buffering and bitrate scaling when distance causes packet drops
+            bitrate = "3M"
+            v_buf = 40
+            a_buf = 40
+            if consecutive_drops > 0:
+                bitrate = "2M" if consecutive_drops <= 3 else "1.5M"
+                v_buf = 100
+                a_buf = 80
+
+            cmd = self.build_scrcpy_cmd(
+                device_id, stay_awake=stay_awake, turn_screen_off=turn_screen_off,
+                codec=codec, bitrate=bitrate, video_buffer=v_buf, audio_buffer=a_buf
+            )
             try:
                 proc = subprocess.Popen(
                     cmd,
@@ -392,13 +405,13 @@ class PhoneMirrorManager:
                     print(f"[PhoneMirrorManager] Reached max reconnect attempts ({max_reconnect_attempts}). Stopping supervisor.")
                     break
 
-                print(f"[PhoneMirrorManager] Wireless mirror dropped (code {rc}). Auto-reconnecting attempt {consecutive_drops}/{max_reconnect_attempts}...")
+                print(f"[PhoneMirrorManager] Wireless mirror dropped (code {rc}). Auto-reconnecting attempt {consecutive_drops}/{max_reconnect_attempts} (buffer={v_buf}ms, bitrate={bitrate})...")
 
                 reconnected = False
-                for _ in range(5):
+                for _ in range(6):
                     if self._stop_requested:
                         break
-                    time.sleep(2)
+                    time.sleep(1.5)
                     try:
                         subprocess.run(['adb', 'connect', device_id], capture_output=True, timeout=2)
                         chk = subprocess.run(['adb', 'devices'], capture_output=True, text=True, timeout=2)
@@ -407,6 +420,16 @@ class PhoneMirrorManager:
                             reconnected = True
                             consecutive_drops = 0
                             break
+                        # Dynamic network rediscovery if IP shifted or re-announced
+                        new_devs, _ = self.discover_device()
+                        if new_devs:
+                            target = next((d for d in new_devs if self.is_wireless_device(d)), new_devs[0])
+                            if target != device_id:
+                                device_id = target
+                                self.enable_low_latency_wifi(device_id)
+                                reconnected = True
+                                consecutive_drops = 0
+                                break
                     except Exception:
                         pass
 
