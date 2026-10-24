@@ -6,6 +6,7 @@
 <div align="center">
 
 [![Arch Linux](https://img.shields.io/badge/Arch_Linux-Wayland-1793D1?logo=arch-linux&logoColor=white)](https://archlinux.org)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?logo=windows&logoColor=white)](windows)
 [![GTK4 & Libadwaita](https://img.shields.io/badge/GTK4-Libadwaita-3584e4?logo=gnome&logoColor=white)](https://gnome.org)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![scrcpy](https://img.shields.io/badge/Phone_Mirror-scrcpy_5.0-3DDC84?logo=android&logoColor=white)](https://github.com/Genymobile/scrcpy)
@@ -13,7 +14,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/shakeel-777/lexi-copilot?style=social)](https://github.com/shakeel-777/lexi-copilot/stargazers)
 
-**[⚡ One-Line Install](#-quick-install) • [🌟 Features](#-core-highlights) • [📊 Comparison](#-why-lexi) • [⌨️ Shortcuts](#️-global-keybindings) • [⭐ Star This Project](#-star-history)**
+**[⚡ Quick Install](#-quick-install) • [🌟 Features](#-core-highlights) • [📊 Comparison](#-why-lexi) • [⌨️ Shortcuts](#️-global-keybindings) • [⭐ Star This Project](#-star-history)**
 
 </div>
 
@@ -21,18 +22,35 @@
 
 ## ⚡ Quick Install
 
-Install and launch Lexi Copilot in a single command on **Arch Linux**, **Fedora**, or **Ubuntu/Debian**:
+### 🐧 Linux (Arch / Fedora / Ubuntu / Debian)
+
+Install and launch Lexi Copilot in a single command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/install.sh | bash
 ```
 
-Or via **Arch User Repository (AUR)**:
+Or on Arch Linux via **AUR**:
 ```bash
 yay -S lexi-copilot-git
 # or
 paru -S lexi-copilot-git
 ```
+
+### 🪟 Windows (Windows 10 / 11)
+
+Install and launch the native **Lexi Dynamic Island & ShareMe Copilot** in a single **PowerShell** command:
+
+```powershell
+irm https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/install.ps1 | iex
+```
+
+Or using standard `curl.exe`:
+```cmd
+curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/install.ps1 | powershell -
+```
+
+*Auto-detects Python, sets up PySide6 runtime, prompts for your DeepSeek or Groq key, creates desktop & startup shortcuts, and launches the notch immediately.*
 
 ---
 
@@ -100,15 +118,16 @@ Most desktop AI assistants are 800MB+ Electron web wrappers that freeze your sys
 - **Interactive Provider Settings Dialog**: Accessible anytime via <kbd>Ctrl</kbd> + <kbd>,</kbd> or the `⚙️` header button.
 - **Zero-Friction Provider Presets**:
   - **Ollama (100% Local / Free / Offline)**: Run offline on your CPU/GPU with zero API keys required (`llama3.2`, `qwen2.5`, `mistral`).
-  - **OpenRouter**: Access 100+ models with multi-model fallback (`deepseek-v4.1-flash`, `gemini-2.5-flash`, `nemotron`).
+  - **Groq (Ultra-Fast LPU)**: Blazing sub-second inference with `llama-3.3-70b-versatile` & `llama-3.2-11b-vision-preview`.
+  - **DeepSeek Direct**: High-throughput access to DeepSeek-V3 and DeepSeek-R1 with live reasoning indicators (`deepseek-flash`).
+  - **OpenRouter**: Access 100+ models with multi-model fallback (`gemini-2.5-flash`, `deepseek`, `nemotron`).
   - **OpenAI Official**: Direct GPT-4o, GPT-4o-mini, and o-series reasoning models.
-  - **DeepSeek Direct**: High-throughput access to DeepSeek-V3 and DeepSeek-R1 with live reasoning indicators.
   - **OmniRoute**: Local resilient multi-provider gateway integration.
   - **Custom OpenAI-Compatible**: Connect to self-hosted vLLM, LM Studio, or LocalAI endpoints.
 - **Non-Blocking Connection Tester**: Test latency and verify authentication live before saving.
 - **Seamless In-Chat Slash Commands**:
   - `/settings` — Open provider settings modal.
-  - `/provider <name>` — Switch between `ollama`, `openai`, `deepseek`, `openrouter`, or `omniroute` on the fly.
+  - `/provider <name>` — Switch between `ollama`, `groq`, `deepseek`, `openai`, `openrouter`, or `omniroute` on the fly.
   - `/model <name>` — Change the active model instantly.
   - `/key <token>` — Securely update credentials (stored locally with `0600` permissions).
 
@@ -143,12 +162,17 @@ mochi-copilot/
 ├── lexi_capabilities.py       # Typed capability registry & schema validation
 ├── lexi_apps.py               # Process inspection via /proc & graceful app manager
 ├── lexi_memory.py             # Context memory compaction & creator provenance
+├── windows/                   # Native Windows Dynamic Island, ShareMe & 1-click installer
+│   ├── lexi_win_island.py     # Windows PySide6 Dynamic Island notch & vision UI
+│   ├── lexi_win_drop.py       # Windows ShareMe UDP discovery & zero-data TCP engine
+│   ├── lexi_win_actions.py    # Windows Win32 action engine (volume, brightness, media)
+│   └── install.ps1            # Windows 1-command automated PowerShell installer
 ├── install.sh                 # One-command automated installer for Linux
 ├── PKGBUILD                   # Official Arch Linux AUR package build script
 ├── requirements.txt           # Python package requirements
 ├── drop_web/                  # Progressive Web App for cross-device LAN file sharing
 ├── android_app/               # Native Android companion application (Lexi Connect)
-└── tests/                     # Automated unit & security test suite (151+ tests)
+└── tests/                     # Automated unit & security test suite (157+ tests)
 ```
 
 ---
