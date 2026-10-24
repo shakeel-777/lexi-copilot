@@ -1,0 +1,74 @@
+name: Lexi Copilot CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test-linux:
+    name: Linux CI & Parity Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r windows/requirements-windows.txt || true
+
+      - name: Syntax compilation check
+        run: |
+          python -m py_compile *.py windows/*.py tests/*.py
+
+      - name: Run Core & Parity Unit Tests
+        run: |
+          python -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers tests.test_windows_parity tests.test_windows_modules
+
+  test-windows:
+    name: Windows CI & PowerShell Validation
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate PowerShell Scripts Syntax
+        shell: pwsh
+        run: |
+          $files = @("windows/install.ps1", "windows/uninstall.ps1")
+          foreach ($f in $files) {
+              $errors = $null
+              $tokens = $null
+              [System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$tokens, [ref]$errors) | Out-Null
+              if ($errors.Count -gt 0) {
+                  Write-Error "Syntax error in $f"
+                  exit 1
+              }
+              Write-Host "✓ $f syntax is valid" -ForegroundColor Green
+          }
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Windows Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r windows/requirements-windows.txt
+
+      - name: Run Windows Modules Tests
+        run: |
+          python -m unittest tests.test_windows_modules tests.test_windows_parity

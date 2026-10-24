@@ -15,8 +15,11 @@ call "%~dp0.venv\Scripts\activate.bat"
 echo [*] Bundling Lexi into standalone executable...
 pyinstaller --noconsole --onefile --clean ^
     --name "Lexi" ^
-    --add-data "lexi_win_actions.py;." ^
-    --add-data "lexi_win_drop.py;." ^
+    --icon "%~dp0lexi.ico" ^
+    --add-data "%~dp0lexi_win_actions.py;." ^
+    --add-data "%~dp0lexi_win_drop.py;." ^
+    --add-data "%~dp0lexi.ico;." ^
+    --add-data "%~dp0lexi_icon.png;." ^
     "%~dp0lexi_win_island.py"
 
 if %ERRORLEVEL% EQU 0 (

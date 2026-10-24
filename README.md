@@ -7,6 +7,7 @@
 
 [![Arch Linux](https://img.shields.io/badge/Arch_Linux-Wayland-1793D1?logo=arch-linux&logoColor=white)](https://archlinux.org)
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%20%2F%2011-0078D6?logo=windows&logoColor=white)](windows)
+[![CI](https://github.com/shakeel-777/lexi-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/shakeel-777/lexi-copilot/actions)
 [![GTK4 & Libadwaita](https://img.shields.io/badge/GTK4-Libadwaita-3584e4?logo=gnome&logoColor=white)](https://gnome.org)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![scrcpy](https://img.shields.io/badge/Phone_Mirror-scrcpy_5.0-3DDC84?logo=android&logoColor=white)](https://github.com/Genymobile/scrcpy)
@@ -189,24 +190,27 @@ mochi-copilot/
 │   ├── lexi_win_island.py     # Windows PySide6 Dynamic Island notch & vision UI
 │   ├── lexi_win_drop.py       # Windows ShareMe UDP discovery & zero-data TCP engine
 │   ├── lexi_win_actions.py    # Windows Win32 action engine (volume, brightness, media)
-│   └── install.ps1            # Windows 1-command automated PowerShell installer
+│   ├── install.ps1            # Windows 1-command automated PowerShell installer
+│   ├── uninstall.ps1          # Windows 1-command automated PowerShell uninstaller
+│   └── lexi.ico               # High-DPI Windows application icon
 ├── install.sh                 # One-command automated installer for Linux
+├── uninstall.sh               # One-command automated uninstaller for Linux
 ├── PKGBUILD                   # Official Arch Linux AUR package build script
 ├── requirements.txt           # Python package requirements
 ├── drop_web/                  # Progressive Web App for cross-device LAN file sharing
 ├── android_app/               # Native Android companion application (Lexi Connect)
-└── tests/                     # Automated unit & security test suite (162+ tests)
+└── tests/                     # Automated unit & security test suite (167+ tests)
 ```
 
 ---
 
 ## 🧪 Automated Test Suite
 
-Lexi includes an exhaustive test suite covering app termination, browser bridge validation, scrcpy mirroring, intent routing, provider resolution, and security regression gates:
+Lexi includes an exhaustive test suite covering app termination, browser bridge validation, scrcpy mirroring, intent routing, provider resolution, Windows parity, and security regression gates:
 
 ```bash
-python3 -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers tests.test_windows_parity
-# 162 tests passed (0 failures)
+python3 -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers tests.test_windows_parity tests.test_windows_modules
+# 167 tests passed (0 failures)
 ```
 
 ---
