@@ -33,7 +33,7 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 ### 🏝️ 1. Dynamic Island Top Notch
 - **Permanent Top Notch**: Pinned seamlessly at `y = 0` (top center of Windows screen) with OLED dark-glass acrylic styling.
 - **Liquid Morphing Pills**: Hovering reveals instant action pills:
-  `[💬 Copilot] [⚡ Beam] [📱 Phone] [◨ Side Panel] [✂️ Snip] [🐾 Pet] [⚙️ Settings]`
+  `[💬 Copilot] [⚡ Beam] [📱 Phone] [◨ Side Panel] [✂️ Snip] [🐾 Pet] [❓ Guide] [⚙️ Settings]`
 - **Live Media Player & Equalizer**: Live track title and artist ticker (Spotify, VLC, Chrome/Edge) + animated mini equalizer and quick controls `[⏮] [⏯] [⏭]`.
 - **Live Download Progress Sentinel**: Real-time throughput (MB/s) and progress indicators for active browser downloads.
 - **Drag-and-Drop Target**: Drop files directly onto the notch to beam to Linux or ask AI about the file.
@@ -42,6 +42,7 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 - **60 FPS Wireless & USB Link**: Direct wireless screen mirroring and mouse/keyboard control powered by `scrcpy`.
 - **Zero-Touch Unlock**: Automatically wakes device and enters lockscreen PIN from `~/.lexi_config.json`.
 - **Autonomous Reconnect Supervisor**: Transparently restores stream if Wi-Fi packets drop across rooms.
+- **Wireless 1-Click ADB**: Toggle wireless mode directly from the Guide with `adb tcpip 5555`.
 - **H.265 / H.264 Resilience**: High-efficiency HEVC compression with automatic fallback.
 
 ### 💬 3. Multimodal Vision Copilot & Side Panel
@@ -50,18 +51,30 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 - **Interactive Region Snip (<kbd>✂️ Snip</kbd>)**: Rubber-band crosshair overlay to snip any screen area and pass directly into AI.
 - **Vertical Side Panel Mode (<kbd>◨ Side</kbd>)**: Docks to the right screen edge as a persistent sidebar companion.
 
-### 🐾 4. Detached Roaming Desktop Pet Mascot
+### ⌨️ 4. Global Windows Hotkeys & System Tray
+- <kbd>Win</kbd> + <kbd>3</kbd> or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> — Summon or dismiss Copilot anywhere
+- <kbd>Win</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> — Interactive Screen Region Snip
+- <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd> — Toggle Vertical Side Panel mode
+- <kbd>F1</kbd> or <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>H</kbd> — Open Interactive User Guide & Diagnostics
+- <kbd>Ctrl</kbd> + <kbd>,</kbd> — Open AI Provider & Model Settings
+- **System Tray Icon**: Full context menu control (Open Copilot, Phone Mirror, Beam, Snip, Side Panel, Pet, Settings, Exit).
+
+### 🩺 5. Interactive User Guide & Live Diagnostics (<kbd>F1</kbd>)
+- Built-in multi-tab helper dialog with beginner-friendly guides for Dynamic Island, Phone Mirroring, and AirDrop.
+- **Live Self-Test**: Automatically checks scrcpy presence, Android ADB connection, LAN IP address, and AI API keys with 1-click fixes!
+
+### 🐾 6. Detached Roaming Desktop Pet Mascot
 - Detach Lexi as a cute borderless anime avatar floating on your desktop.
 - Draggable anywhere; double-click opens Copilot; right-click context menu lets you re-dock to the top island notch.
 
-### 🛠️ 5. Developer Power Tools & Natural Language Commands
+### 🛠️ 7. Developer Power Tools & Natural Language Commands
 - `kill port 3000` / `inspect port 8080` — Instant PID inspection & termination.
 - `top processes` / `top mem` — Lists resource hogs directly in chat.
 - `kill process <name/pid>` — Terminate rogue processes with system shields.
 - `volume 80` / `mute` — Controls master volume.
 - `pause` / `next song` — Global media keys.
 
-### 🤖 6. Supported AI Providers
+### 🤖 8. Supported AI Providers
 - **Groq LPU**: Ultra-fast (500+ T/s) with `llama-3.3-70b-versatile` & `llama-3.2-11b-vision-preview`.
 - **DeepSeek Direct**: Native `deepseek-flash` with vision & reasoning tokens.
 - **Ollama (100% Free / Local)**: Offline inference via local Ollama.

@@ -1500,6 +1500,8 @@ class LexiDynamicIslandWin(QMainWindow):
         # Check if shakeel_chibi.png exists
         app_dir = Path(__file__).parent
         avatar_path = app_dir / "shakeel_chibi.png"
+        if not avatar_path.exists():
+            avatar_path = app_dir.parent / "shakeel_chibi.png"
         if avatar_path.exists():
             pix = QPixmap(str(avatar_path)).scaled(22, 22, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.mascot_btn.setIcon(QIcon(pix))
@@ -1752,6 +1754,8 @@ class LexiDynamicIslandWin(QMainWindow):
         self.tray = QSystemTrayIcon(self)
         app_dir = Path(__file__).parent
         avatar_path = app_dir / "shakeel_chibi.png"
+        if not avatar_path.exists():
+            avatar_path = app_dir.parent / "shakeel_chibi.png"
         if avatar_path.exists():
             self.tray.setIcon(QIcon(str(avatar_path)))
         else:
