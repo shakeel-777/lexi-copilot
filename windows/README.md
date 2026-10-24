@@ -4,12 +4,35 @@ Native Windows companion for Lexi Copilot. Provides the top-screen dynamic notch
 
 ---
 
-## 🚀 Quick Start (1-Click Run)
+## ⚡ 1-Command Install (PowerShell / curl)
 
-1. **Install Python 3.10+** from [python.org](https://www.python.org/) (ensure **"Add Python to PATH"** is checked).
-2. Double-click `setup_windows.bat`.
-3. Enter your DeepSeek API key when prompted (or leave blank to configure later).
-4. **Lexi Dynamic Island** will appear immediately at the top center of your display!
+Open PowerShell on any Windows 10/11 machine and run:
+
+```powershell
+irm https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/install.ps1 | iex
+```
+
+Or using standard curl:
+
+```cmd
+curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/install.ps1 | powershell -
+```
+
+**What the installer does automatically:**
+- Auto-detects or installs Python 3.11 via Windows `winget`
+- Clones and sets up the isolated runtime in `%LOCALAPPDATA%\Lexi`
+- Prompts for your **DeepSeek** (`sk-...`) or **Groq** (`gsk_...`) API key
+- Creates a Desktop shortcut and auto-start shortcut on Windows boot (`shell:startup`)
+- Launches the top-docked Dynamic Island notch immediately!
+
+---
+
+## 🧠 Supported AI Providers & Keys
+
+Lexi on Windows natively supports:
+- **Groq LPU**: Ultra-fast (500+ tokens/sec) with `llama-3.3-70b-versatile` and automatic `llama-3.2-11b-vision-preview` when capturing screen snips. Accepts any Groq key (`gsk_...`).
+- **DeepSeek Direct**: Native `deepseek-flash` (DeepSeek-V4.1-Flash Vision) with deep reasoning chains. Accepts any DeepSeek key (`sk-...`).
+- **OpenRouter & OpenAI**: Full OpenAI-compatible model routing.
 
 ---
 

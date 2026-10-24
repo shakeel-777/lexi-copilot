@@ -38,7 +38,7 @@ class TestProviderIntegration(unittest.TestCase):
 
     def test_provider_presets_metadata(self):
         """Verifies presets have name, default_model, api_base, requires_key, and helpful hints."""
-        for key in ['openrouter', 'openai', 'deepseek', 'ollama', 'omniroute', 'custom']:
+        for key in ['openrouter', 'openai', 'deepseek', 'groq', 'ollama', 'omniroute', 'custom']:
             self.assertIn(key, PROVIDER_PRESETS)
             preset = PROVIDER_PRESETS[key]
             self.assertIn('name', preset)
@@ -51,6 +51,7 @@ class TestProviderIntegration(unittest.TestCase):
         self.assertFalse(PROVIDER_PRESETS['custom']['requires_key'])
         self.assertTrue(PROVIDER_PRESETS['openai']['requires_key'])
         self.assertTrue(PROVIDER_PRESETS['openrouter']['requires_key'])
+        self.assertTrue(PROVIDER_PRESETS['groq']['requires_key'])
 
     def test_get_active_provider_info_resolution(self):
         """Tests provider resolution for each supported backend."""

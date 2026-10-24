@@ -444,6 +444,9 @@ DEFAULT_CONFIG = {
     "deepseek_api_base": "https://api.deepseek.com",
     "deepseek_api_key": "",
     "deepseek_model": "deepseek-flash",
+    "groq_api_base": "https://api.groq.com/openai/v1",
+    "groq_api_key": "",
+    "groq_model": "llama-3.3-70b-versatile",
     "ollama_api_base": "http://localhost:11434/v1",
     "ollama_api_key": "",
     "ollama_model": "llama3.2",
@@ -526,6 +529,14 @@ PROVIDER_PRESETS = {
         "key_placeholder": "sk-...",
         "hint": "Direct ultra-fast access to DeepSeek-V4.1-Flash (Vision) and DeepSeek-V4-Pro."
     },
+    "groq": {
+        "name": "Groq (Ultra-Fast LPU)",
+        "api_base": "https://api.groq.com/openai/v1",
+        "default_model": "llama-3.3-70b-versatile",
+        "requires_key": True,
+        "key_placeholder": "gsk_...",
+        "hint": "Lightning-fast inference (500+ tokens/sec) for Llama 3.3 70B, Llama 3.2 Vision, and DeepSeek R1."
+    },
     "ollama": {
         "name": "Ollama (100% Local / Free)",
         "api_base": "http://localhost:11434/v1",
@@ -586,6 +597,10 @@ def get_active_provider_info(cfg):
         base = cfg.get('deepseek_api_base') or preset['api_base']
         key = cfg.get('deepseek_api_key') or cfg.get('api_key') or ''
         model = normalize_deepseek_model(cfg.get('deepseek_model') or cfg.get('model') or preset['default_model'])
+    elif prov == 'groq':
+        base = cfg.get('groq_api_base') or preset['api_base']
+        key = cfg.get('groq_api_key') or cfg.get('api_key') or ''
+        model = cfg.get('groq_model') or preset['default_model']
     elif prov == 'ollama':
         base = cfg.get('ollama_api_base') or preset['api_base']
         key = cfg.get('ollama_api_key') or ''
@@ -714,6 +729,10 @@ def load_config():
     env_ds = os.environ.get('DEEPSEEK_API_KEY', '').strip()
     if env_ds and not cfg.get('deepseek_api_key'):
         cfg['deepseek_api_key'] = env_ds
+
+    env_groq = os.environ.get('GROQ_API_KEY', '').strip()
+    if env_groq and not cfg.get('groq_api_key'):
+        cfg['groq_api_key'] = env_groq
 
     env_oa = os.environ.get('OPENAI_API_KEY', '').strip()
     if env_oa and not cfg.get('openai_api_key'):
@@ -9017,11 +9036,12 @@ class LexiSettingsDialog(Gtk.Window):
         self.set_resizable(False)
         self.add_css_class('lexi-settings-win')
 
-        self.provider_keys = ["openrouter", "openai", "deepseek", "ollama", "omniroute", "custom"]
+        self.provider_keys = ["openrouter", "openai", "deepseek", "groq", "ollama", "omniroute", "custom"]
         self.provider_labels = [
             "OpenRouter (100+ Models)",
             "OpenAI (Official GPT-4o / o3-mini)",
             "DeepSeek Direct (V4.1-Flash Vision / Pro)",
+            "Groq (Ultra-Fast 500+ T/s · Llama 3.3)",
             "Ollama (100% Local / Free / Offline)",
             "OmniRoute (Local Gateway)",
             "Custom OpenAI-Compatible"
@@ -9187,6 +9207,10 @@ class LexiSettingsDialog(Gtk.Window):
             self.key_entry.set_text(self.config.get('deepseek_api_key', ''))
             self.base_entry.set_text(self.config.get('deepseek_api_base') or preset['api_base'])
             self.model_entry.set_text(self.config.get('deepseek_model') or preset['default_model'])
+        elif prov_key == 'groq':
+            self.key_entry.set_text(self.config.get('groq_api_key', ''))
+            self.base_entry.set_text(self.config.get('groq_api_base') or preset['api_base'])
+            self.model_entry.set_text(self.config.get('groq_model') or preset['default_model'])
         elif prov_key == 'ollama':
             self.key_entry.set_text(self.config.get('ollama_api_key', ''))
             self.base_entry.set_text(self.config.get('ollama_api_base') or preset['api_base'])
@@ -9270,6 +9294,10 @@ class LexiSettingsDialog(Gtk.Window):
             self.config['deepseek_api_base'] = base_url
             self.config['deepseek_api_key'] = api_key
             self.config['deepseek_model'] = normalize_deepseek_model(model)
+        elif prov_key == 'groq':
+            self.config['groq_api_base'] = base_url
+            self.config['groq_api_key'] = api_key
+            self.config['groq_model'] = model
         elif prov_key == 'ollama':
             self.config['ollama_api_base'] = base_url
             self.config['ollama_api_key'] = api_key
@@ -10826,6 +10854,8 @@ class LexiWindow(Adw.ApplicationWindow):
                     self.config['openai_api_key'] = new_key
                 elif prov == 'deepseek':
                     self.config['deepseek_api_key'] = new_key
+                elif prov == 'groq':
+                    self.config['groq_api_key'] = new_key
                 elif prov == 'ollama':
                     self.config['ollama_api_key'] = new_key
                 elif prov == 'omniroute':
@@ -10855,6 +10885,8 @@ class LexiWindow(Adw.ApplicationWindow):
                 elif prov == 'deepseek':
                     new_model = normalize_deepseek_model(new_model)
                     self.config['deepseek_model'] = new_model
+                elif prov == 'groq':
+                    self.config['groq_model'] = new_model
                 elif prov == 'ollama':
                     self.config['ollama_model'] = new_model
                 elif prov == 'omniroute':
@@ -11361,13 +11393,17 @@ class LexiWindow(Adw.ApplicationWindow):
                 except Exception as e_ds:
                     log(f"Direct DeepSeek call failed: {e_ds}. Falling back...")
 
-            # 2. Universal Dispatch for OpenAI, OpenRouter, Ollama, OmniRoute, Custom
+            # 2. Universal Dispatch for OpenAI, OpenRouter, Groq, Ollama, OmniRoute, Custom
             if not success:
+                active_model = model
+                if prov_name == 'groq' and has_images and 'vision' not in (active_model or '').lower():
+                    active_model = 'llama-3.2-11b-vision-preview'
+
                 payload = {
                     "messages": messages,
                     "stream": True,
                     "max_tokens": max_tokens,
-                    "model": model
+                    "model": active_model
                 }
                 if prov_name == 'openrouter':
                     models_list = self.config.get('models')

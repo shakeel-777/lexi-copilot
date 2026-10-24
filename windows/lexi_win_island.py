@@ -36,6 +36,9 @@ DEFAULT_CONFIG = {
     "api_base": "https://api.deepseek.com",
     "api_key": "",
     "model": "deepseek-flash",
+    "groq_api_base": "https://api.groq.com/openai/v1",
+    "groq_api_key": "",
+    "groq_model": "llama-3.3-70b-versatile",
     "max_tokens": 4096,
     "system_prompt": (
         "You are Lexi, an intelligent autonomous desktop AI companion on Windows created by Shakeel.\n"
@@ -76,10 +79,17 @@ class StreamWorker(QThread):
         self.prompt = prompt
         self.image_b64 = image_b64
 
-    def run(self):
-        api_key = self.config.get("api_key") or self.config.get("deepseek_api_key") or ""
-        api_base = (self.config.get("api_base") or "https://api.deepseek.com").rstrip("/")
-        model = self.config.get("model") or "deepseek-flash"
+        provider = (self.config.get("provider") or "deepseek").lower()
+        if provider == "groq":
+            api_base = (self.config.get("groq_api_base") or "https://api.groq.com/openai/v1").rstrip("/")
+            api_key = self.config.get("groq_api_key") or self.config.get("api_key") or ""
+            model = self.config.get("groq_model") or self.config.get("model") or "llama-3.3-70b-versatile"
+            if self.image_b64 and "vision" not in model.lower():
+                model = "llama-3.2-11b-vision-preview"
+        else:
+            api_key = self.config.get("api_key") or self.config.get("deepseek_api_key") or ""
+            api_base = (self.config.get("api_base") or "https://api.deepseek.com").rstrip("/")
+            model = self.config.get("model") or "deepseek-flash"
 
         messages = [{"role": "system", "content": self.config.get("system_prompt", "")}]
         if self.image_b64:
