@@ -44,13 +44,19 @@ if (!(Test-Path $installDir)) {
 # 3. Download Source Files from GitHub
 Write-Host "[3/5] Downloading latest Lexi Windows modules..." -ForegroundColor Yellow
 $baseUrl = "https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows"
-$files = @("lexi_win_island.py", "lexi_win_actions.py", "lexi_win_drop.py", "requirements-windows.txt", "shakeel_chibi.png")
+$files = @("lexi_win_island.py", "lexi_win_actions.py", "lexi_win_drop.py", "requirements-windows.txt")
 
 foreach ($file in $files) {
     $dest = Join-Path $installDir $file
     Write-Host "      Downloading $file..." -ForegroundColor Gray
     Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile $dest -UseBasicParsing
 }
+
+# Download mascot avatar asset (with resilient fallback)
+try {
+    $avatarDest = Join-Path $installDir "shakeel_chibi.png"
+    Invoke-WebRequest -Uri "$baseUrl/shakeel_chibi.png" -OutFile $avatarDest -UseBasicParsing -ErrorAction SilentlyContinue
+} catch {}
 
 # 4. Setup Virtual Environment & Dependencies
 Write-Host "[4/5] Installing Python dependencies (PySide6, aiohttp, Pillow)..." -ForegroundColor Yellow
