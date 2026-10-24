@@ -5,6 +5,7 @@ __pycache__/
 *.log
 contacts.json
 custom_avatar.*
+shakeel_chibi*.png
 android_app/bin/
 android_app/gen/
 android_app/*.zip

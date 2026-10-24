@@ -52,10 +52,10 @@ foreach ($file in $files) {
     Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile $dest -UseBasicParsing
 }
 
-# Download mascot avatar asset (with resilient fallback)
+# Download official Lexi icon asset
 try {
-    $avatarDest = Join-Path $installDir "shakeel_chibi.png"
-    Invoke-WebRequest -Uri "$baseUrl/shakeel_chibi.png" -OutFile $avatarDest -UseBasicParsing -ErrorAction SilentlyContinue
+    $iconDest = Join-Path $installDir "lexi_icon.png"
+    Invoke-WebRequest -Uri "$baseUrl/lexi_icon.png" -OutFile $iconDest -UseBasicParsing -ErrorAction SilentlyContinue
 } catch {}
 
 # 4. Setup Virtual Environment & Dependencies
