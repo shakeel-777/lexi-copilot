@@ -22,6 +22,7 @@ import json
 import time
 import base64
 import ctypes
+import tempfile
 import threading
 import subprocess
 import urllib.request
@@ -290,7 +291,7 @@ class LexiSnipOverlay(QWidget):
             if rect.width() > 10 and rect.height() > 10:
                 screen = QApplication.primaryScreen()
                 pix = screen.grabWindow(0, rect.x(), rect.y(), rect.width(), rect.height())
-                tmp = Path(os.path.expanduser("~/AppData/Local/Temp/lexi_snip_region.jpg"))
+                tmp = Path(tempfile.gettempdir()) / "lexi_snip_region.jpg"
                 tmp.parent.mkdir(parents=True, exist_ok=True)
                 pix.save(str(tmp), "JPEG", 90)
                 with open(tmp, "rb") as f:
