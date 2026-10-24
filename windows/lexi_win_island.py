@@ -824,11 +824,115 @@ class LexiCopilotCard(QWidget):
     def on_error(self, err_msg: str):
         self.chat_display.append(f"\n<i>⚠️ Error: {err_msg}</i>\n")
 
+class LexiCopilotWindow(QMainWindow):
+    """
+    Multimodal Vision Copilot Window for Windows:
+    Floating center card or docked vertical side panel with acrylic glass styling.
+    """
+    def __init__(self, actions, drop_server, on_request_snip, on_request_beam, parent=None):
+        super().__init__(parent)
+        self.actions = actions
+        self.drop_server = drop_server
+        self.side_panel_mode = False
+
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
+        )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+        self.root = QWidget(self)
+        self.root.setObjectName("copilotRoot")
+        self.root.setStyleSheet("""
+            #copilotRoot {
+                background-color: rgba(13, 15, 22, 0.96);
+                border: 1.5px solid rgba(168, 85, 247, 0.35);
+                border-radius: 14px;
+            }
+        """)
+        self.setCentralWidget(self.root)
+
+        layout = QVBoxLayout(self.root)
+        layout.setContentsMargins(12, 10, 12, 12)
+        layout.setSpacing(6)
+
+        # Header Titlebar
+        hdr = QHBoxLayout()
+        hdr.setContentsMargins(4, 2, 4, 4)
+        
+        title_lbl = QLabel("✨ Lexi Multimodal Copilot")
+        title_lbl.setStyleSheet("color: #f4f4f5; font-size: 13px; font-weight: bold;")
+        hdr.addWidget(title_lbl)
+
+        hdr.addStretch()
+
+        self.side_btn = QPushButton("◨ Side")
+        self.side_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                padding: 2px 8px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background: rgba(255, 255, 255, 0.16); color: #fff; }
+        """)
+        self.side_btn.clicked.connect(self.toggle_side_panel)
+        hdr.addWidget(self.side_btn)
+
+        close_btn = QPushButton("✕")
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #a1a1aa;
+                border: none;
+                font-size: 14px;
+                padding: 2px 6px;
+            }
+            QPushButton:hover { color: #ef4444; }
+        """)
+        close_btn.clicked.connect(self.hide)
+        hdr.addWidget(close_btn)
+
+        layout.addLayout(hdr)
+
+        self.card = LexiCopilotCard(
+            self.actions,
+            self.drop_server,
+            on_request_snip=on_request_snip,
+            on_request_beam=on_request_beam
+        )
+        layout.addWidget(self.card)
+
+        self.resize(520, 500)
+        self.reposition_center()
+
+    def reposition_center(self):
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - 520) // 2
+        y = 50  # Just below top dynamic island
+        self.move(x, y)
+
+    def toggle_side_panel(self):
+        self.side_panel_mode = not self.side_panel_mode
+        screen = QApplication.primaryScreen().geometry()
+        if self.side_panel_mode:
+            self.side_btn.setText("🗗 Center")
+            self.move(screen.width() - 440, 0)
+            self.resize(440, screen.height())
+        else:
+            self.side_btn.setText("◨ Side")
+            self.resize(520, 500)
+            self.reposition_center()
+
+
 class LexiDynamicIslandWin(QMainWindow):
     """
     Lexi Dynamic Island for Windows:
-    Top-docked OLED notch with liquid morphing pills, media controls, download bar,
-    phone mirroring, screen vision, and side panel modes.
+    Top-docked OLED pure black pill (border-radius: 9999px) with smooth hover morphing,
+    media equalizer, download monitor, phone mirroring, and system alerts.
     """
     def __init__(self):
         super().__init__()
@@ -846,12 +950,18 @@ class LexiDynamicIslandWin(QMainWindow):
         self.snip_overlay = LexiSnipOverlay()
         self.snip_overlay.snip_captured.connect(self.on_snip_captured)
 
+        self.copilot_win = LexiCopilotWindow(
+            self.actions,
+            self.drop_server,
+            on_request_snip=self.start_region_snip,
+            on_request_beam=self.show_beam_dialog
+        )
+
         self.pet_widget = LexiPetWidget(on_activate=self.expand_copilot, on_dock=self.show_island)
-        self.side_panel_mode = False
-        self.expanded = False
+        self.is_hovered = False
 
         self.init_ui()
-        self.reposition()
+        self.collapse_to_resting()
 
         # Background Media & Download Watcher Timer
         self.status_timer = QTimer(self)
@@ -867,142 +977,188 @@ class LexiDynamicIslandWin(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
         self.root_widget = QWidget(self)
-        self.root_widget.setObjectName("rootWidget")
         self.setCentralWidget(self.root_widget)
 
-        self.layout = QVBoxLayout(self.root_widget)
-        self.layout.setContentsMargins(12, 6, 12, 10)
-        self.layout.setSpacing(8)
+        root_layout = QVBoxLayout(self.root_widget)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-        # 1. Notch Capsule Bar (Always Visible)
-        self.notch_bar = QWidget()
-        self.notch_layout = QHBoxLayout(self.notch_bar)
-        self.notch_layout.setContentsMargins(0, 0, 0, 0)
-        self.notch_layout.setSpacing(8)
+        # The Exact OLED Black Capsule Pill
+        self.pill = QFrame()
+        self.pill.setObjectName("dynamicIslandPill")
+        self.apply_pill_style("default")
 
-        # Mascot Icon
+        self.pill_layout = QHBoxLayout(self.pill)
+        self.pill_layout.setContentsMargins(10, 4, 12, 4)
+        self.pill_layout.setSpacing(8)
+
+        # 1. Mascot Avatar
         self.mascot_btn = QPushButton("✨")
         self.mascot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.mascot_btn.setStyleSheet("background: transparent; border: none; font-size: 16px;")
-        self.mascot_btn.clicked.connect(self.toggle_expand)
-        self.notch_layout.addWidget(self.mascot_btn)
+        self.mascot_btn.setStyleSheet("background: transparent; border: none; font-size: 15px;")
+        
+        # Check if shakeel_chibi.png exists
+        app_dir = Path(__file__).parent
+        avatar_path = app_dir / "shakeel_chibi.png"
+        if avatar_path.exists():
+            pix = QPixmap(str(avatar_path)).scaled(22, 22, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.mascot_btn.setIcon(QIcon(pix))
+            self.mascot_btn.setIconSize(QSize(22, 22))
+            self.mascot_btn.setText("")
 
-        # Pulsing Dot + Status Pill
-        self.status_pill = QLabel("● deepseek-flash")
-        self.status_pill.setStyleSheet("""
-            background: rgba(16, 185, 129, 0.15);
-            color: #10b981;
-            border: 1px solid rgba(16, 185, 129, 0.3);
-            border-radius: 10px;
-            padding: 2px 8px;
-            font-size: 11px;
-            font-weight: bold;
-        """)
-        self.notch_layout.addWidget(self.status_pill)
+        self.mascot_btn.clicked.connect(self.expand_copilot)
+        self.pill_layout.addWidget(self.mascot_btn)
 
-        # Media Controls (Visible when music is playing)
+        # 2. Status Label & Pulsing Dot
+        self.status_label = QLabel("Lexi")
+        self.status_label.setStyleSheet("color: #f4f4f5; font-size: 12px; font-weight: bold; letter-spacing: -0.2px;")
+        self.pill_layout.addWidget(self.status_label)
+
+        self.pulse_dot = QLabel("●")
+        self.pulse_dot.setStyleSheet("color: #10b981; font-size: 8px; margin-right: 2px;")
+        self.pill_layout.addWidget(self.pulse_dot)
+
+        # 3. Media Controls (Visible on hover during media playback)
         self.media_container = QWidget()
         m_layout = QHBoxLayout(self.media_container)
         m_layout.setContentsMargins(0, 0, 0, 0)
         m_layout.setSpacing(4)
 
-        def make_mini_btn(icon, cb):
+        def make_media_btn(icon, cb):
             b = QPushButton(icon)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet("background: transparent; color: #cbd5e1; border: none; font-size: 11px;")
+            b.setStyleSheet("""
+                QPushButton {
+                    background: rgba(255, 255, 255, 0.08);
+                    color: #fff;
+                    border: 1px solid rgba(255, 255, 255, 0.18);
+                    border-radius: 11px;
+                    min-height: 22px;
+                    padding: 2px 7px;
+                    font-size: 11px;
+                    font-weight: bold;
+                }
+                QPushButton:hover { background: rgba(255, 255, 255, 0.22); }
+            """)
             b.clicked.connect(cb)
             return b
 
-        m_layout.addWidget(make_mini_btn("⏮", lambda: self.actions.media_control("prev")))
-        m_layout.addWidget(make_mini_btn("⏯", lambda: self.actions.media_control("play_pause")))
-        m_layout.addWidget(make_mini_btn("⏭", lambda: self.actions.media_control("next")))
+        m_layout.addWidget(make_media_btn("⏮", lambda: self.actions.media_control("prev")))
+        m_layout.addWidget(make_media_btn("⏯", lambda: self.actions.media_control("play_pause")))
+        m_layout.addWidget(make_media_btn("⏭", lambda: self.actions.media_control("next")))
         self.media_container.setVisible(False)
-        self.notch_layout.addWidget(self.media_container)
+        self.pill_layout.addWidget(self.media_container)
 
-        self.notch_layout.addStretch()
+        # 4. Action Buttons Container (Morphs open on hover)
+        self.actions_container = QWidget()
+        self.actions_layout = QHBoxLayout(self.actions_container)
+        self.actions_layout.setContentsMargins(0, 0, 0, 0)
+        self.actions_layout.setSpacing(4)
 
-        # Action Buttons
-        def make_btn(label, cb, primary=False):
+        def make_pill_chip(label, cb, primary=False):
             b = QPushButton(label)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             if primary:
-                b.setStyleSheet("background: #6366f1; color: white; border: none; border-radius: 6px; padding: 4px 10px; font-size: 11px; font-weight: bold;")
+                b.setStyleSheet("""
+                    QPushButton {
+                        background: #ffffff;
+                        color: #09090b;
+                        border: 1px solid rgba(255, 255, 255, 0.4);
+                        border-radius: 12px;
+                        padding: 3px 10px;
+                        font-size: 11px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover { background: #f4f4f5; }
+                """)
             else:
-                b.setStyleSheet("background: rgba(255, 255, 255, 0.08); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; padding: 3px 8px; font-size: 11px;")
+                b.setStyleSheet("""
+                    QPushButton {
+                        background: rgba(255, 255, 255, 0.08);
+                        color: #e4e4e7;
+                        border: 1px solid rgba(255, 255, 255, 0.14);
+                        border-radius: 12px;
+                        padding: 3px 9px;
+                        font-size: 11px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+                """)
             b.clicked.connect(cb)
             return b
 
-        self.btn_copilot = make_btn("💬 Copilot", self.toggle_expand, primary=True)
-        self.btn_phone = make_btn("📱 Phone", self.trigger_phone_mirror)
-        self.btn_beam = make_btn("⚡ Beam", self.show_beam_dialog)
-        self.btn_side = make_btn("◨ Side", self.toggle_side_panel)
-        self.btn_snip = make_btn("✂️ Snip", self.start_region_snip)
-        self.btn_pet = make_btn("🐾 Pet", self.detach_pet)
-        self.btn_cfg = make_btn("⚙️", self.open_settings)
+        self.actions_layout.addWidget(make_pill_chip("💬 Copilot", self.expand_copilot, primary=True))
+        self.actions_layout.addWidget(make_pill_chip("⚡ Beam", self.show_beam_dialog))
+        self.actions_layout.addWidget(make_pill_chip("📱 Phone", self.trigger_phone_mirror))
+        self.actions_layout.addWidget(make_pill_chip("◨ Side", self.toggle_side_panel))
+        self.actions_layout.addWidget(make_pill_chip("✂️ Snip", self.start_region_snip))
+        self.actions_layout.addWidget(make_pill_chip("🐾 Pet", self.detach_pet))
+        self.actions_layout.addWidget(make_pill_chip("⚙️", self.open_settings))
 
-        self.notch_layout.addWidget(self.btn_copilot)
-        self.notch_layout.addWidget(self.btn_phone)
-        self.notch_layout.addWidget(self.btn_beam)
-        self.notch_layout.addWidget(self.btn_side)
-        self.notch_layout.addWidget(self.btn_snip)
-        self.notch_layout.addWidget(self.btn_pet)
-        self.notch_layout.addWidget(self.btn_cfg)
+        self.actions_container.setVisible(False)
+        self.pill_layout.addWidget(self.actions_container)
 
-        self.layout.addWidget(self.notch_bar)
+        root_layout.addWidget(self.pill)
 
-        # 2. Copilot Card Section (Visible when expanded)
-        self.copilot_card = LexiCopilotCard(
-            self.actions,
-            self.drop_server,
-            on_request_snip=self.start_region_snip,
-            on_request_beam=self.show_beam_dialog
-        )
-        self.copilot_card.setVisible(False)
-        self.layout.addWidget(self.copilot_card)
-
-        self.apply_theme()
-        self.resize(560, 44)
-
-    def apply_theme(self):
-        self.root_widget.setStyleSheet("""
-            #rootWidget {
-                background-color: rgba(13, 15, 22, 0.95);
-                border: 1px solid rgba(255, 255, 255, 0.12);
-                border-bottom-left-radius: 14px;
-                border-bottom-right-radius: 14px;
-            }
+    def apply_pill_style(self, mode="default"):
+        glows = {
+            "default": "border: 1.5px solid rgba(255, 255, 255, 0.28);",
+            "hover": "border: 1.5px solid rgba(192, 132, 252, 0.9);",
+            "green": "border: 1.5px solid #22c55e;",
+            "cyan": "border: 1.5px solid #06b6d4;",
+            "amber": "border: 1.5px solid #f59e0b;",
+            "purple": "border: 1.5px solid #c084fc;"
+        }
+        border_css = glows.get(mode, glows["default"])
+        self.pill.setStyleSheet(f"""
+            #dynamicIslandPill {{
+                background-color: #000000;
+                border-radius: 18px;
+                {border_css}
+            }}
         """)
 
-    def reposition(self):
-        screen = QApplication.primaryScreen().geometry()
-        if self.side_panel_mode:
-            self.move(screen.width() - 440, 0)
-            self.resize(440, screen.height())
-        else:
-            x = (screen.width() - self.width()) // 2
-            self.move(x, 0)
+    def enterEvent(self, event):
+        self.is_hovered = True
+        self.actions_container.setVisible(True)
+        self.apply_pill_style("hover")
+        self.expand_to_actions()
 
-    def toggle_expand(self):
-        self.expanded = not self.expanded
-        self.copilot_card.setVisible(self.expanded)
-        if self.expanded:
-            self.resize(560, 480)
-            self.copilot_card.input_field.setFocus()
-        else:
-            self.resize(560, 44)
-        self.reposition()
+    def leaveEvent(self, event):
+        self.is_hovered = False
+        QTimer.singleShot(250, self._check_leave)
+
+    def _check_leave(self):
+        if not self.is_hovered:
+            self.actions_container.setVisible(False)
+            self.apply_pill_style("default")
+            self.collapse_to_resting()
+
+    def collapse_to_resting(self):
+        w = 180
+        if self.status_label.text() != "Lexi":
+            w = 260
+        self.resize(w, 38)
+        self.reposition_top()
+
+    def expand_to_actions(self):
+        self.resize(620, 38)
+        self.reposition_top()
+
+    def reposition_top(self):
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - self.width()) // 2
+        y = 6  # Pinned smoothly at the very top
+        self.move(x, y)
 
     def expand_copilot(self):
-        if not self.expanded:
-            self.toggle_expand()
-        self.show()
-        self.raise_()
+        self.copilot_win.show()
+        self.copilot_win.raise_()
+        self.copilot_win.activateWindow()
 
     def toggle_side_panel(self):
-        self.side_panel_mode = not self.side_panel_mode
-        self.expanded = True
-        self.copilot_card.setVisible(True)
-        self.reposition()
+        self.copilot_win.show()
+        self.copilot_win.toggle_side_panel()
 
     def detach_pet(self):
         screen = QApplication.primaryScreen().geometry()
@@ -1012,17 +1168,27 @@ class LexiDynamicIslandWin(QMainWindow):
 
     def show_island(self):
         self.show()
-        self.reposition()
+        self.collapse_to_resting()
 
     def trigger_phone_mirror(self):
-        self.status_pill.setText("📱 Connecting...")
+        self.trigger_alert("📱", "Mirroring Phone @ 60 FPS", "green", 3.5)
         res = self.actions.start_phone_mirror()
-        if res.get("success"):
-            self.status_pill.setText("● Mirroring @ 60fps")
-        else:
-            self.status_pill.setText("⚠️ Plug USB")
+        if not res.get("success"):
+            self.trigger_alert("📱", "Plug USB or Enable Debugging", "amber", 4.0)
             QMessageBox.information(self, "Phone Mirror", res.get("message", "Error connecting phone"))
-        QTimer.singleShot(4000, self.restore_status_pill)
+
+    def trigger_alert(self, icon: str, text: str, glow_color: str = "green", duration: float = 3.0):
+        self.mascot_btn.setText(icon)
+        self.status_label.setText(text)
+        self.apply_pill_style(glow_color)
+        self.resize(320, 38)
+        self.reposition_top()
+        QTimer.singleShot(int(duration * 1000), self.restore_resting_state)
+
+    def restore_resting_state(self):
+        self.status_label.setText("Lexi")
+        self.apply_pill_style("default")
+        self.collapse_to_resting()
 
     def show_beam_dialog(self):
         LexiBeamDialog(self.drop_server, self).exec()
@@ -1032,47 +1198,45 @@ class LexiDynamicIslandWin(QMainWindow):
 
     def on_snip_captured(self, b64_img: str):
         self.expand_copilot()
-        self.copilot_card.add_image_attachment(b64_img)
-        self.copilot_card.chat_display.append("<i>[📸 Screen Region Attached. Ask anything!]</i>\n")
+        self.copilot_win.card.add_image_attachment(b64_img)
+        self.copilot_win.card.chat_display.append("<i>[📸 Screen Region Attached. Ask anything!]</i>\n")
 
     def open_settings(self):
         LexiSettingsDialog(self).exec()
-        self.restore_status_pill()
-
-    def restore_status_pill(self):
-        cfg = load_config()
-        p = cfg.get("provider", "deepseek")
-        m = cfg.get("model", "deepseek-flash")
-        self.status_pill.setText(f"● {p}: {m}")
 
     def poll_system_status(self):
-        # Media check
         media = self.actions.get_media_status()
         if media.get("playing") and media.get("track"):
             track = media.get("track")
             artist = media.get("artist")
-            self.status_pill.setText(f"🎵 {artist} - {track[:20]}")
+            self.status_label.setText(f"🎵 {artist} - {track[:18]}")
             self.media_container.setVisible(True)
+            if not self.is_hovered:
+                self.resize(300, 38)
+                self.reposition_top()
         else:
             self.media_container.setVisible(False)
-            if not self.expanded:
-                self.restore_status_pill()
+            if not self.is_hovered:
+                self.status_label.setText("Lexi")
+                self.collapse_to_resting()
 
     def on_incoming_beam(self, info: Dict[str, Any]):
-        self.expand_copilot()
         name = info.get("filename")
         size = format_size(info.get("size_bytes", 0))
         sender = info.get("from_device", "Nearby Device")
-        self.copilot_card.chat_display.append(f"\n📥 <b>Incoming Beam from {sender}:</b>\n• File: <b>{name}</b> ({size})\n• Receiving into Downloads at direct Wi-Fi wire speed...\n")
+        self.trigger_alert("📥", f"Incoming {name} ({size})", "purple", 4.0)
+        self.expand_copilot()
+        msg = f"<br>📥 <b>Incoming Beam from {sender}:</b><br>• File: <b>{name}</b> ({size})<br>• Receiving into Downloads at wire speed...<br>"
+        self.copilot_win.card.chat_display.append(msg)
 
     def on_beam_progress(self, filename: str, pct: float, speed_mb: float):
-        self.status_pill.setText(f"⚡ {pct:.0f}% · {speed_mb:.1f} MB/s")
+        self.status_label.setText(f"⚡ {pct:.0f}% · {speed_mb:.1f} MB/s")
 
     def on_beam_completed(self, filename: str, dest_path: str):
-        self.status_pill.setText("✓ Complete!")
+        self.trigger_alert("✓", f"Received {filename}", "green", 4.0)
         self.expand_copilot()
-        self.copilot_card.chat_display.append(f"✓ <b>Received '{filename}'!</b>\nSaved to: <code>{dest_path}</code>\n")
-        QTimer.singleShot(4000, self.restore_status_pill)
+        msg = f"✓ <b>Received '{filename}'!</b><br>Saved to: <code>{dest_path}</code><br>"
+        self.copilot_win.card.chat_display.append(msg)
 
 
 def main():
