@@ -443,7 +443,7 @@ DEFAULT_CONFIG = {
     "openai_model": "gpt-4o-mini",
     "deepseek_api_base": "https://api.deepseek.com",
     "deepseek_api_key": "",
-    "deepseek_model": "deepseek-chat",
+    "deepseek_model": "deepseek-flash",
     "ollama_api_base": "http://localhost:11434/v1",
     "ollama_api_key": "",
     "ollama_model": "llama3.2",
@@ -521,10 +521,10 @@ PROVIDER_PRESETS = {
     "deepseek": {
         "name": "DeepSeek Direct",
         "api_base": "https://api.deepseek.com",
-        "default_model": "deepseek-chat",
+        "default_model": "deepseek-flash",
         "requires_key": True,
         "key_placeholder": "sk-...",
-        "hint": "Direct ultra-fast access to DeepSeek-V3 and DeepSeek-R1 reasoning engine."
+        "hint": "Direct ultra-fast access to DeepSeek-V4.1-Flash (Vision) and DeepSeek-V4-Pro."
     },
     "ollama": {
         "name": "Ollama (100% Local / Free)",
@@ -552,6 +552,16 @@ PROVIDER_PRESETS = {
     }
 }
 
+def normalize_deepseek_model(m: str) -> str:
+    """Normalizes model names and aliases for official DeepSeek API endpoints."""
+    m_clean = (m or '').strip()
+    m_low = m_clean.lower()
+    if any(x in m_low for x in ['flash', 'v4.1', 'v4-flash', 'vision', 'vl']):
+        return 'deepseek-flash'
+    elif 'pro' in m_low:
+        return 'deepseek-v4-pro'
+    return m_clean or 'deepseek-flash'
+
 def get_active_provider_info(cfg):
     """
     Resolves the active LLM provider configuration and credentials.
@@ -575,7 +585,7 @@ def get_active_provider_info(cfg):
     elif prov == 'deepseek':
         base = cfg.get('deepseek_api_base') or preset['api_base']
         key = cfg.get('deepseek_api_key') or cfg.get('api_key') or ''
-        model = cfg.get('deepseek_model') or preset['default_model']
+        model = normalize_deepseek_model(cfg.get('deepseek_model') or cfg.get('model') or preset['default_model'])
     elif prov == 'ollama':
         base = cfg.get('ollama_api_base') or preset['api_base']
         key = cfg.get('ollama_api_key') or ''
@@ -631,7 +641,8 @@ def test_llm_connection(provider, api_base, api_key, model, timeout=7):
         headers["Authorization"] = f"Bearer {api_key}"
     if provider == 'openrouter':
         headers["HTTP-Referer"] = "https://lexi.desktop"
-        headers["X-Title"] = "Lexi Connection Test"
+    if provider == 'deepseek' or 'api.deepseek.com' in api_base:
+        model = normalize_deepseek_model(model)
 
     payload = {
         "model": model or "default",
@@ -9010,7 +9021,7 @@ class LexiSettingsDialog(Gtk.Window):
         self.provider_labels = [
             "OpenRouter (100+ Models)",
             "OpenAI (Official GPT-4o / o3-mini)",
-            "DeepSeek Direct (V3 / R1)",
+            "DeepSeek Direct (V4.1-Flash Vision / Pro)",
             "Ollama (100% Local / Free / Offline)",
             "OmniRoute (Local Gateway)",
             "Custom OpenAI-Compatible"
@@ -9258,7 +9269,7 @@ class LexiSettingsDialog(Gtk.Window):
         elif prov_key == 'deepseek':
             self.config['deepseek_api_base'] = base_url
             self.config['deepseek_api_key'] = api_key
-            self.config['deepseek_model'] = model
+            self.config['deepseek_model'] = normalize_deepseek_model(model)
         elif prov_key == 'ollama':
             self.config['ollama_api_base'] = base_url
             self.config['ollama_api_key'] = api_key
@@ -10842,6 +10853,7 @@ class LexiWindow(Adw.ApplicationWindow):
                 if prov == 'openai':
                     self.config['openai_model'] = new_model
                 elif prov == 'deepseek':
+                    new_model = normalize_deepseek_model(new_model)
                     self.config['deepseek_model'] = new_model
                 elif prov == 'ollama':
                     self.config['ollama_model'] = new_model
@@ -11303,7 +11315,7 @@ class LexiWindow(Adw.ApplicationWindow):
 
             deepseek_key = self.config.get('deepseek_api_key', '').strip()
             deepseek_base = self.config.get('deepseek_api_base', 'https://api.deepseek.com').rstrip('/')
-            deepseek_model = self.config.get('deepseek_model', 'deepseek-chat')
+            deepseek_model = normalize_deepseek_model(self.config.get('deepseek_model') or self.config.get('model') or 'deepseek-flash')
             is_ds_multimodal = any(k in deepseek_model.lower() for k in ['flash', 'vl', 'vision', 'v4'])
             can_ds_handle = (not has_images) or is_ds_multimodal
 
@@ -11312,7 +11324,7 @@ class LexiWindow(Adw.ApplicationWindow):
                 try:
                     ds_key = deepseek_key if prov_name != 'deepseek' else api_key
                     ds_base = deepseek_base if prov_name != 'deepseek' else api_base
-                    ds_mod = deepseek_model if prov_name != 'deepseek' else model
+                    ds_mod = normalize_deepseek_model(deepseek_model if prov_name != 'deepseek' else model)
                     ds_payload = {
                         "model": ds_mod,
                         "messages": messages,

@@ -157,7 +157,32 @@ class TestProviderIntegration(unittest.TestCase):
         self.assertEqual(r.name, "open_site")
         self.assertIn("artemus+github", r.args["site"])
 
+    def test_deepseek_provider_resolution_and_model_normalization(self):
+        """Verifies deepseek provider resolves deepseek-flash and normalizes model variants."""
+        from lexi import get_active_provider_info, normalize_deepseek_model, PROVIDER_PRESETS
+        self.assertEqual(PROVIDER_PRESETS['deepseek']['default_model'], 'deepseek-flash')
+        
+        cfg = {
+            'provider': 'deepseek',
+            'deepseek_api_key': 'test_ds_key',
+            'deepseek_api_base': 'https://api.deepseek.com',
+            'deepseek_model': 'deepseek/deepseek-v4.1-flash'
+        }
+        info = get_active_provider_info(cfg)
+        self.assertEqual(info['provider'], 'deepseek')
+        self.assertEqual(info['api_key'], 'test_ds_key')
+        self.assertEqual(info['model'], 'deepseek-flash')
+
+        # Test normalization aliases
+        self.assertEqual(normalize_deepseek_model('deepseek-v4.1-flash'), 'deepseek-flash')
+        self.assertEqual(normalize_deepseek_model('deepseek/deepseek-v4.1-flash'), 'deepseek-flash')
+        self.assertEqual(normalize_deepseek_model('deepseek-flash-vision'), 'deepseek-flash')
+        self.assertEqual(normalize_deepseek_model('deepseek-v4-flash'), 'deepseek-flash')
+        self.assertEqual(normalize_deepseek_model('deepseek-v4-pro'), 'deepseek-v4-pro')
+        self.assertEqual(normalize_deepseek_model('deepseek-chat'), 'deepseek-chat')
+
 
 if __name__ == '__main__':
     unittest.main()
+
 
