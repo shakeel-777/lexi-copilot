@@ -24,8 +24,25 @@ from aiohttp import web
 
 PORT = 7890
 BEACON_PORT = 7891
-DOWNLOADS_DIR = Path(os.path.expanduser("~/Downloads"))
-DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+def _resolve_downloads_dir() -> Path:
+    if sys.platform == "win32":
+        try:
+            import winreg
+            sub_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, sub_key) as key:
+                val, _ = winreg.QueryValueEx(key, "{374DE290-123F-4565-9164-39C4925E467B}")
+                if val and os.path.exists(val):
+                    return Path(val)
+        except Exception:
+            pass
+    dl = Path.home() / "Downloads"
+    try:
+        dl.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+    return dl
+
+DOWNLOADS_DIR = _resolve_downloads_dir()
 
 
 def get_local_ip() -> str:

@@ -1753,7 +1753,9 @@ class LexiDynamicIslandWin(QMainWindow):
     def init_tray(self):
         self.tray = QSystemTrayIcon(self)
         app_dir = Path(__file__).parent
-        avatar_path = app_dir / "lexi_icon.png"
+        avatar_path = app_dir / "lexi.ico"
+        if not avatar_path.exists():
+            avatar_path = app_dir / "lexi_icon.png"
         if not avatar_path.exists():
             avatar_path = app_dir.parent / "drop_web" / "icon-512.png"
         if avatar_path.exists():
@@ -1851,7 +1853,23 @@ class LexiDynamicIslandWin(QMainWindow):
 
 
 def main():
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Lexi.Copilot.Desktop.1")
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
+    
+    app_dir = Path(__file__).parent
+    icon_path = app_dir / "lexi.ico"
+    if not icon_path.exists():
+        icon_path = app_dir / "lexi_icon.png"
+    if not icon_path.exists():
+        icon_path = app_dir.parent / "drop_web" / "icon-512.png"
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
+
     island = LexiDynamicIslandWin()
     island.show()
     sys.exit(app.exec())

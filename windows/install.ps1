@@ -52,10 +52,12 @@ foreach ($file in $files) {
     Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile $dest -UseBasicParsing
 }
 
-# Download official Lexi icon asset
+# Download official Lexi icon assets (.png and .ico)
 try {
     $iconDest = Join-Path $installDir "lexi_icon.png"
     Invoke-WebRequest -Uri "$baseUrl/lexi_icon.png" -OutFile $iconDest -UseBasicParsing -ErrorAction SilentlyContinue
+    $icoDest = Join-Path $installDir "lexi.ico"
+    Invoke-WebRequest -Uri "$baseUrl/lexi.ico" -OutFile $icoDest -UseBasicParsing -ErrorAction SilentlyContinue
 } catch {}
 
 # 4. Setup Virtual Environment & Dependencies
@@ -147,6 +149,9 @@ $sc.TargetPath = $venvPythonW
 $sc.Arguments = "`"$installDir\lexi_win_island.py`""
 $sc.WorkingDirectory = $installDir
 $sc.Description = "Lexi Dynamic Island Copilot"
+if (Test-Path "$installDir\lexi.ico") {
+    $sc.IconLocation = "$installDir\lexi.ico,0"
+}
 $sc.Save()
 
 # Windows Startup shortcut (Auto-start on boot)
@@ -157,6 +162,9 @@ $sc2.TargetPath = $venvPythonW
 $sc2.Arguments = "`"$installDir\lexi_win_island.py`""
 $sc2.WorkingDirectory = $installDir
 $sc2.Description = "Lexi Dynamic Island Copilot"
+if (Test-Path "$installDir\lexi.ico") {
+    $sc2.IconLocation = "$installDir\lexi.ico,0"
+}
 $sc2.Save()
 
 Write-Host "      ✓ Shortcuts created on Desktop and Windows Startup." -ForegroundColor Green
