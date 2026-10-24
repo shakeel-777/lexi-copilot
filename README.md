@@ -14,7 +14,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/shakeel-777/lexi-copilot?style=social)](https://github.com/shakeel-777/lexi-copilot/stargazers)
 
-**[⚡ Quick Install](#-quick-install) • [🌟 Features](#-core-highlights) • [📊 Comparison](#-why-lexi) • [⌨️ Shortcuts](#️-global-keybindings) • [⭐ Star This Project](#-star-history)**
+**[⚡ Quick Install](#-quick-install) • [🗑️ Uninstall](#️-clean-uninstallation) • [🌟 Features](#-core-highlights) • [📊 Comparison](#-why-lexi) • [⌨️ Shortcuts](#️-global-keybindings) • [⭐ Star This Project](#-star-history)**
 
 </div>
 
@@ -51,6 +51,29 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 ```
 
 *Auto-detects Python, installs scrcpy phone mirror engine, sets up PySide6 runtime, prompts for your DeepSeek or Groq key, creates desktop & startup shortcuts, and launches the notch immediately.*
+
+---
+
+## 🗑️ Clean Uninstallation
+
+If you ever wish to completely remove Lexi from your system:
+
+### 🐧 Linux
+Run this single command in terminal to stop background systemd services, remove desktop launchers, and delete all runtime files:
+```bash
+curl -fsSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/uninstall.sh | bash
+```
+
+### 🪟 Windows
+Run this single command in **PowerShell** to terminate running processes, remove desktop/startup shortcuts, and clean up application data:
+```powershell
+irm https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/uninstall.ps1 | iex
+```
+
+Or using standard `curl.exe`:
+```cmd
+curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/uninstall.ps1 | powershell -
+```
 
 ---
 

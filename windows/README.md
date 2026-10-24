@@ -28,6 +28,21 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 
 ---
 
+## 🗑️ 1-Command Uninstall (PowerShell)
+
+To completely remove Lexi, its background processes, desktop shortcuts, and runtime files:
+
+```powershell
+irm https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/uninstall.ps1 | iex
+```
+
+Or using standard `curl.exe`:
+```cmd
+curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/uninstall.ps1 | powershell -
+```
+
+---
+
 ## 🌟 Full Feature Parity with Linux
 
 ### 🏝️ 1. Dynamic Island Top Notch
