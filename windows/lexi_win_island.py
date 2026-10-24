@@ -29,7 +29,10 @@ import urllib.parse
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
-from PySide6.QtCore import Qt, QTimer, QPoint, QSize, Signal, QObject, QThread, QRect, QUrl
+from PySide6.QtCore import (
+    Qt, QTimer, QPoint, QSize, Signal, QObject, QThread, QRect, QUrl,
+    QPropertyAnimation, QEasingCurve
+)
 from PySide6.QtGui import (
     QColor, QFont, QPainter, QBrush, QPen, QLinearGradient, QAction, QIcon,
     QKeySequence, QPixmap, QCursor, QGuiApplication, QDesktopServices
@@ -1637,16 +1640,45 @@ class LexiDynamicIslandWin(QMainWindow):
             self.apply_pill_style("default")
             self.collapse_to_resting()
 
-    def collapse_to_resting(self):
+    def animate_to_geometry(self, target_w: int, target_h: int = 38, duration_ms: int = 220, on_finished=None):
+        screen = QApplication.primaryScreen().geometry()
+        target_x = (screen.width() - target_w) // 2
+        target_y = 6
+        target_rect = QRect(target_x, target_y, target_w, target_h)
+
+        if hasattr(self, "_geom_anim") and self._geom_anim is not None:
+            self._geom_anim.stop()
+
+        self._geom_anim = QPropertyAnimation(self, b"geometry")
+        self._geom_anim.setDuration(duration_ms)
+        self._geom_anim.setStartValue(self.geometry())
+        self._geom_anim.setEndValue(target_rect)
+        self._geom_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        if on_finished:
+            self._geom_anim.finished.connect(on_finished)
+        self._geom_anim.start()
+
+    def collapse_to_resting(self, animated=True):
         w = 180
         if self.status_label.text() != "Lexi":
             w = 260
-        self.resize(w, 38)
-        self.reposition_top()
+        if animated and self.isVisible():
+            def _after():
+                if not self.is_hovered:
+                    self.actions_container.setVisible(False)
+            self.animate_to_geometry(w, 38, 200, on_finished=_after)
+        else:
+            self.actions_container.setVisible(False)
+            self.resize(w, 38)
+            self.reposition_top()
 
-    def expand_to_actions(self):
-        self.resize(700, 38)
-        self.reposition_top()
+    def expand_to_actions(self, animated=True):
+        self.actions_container.setVisible(True)
+        if animated and self.isVisible():
+            self.animate_to_geometry(700, 38, 220)
+        else:
+            self.resize(700, 38)
+            self.reposition_top()
 
     def reposition_top(self):
         screen = QApplication.primaryScreen().geometry()
@@ -1680,7 +1712,7 @@ class LexiDynamicIslandWin(QMainWindow):
 
     def show_island(self):
         self.show()
-        self.collapse_to_resting()
+        self.collapse_to_resting(animated=False)
 
     def trigger_phone_mirror(self):
         self.trigger_alert("📱", "Mirroring Phone @ 60 FPS", "green", 3.5)
@@ -1693,8 +1725,7 @@ class LexiDynamicIslandWin(QMainWindow):
         self.mascot_btn.setText(icon)
         self.status_label.setText(text)
         self.apply_pill_style(glow_color)
-        self.resize(320, 38)
-        self.reposition_top()
+        self.animate_to_geometry(320, 38, 200)
         QTimer.singleShot(int(duration * 1000), self.restore_resting_state)
 
     def restore_resting_state(self):
@@ -1723,12 +1754,11 @@ class LexiDynamicIslandWin(QMainWindow):
             artist = media.get("artist")
             self.status_label.setText(f"🎵 {artist} - {track[:18]}")
             self.media_container.setVisible(True)
-            if not self.is_hovered:
-                self.resize(300, 38)
-                self.reposition_top()
+            if not self.is_hovered and not self.status_label.text().startswith("🎵"):
+                self.animate_to_geometry(300, 38, 200)
         else:
             self.media_container.setVisible(False)
-            if not self.is_hovered:
+            if not self.is_hovered and self.status_label.text().startswith("🎵"):
                 self.status_label.setText("Lexi")
                 self.collapse_to_resting()
 
