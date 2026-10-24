@@ -66,6 +66,20 @@ $venvPythonW = Join-Path $venvDir "Scripts\pythonw.exe"
 & $venvPip install -r (Join-Path $installDir "requirements-windows.txt") --quiet
 Write-Host "      ✓ Dependencies installed." -ForegroundColor Green
 
+# 4b. Check or Install scrcpy for Android Phone Mirroring
+Write-Host "      Checking Android phone mirroring engine (scrcpy)..." -ForegroundColor Yellow
+if (!(Get-Command scrcpy -ErrorAction SilentlyContinue) -and !(Test-Path "$env:LOCALAPPDATA\Programs\scrcpy\scrcpy.exe") -and !(Test-Path "C:\scrcpy\scrcpy.exe")) {
+    Write-Host "      [!] scrcpy not detected. Installing via winget for 60 FPS phone mirroring..." -ForegroundColor Cyan
+    try {
+        winget install Genymobile.scrcpy --silent --accept-package-agreements --accept-source-agreements
+        Write-Host "      ✓ scrcpy installed successfully!" -ForegroundColor Green
+    } catch {
+        Write-Host "      (Optional) You can install scrcpy later: winget install Genymobile.scrcpy" -ForegroundColor Gray
+    }
+} else {
+    Write-Host "      ✓ Found scrcpy phone mirror engine." -ForegroundColor Green
+}
+
 # 5. Configuration & API Key Setup
 $configPath = "$env:USERPROFILE\.lexi_config.json"
 if (!(Test-Path $configPath)) {

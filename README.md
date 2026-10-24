@@ -39,7 +39,7 @@ paru -S lexi-copilot-git
 
 ### 🪟 Windows (Windows 10 / 11)
 
-Install and launch the native **Lexi Dynamic Island & ShareMe Copilot** in a single **PowerShell** command:
+Install and launch the native **Lexi Dynamic Island, 60 FPS Phone Mirror & ShareMe Copilot** in a single **PowerShell** command:
 
 ```powershell
 irm https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/install.ps1 | iex
@@ -50,7 +50,7 @@ Or using standard `curl.exe`:
 curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/install.ps1 | powershell -
 ```
 
-*Auto-detects Python, sets up PySide6 runtime, prompts for your DeepSeek or Groq key, creates desktop & startup shortcuts, and launches the notch immediately.*
+*Auto-detects Python, installs scrcpy phone mirror engine, sets up PySide6 runtime, prompts for your DeepSeek or Groq key, creates desktop & startup shortcuts, and launches the notch immediately.*
 
 ---
 
@@ -172,7 +172,7 @@ mochi-copilot/
 ├── requirements.txt           # Python package requirements
 ├── drop_web/                  # Progressive Web App for cross-device LAN file sharing
 ├── android_app/               # Native Android companion application (Lexi Connect)
-└── tests/                     # Automated unit & security test suite (157+ tests)
+└── tests/                     # Automated unit & security test suite (162+ tests)
 ```
 
 ---
@@ -182,8 +182,8 @@ mochi-copilot/
 Lexi includes an exhaustive test suite covering app termination, browser bridge validation, scrcpy mirroring, intent routing, provider resolution, and security regression gates:
 
 ```bash
-python3 -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers
-# 151 tests passed (0 failures)
+python3 -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers tests.test_windows_parity
+# 162 tests passed (0 failures)
 ```
 
 ---

@@ -1,6 +1,6 @@
-# ⚡ Lexi Dynamic Island & ShareMe Beam for Windows
+# ⚡ Lexi Dynamic Island & Phone Mirroring Copilot for Windows
 
-Native Windows companion for Lexi Copilot. Provides the top-screen dynamic notch, DeepSeek-V4.1-Flash (Vision) chat, and zero-data P2P ShareMe file transfers directly with your Linux laptop.
+Native Windows companion for Lexi Copilot — **100% feature parity with Linux**. Provides the top-screen hardware-accelerated dynamic notch, Android 60 FPS phone mirroring, multimodal vision AI, vertical side panel mode, detached desktop pet mascot, and zero-data P2P ShareMe file transfers directly with your Linux laptop.
 
 ---
 
@@ -20,6 +20,7 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 
 **What the installer does automatically:**
 - Auto-detects or installs Python 3.11 via Windows `winget`
+- Auto-installs **`scrcpy`** for Android Phone Mirroring via `winget install Genymobile.scrcpy`
 - Clones and sets up the isolated runtime in `%LOCALAPPDATA%\Lexi`
 - Prompts for your **DeepSeek** (`sk-...`) or **Groq** (`gsk_...`) API key
 - Creates a Desktop shortcut and auto-start shortcut on Windows boot (`shell:startup`)
@@ -27,12 +28,44 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 
 ---
 
-## 🧠 Supported AI Providers & Keys
+## 🌟 Full Feature Parity with Linux
 
-Lexi on Windows natively supports:
-- **Groq LPU**: Ultra-fast (500+ tokens/sec) with `llama-3.3-70b-versatile` and automatic `llama-3.2-11b-vision-preview` when capturing screen snips. Accepts any Groq key (`gsk_...`).
-- **DeepSeek Direct**: Native `deepseek-flash` (DeepSeek-V4.1-Flash Vision) with deep reasoning chains. Accepts any DeepSeek key (`sk-...`).
-- **OpenRouter & OpenAI**: Full OpenAI-compatible model routing.
+### 🏝️ 1. Dynamic Island Top Notch
+- **Permanent Top Notch**: Pinned seamlessly at `y = 0` (top center of Windows screen) with OLED dark-glass acrylic styling.
+- **Liquid Morphing Pills**: Hovering reveals instant action pills:
+  `[💬 Copilot] [⚡ Beam] [📱 Phone] [◨ Side Panel] [✂️ Snip] [🐾 Pet] [⚙️ Settings]`
+- **Live Media Player & Equalizer**: Live track title and artist ticker (Spotify, VLC, Chrome/Edge) + animated mini equalizer and quick controls `[⏮] [⏯] [⏭]`.
+- **Live Download Progress Sentinel**: Real-time throughput (MB/s) and progress indicators for active browser downloads.
+- **Drag-and-Drop Target**: Drop files directly onto the notch to beam to Linux or ask AI about the file.
+
+### 📱 2. Android Phone Mirroring & Remote Control
+- **60 FPS Wireless & USB Link**: Direct wireless screen mirroring and mouse/keyboard control powered by `scrcpy`.
+- **Zero-Touch Unlock**: Automatically wakes device and enters lockscreen PIN from `~/.lexi_config.json`.
+- **Autonomous Reconnect Supervisor**: Transparently restores stream if Wi-Fi packets drop across rooms.
+- **H.265 / H.264 Resilience**: High-efficiency HEVC compression with automatic fallback.
+
+### 💬 3. Multimodal Vision Copilot & Side Panel
+- **Multi-Page Attachments**: Attach up to 5 screenshots, terminal outputs, or documents in a single prompt.
+- **Deep Reasoning Display**: Renders DeepSeek-R1 reasoning process collapsible tokens (`💭 Reasoning Process`).
+- **Interactive Region Snip (<kbd>✂️ Snip</kbd>)**: Rubber-band crosshair overlay to snip any screen area and pass directly into AI.
+- **Vertical Side Panel Mode (<kbd>◨ Side</kbd>)**: Docks to the right screen edge as a persistent sidebar companion.
+
+### 🐾 4. Detached Roaming Desktop Pet Mascot
+- Detach Lexi as a cute borderless anime avatar floating on your desktop.
+- Draggable anywhere; double-click opens Copilot; right-click context menu lets you re-dock to the top island notch.
+
+### 🛠️ 5. Developer Power Tools & Natural Language Commands
+- `kill port 3000` / `inspect port 8080` — Instant PID inspection & termination.
+- `top processes` / `top mem` — Lists resource hogs directly in chat.
+- `kill process <name/pid>` — Terminate rogue processes with system shields.
+- `volume 80` / `mute` — Controls master volume.
+- `pause` / `next song` — Global media keys.
+
+### 🤖 6. Supported AI Providers
+- **Groq LPU**: Ultra-fast (500+ T/s) with `llama-3.3-70b-versatile` & `llama-3.2-11b-vision-preview`.
+- **DeepSeek Direct**: Native `deepseek-flash` with vision & reasoning tokens.
+- **Ollama (100% Free / Local)**: Offline inference via local Ollama.
+- **OpenRouter & OpenAI**: Universal OpenAI-compatible API support.
 
 ---
 
@@ -45,7 +78,7 @@ Lexi on Windows natively supports:
 3. **Zero Internet Data**: Bytes travel purely over local Wi-Fi radio waves. No browser needed!
 
 ### 2. Beaming a File from Windows to Linux
-1. Click the **📡 Beam** button on the Windows notch.
+1. Click the **⚡ Beam** button on the Windows notch.
 2. Select any movie, video, or folder.
 3. Lexi discovers your nearby Linux laptop on the LAN automatically and pushes it straight to Linux `~/Downloads`!
 

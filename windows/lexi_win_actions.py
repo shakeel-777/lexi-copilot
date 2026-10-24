@@ -8,7 +8,10 @@ app launching, media keys, and system automation without external Linux dependen
 
 import os
 import sys
+import time
+import shutil
 import ctypes
+import threading
 import subprocess
 import urllib.parse
 from pathlib import Path
@@ -243,3 +246,322 @@ class SystemActionEngineWindows:
             return True, "Opened WhatsApp"
         except Exception as e:
             return False, f"WhatsApp launch failed: {e}"
+
+    def start_phone_mirror(self, stay_awake: bool = True, turn_screen_off: bool = False) -> Dict[str, Any]:
+        """Launches resilient scrcpy phone mirror on Windows."""
+        return PhoneMirrorManagerWindows.get().start_mirror(stay_awake=stay_awake, turn_screen_off=turn_screen_off)
+
+    def stop_phone_mirror(self) -> Dict[str, Any]:
+        """Stops the active phone mirror."""
+        return PhoneMirrorManagerWindows.get().stop_mirror()
+
+    def is_phone_mirror_running(self) -> bool:
+        """Returns True if scrcpy is actively mirroring."""
+        return PhoneMirrorManagerWindows.get().is_running()
+
+    def inspect_port(self, port: int) -> Dict[str, Any]:
+        """Inspects which Windows process is listening on the given port."""
+        try:
+            port = int(port)
+            if port <= 0 or port > 65535:
+                return {"success": False, "message": f"Invalid port: {port}"}
+            try:
+                import psutil
+                for c in psutil.net_connections(kind='inet'):
+                    if c.laddr and c.laddr.port == port and c.status == psutil.CONN_LISTEN:
+                        proc = psutil.Process(c.pid) if c.pid else None
+                        pname = proc.name() if proc else "unknown"
+                        return {
+                            "success": True,
+                            "active": True,
+                            "port": port,
+                            "pid": c.pid,
+                            "name": pname,
+                            "message": f"🔌 **Port {port}** is in use by `{pname}` (PID {c.pid}). Say 'kill port {port}' to free it."
+                        }
+            except Exception:
+                pass
+            # Fallback to netstat
+            res = subprocess.run(["cmd.exe", "/c", f"netstat -ano | findstr :{port}"], capture_output=True, text=True, timeout=3)
+            lines = [l.strip() for l in res.stdout.strip().splitlines() if "LISTENING" in l]
+            if lines:
+                parts = lines[0].split()
+                pid = parts[-1]
+                return {
+                    "success": True,
+                    "active": True,
+                    "port": port,
+                    "pid": int(pid) if pid.isdigit() else pid,
+                    "message": f"🔌 **Port {port}** is in use by PID {pid}. Say 'kill port {port}' to free it."
+                }
+            return {"success": True, "active": False, "port": port, "message": f"🔌 Port {port} is completely free."}
+        except Exception as e:
+            return {"success": False, "message": f"Port inspection failed: {e}"}
+
+    def kill_port(self, port: int) -> Dict[str, Any]:
+        """Kills the Windows process holding the specified port."""
+        info = self.inspect_port(port)
+        if not info.get("active") or not info.get("pid"):
+            return {"success": True, "message": f"🔌 Port {port} is already free."}
+        pid = info["pid"]
+        try:
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=3)
+            return {"success": True, "message": f"⚡ Freed port {port} (terminated PID {pid})."}
+        except Exception as e:
+            return {"success": False, "message": f"Failed to kill port {port}: {e}"}
+
+    def top_processes(self, sort_by: str = "cpu", limit: int = 5) -> Dict[str, Any]:
+        """Returns top resource-consuming Windows processes."""
+        try:
+            import psutil
+            procs = []
+            for p in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                try:
+                    info = p.info
+                    procs.append(info)
+                except Exception:
+                    pass
+            key = 'cpu_percent' if sort_by.lower() != 'mem' else 'memory_percent'
+            sorted_procs = sorted(procs, key=lambda x: x.get(key) or 0, reverse=True)[:limit]
+            icon = "🔥" if key == "cpu_percent" else "🧠"
+            lines = [f"{i+1}. **`{p['name']}`** (PID {p['pid']}) — {p.get('cpu_percent', 0):.1f}% CPU | {p.get('memory_percent', 0):.1f}% RAM" for i, p in enumerate(sorted_procs)]
+            return {"success": True, "message": f"{icon} **Top {limit} {sort_by.upper()} Consumers**:\n" + "\n".join(lines)}
+        except Exception as e:
+            return {"success": False, "message": f"Failed to list processes: {e}"}
+
+    def kill_process(self, target: str) -> Dict[str, Any]:
+        """Safely terminates a process by PID or image name, shielding critical OS tasks."""
+        clean = (target or "").strip()
+        if not clean:
+            return {"success": False, "message": "Specify a process name or PID."}
+        protected = {"explorer.exe", "csrss.exe", "smss.exe", "services.exe", "lsass.exe", "svchost.exe", "lexi.exe", "python.exe"}
+        if clean.lower() in protected:
+            return {"success": False, "message": f"Refused to terminate critical system process '{clean}'."}
+        try:
+            if clean.isdigit():
+                subprocess.run(["taskkill", "/PID", clean, "/F"], capture_output=True, timeout=3)
+            else:
+                img = clean if clean.endswith(".exe") else f"{clean}.exe"
+                subprocess.run(["taskkill", "/IM", img, "/F"], capture_output=True, timeout=3)
+            return {"success": True, "message": f"🛑 Terminated process: {clean}"}
+        except Exception as e:
+            return {"success": False, "message": f"Failed to kill process '{clean}': {e}"}
+
+    def get_media_status(self) -> Dict[str, Any]:
+        """Queries active audio player window title on Windows (Spotify, Chrome, VLC)."""
+        if not self.user32:
+            return {"playing": False, "track": "", "artist": ""}
+        try:
+            # Query window titles
+            found = []
+            def enum_proc(hwnd, lParam):
+                if self.user32.IsWindowVisible(hwnd):
+                    length = self.user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buf = ctypes.create_unicode_buffer(length + 1)
+                        self.user32.GetWindowTextW(hwnd, buf, length + 1)
+                        title = buf.value.strip()
+                        if " - " in title and not title.endswith(" - Google Chrome") and not title.endswith(" - Microsoft Edge"):
+                            found.append(title)
+                return True
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            self.user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
+            if found:
+                first = found[0]
+                parts = first.split(" - ", 1)
+                return {"playing": True, "artist": parts[0].strip(), "track": parts[1].strip(), "raw": first}
+        except Exception:
+            pass
+        return {"playing": False, "track": "", "artist": ""}
+
+
+class PhoneMirrorManagerWindows:
+    """
+    High-Resilience Phone Mirror Manager & Auto-Reconnect Supervisor for Windows.
+    - Low-latency wireless profile: H.265 compression, 1080p downscaling, 3M bitrate, 60 FPS.
+    - Resilient background supervisor: auto-reconnects on Wi-Fi drops.
+    - Codec resilience: falls back to H.264 if device lacks H.265.
+    - Window deduplication: raises active scrcpy window if already running.
+    """
+    _instance = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = PhoneMirrorManagerWindows()
+            return cls._instance
+
+    def __init__(self):
+        self._proc = None
+        self._supervisor_thread = None
+        self._stop_requested = False
+        self._current_device = None
+        self._is_wireless = False
+        self._state_lock = threading.Lock()
+
+    def is_running(self) -> bool:
+        with self._state_lock:
+            return bool(self._proc and self._proc.poll() is None)
+
+    def find_scrcpy(self) -> Optional[str]:
+        candidates = [
+            shutil.which("scrcpy"),
+            shutil.which("scrcpy.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\scrcpy\scrcpy.exe"),
+            os.path.expandvars(r"%PROGRAMFILES%\scrcpy\scrcpy.exe"),
+            r"C:\scrcpy\scrcpy.exe",
+            os.path.expandvars(r"%USERPROFILE%\scoop\apps\scrcpy\current\scrcpy.exe"),
+            r"C:\ProgramData\chocolatey\bin\scrcpy.exe"
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def find_adb(self) -> Optional[str]:
+        candidates = [
+            shutil.which("adb"),
+            shutil.which("adb.exe"),
+            os.path.expandvars(r"%LOCALAPPDATA%\Programs\scrcpy\adb.exe"),
+            os.path.expandvars(r"%PROGRAMFILES%\scrcpy\adb.exe"),
+            r"C:\scrcpy\adb.exe",
+            os.path.expandvars(r"%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe")
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return c
+        return None
+
+    def discover_device(self, preferred_ip: str = None) -> Tuple[list, list]:
+        adb = self.find_adb() or "adb"
+        try:
+            res = subprocess.run([adb, 'devices'], capture_output=True, text=True, timeout=3)
+            lines = [l.strip() for l in res.stdout.strip().split('\n')[1:] if l.strip()]
+            attached = [l.split()[0] for l in lines if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
+            unauth = [l.split()[0] for l in lines if 'unauthorized' in l]
+
+            if not attached:
+                # Check ARP table for phone IP
+                try:
+                    arp_res = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=2)
+                    for line in arp_res.stdout.splitlines():
+                        parts = line.split()
+                        if parts and len(parts) >= 2:
+                            ip = parts[0]
+                            if ip.count('.') == 3 and not ip.startswith('127.') and not ip.endswith('.255'):
+                                subprocess.run([adb, 'connect', f'{ip}:5555'], capture_output=True, timeout=1)
+                except Exception:
+                    pass
+
+                res2 = subprocess.run([adb, 'devices'], capture_output=True, text=True, timeout=2)
+                lines2 = [l.strip() for l in res2.stdout.strip().split('\n')[1:] if l.strip()]
+                attached = [l.split()[0] for l in lines2 if 'device' in l and 'offline' not in l and 'unauthorized' not in l]
+                unauth = [l.split()[0] for l in lines2 if 'unauthorized' in l]
+
+            return attached, unauth
+        except Exception as e:
+            return [], []
+
+    def start_mirror(self, device_id: str = None, stay_awake: bool = True, turn_screen_off: bool = False, preferred_ip: str = None) -> Dict[str, Any]:
+        scrcpy_bin = self.find_scrcpy()
+        if not scrcpy_bin:
+            return {
+                "success": False,
+                "message": (
+                    "⚠️ **scrcpy is not installed on Windows.**\n\n"
+                    "Install it in 10 seconds via PowerShell:\n"
+                    "```powershell\nwinget install Genymobile.scrcpy\n```"
+                )
+            }
+
+        user32 = ctypes.windll.user32 if hasattr(ctypes, 'windll') else None
+        if user32:
+            hwnd = user32.FindWindowW(None, "📱 Lexi Phone Mirror")
+            if hwnd:
+                user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                user32.SetForegroundWindow(hwnd)
+                return {"success": True, "message": "📱 **Phone Mirror is already running!** Window brought to front."}
+
+        attached, unauth = self.discover_device(preferred_ip=preferred_ip)
+        if not attached:
+            if unauth:
+                return {"success": False, "message": "⚠️ **Phone Unauthorized**: Please unlock your phone and tap 'Allow USB debugging'."}
+            return {
+                "success": False,
+                "message": (
+                    "📱 **No Android Phone Connected**\n\n"
+                    "1. Enable Developer Options & USB Debugging on your phone.\n"
+                    "2. Plug phone into PC via USB cable once and tap 'Allow'.\n"
+                    "3. For wireless mirroring, run `adb tcpip 5555` then unplug USB!"
+                )
+            }
+
+        target = device_id or attached[0]
+        is_wireless = (":" in target) or target.replace(".", "").isdigit()
+
+        with self._state_lock:
+            self._stop_requested = False
+            self._current_device = target
+            self._is_wireless = is_wireless
+
+        self._supervisor_thread = threading.Thread(
+            target=self._run_supervisor,
+            args=(scrcpy_bin, target, stay_awake, turn_screen_off),
+            name="LexiWinMirrorSupervisor",
+            daemon=True
+        )
+        self._supervisor_thread.start()
+
+        return {
+            "success": True,
+            "device": target,
+            "is_wireless": is_wireless,
+            "message": f"📱 **Mirroring Phone (`{target}`) at 60 FPS{' (Wireless 2.0)' if is_wireless else ' (USB Direct)'}**"
+        }
+
+    def stop_mirror(self) -> Dict[str, Any]:
+        with self._state_lock:
+            self._stop_requested = True
+            if self._proc:
+                try:
+                    self._proc.terminate()
+                except Exception:
+                    pass
+                self._proc = None
+        return {"success": True, "message": "📱 Phone mirror stopped."}
+
+    def _run_supervisor(self, scrcpy_bin: str, device: str, stay_awake: bool, turn_screen_off: bool):
+        codec = "h265"
+        while not self._stop_requested:
+            cmd = [
+                scrcpy_bin,
+                "-s", device,
+                "--window-title=📱 Lexi Phone Mirror",
+                "--mouse-bind=++++:bhsn",
+                "--no-mouse-hover"
+            ]
+            if stay_awake:
+                cmd.append("--stay-awake")
+            if turn_screen_off:
+                cmd.append("--turn-screen-off")
+            if self._is_wireless:
+                cmd.extend([f"--video-codec={codec}", "--max-size=1080", "-b", "3M", "--max-fps=60", "--video-buffer=40", "--audio-buffer=40"])
+            else:
+                cmd.extend(["--max-size=1440", "-b", "8M", "--max-fps=60"])
+
+            try:
+                with self._state_lock:
+                    if self._stop_requested:
+                        break
+                    self._proc = subprocess.Popen(cmd)
+                rc = self._proc.wait()
+                if self._stop_requested or rc == 0:
+                    break
+                # Fallback to h264 if h265 fails
+                if codec == "h265":
+                    codec = "h264"
+                time.sleep(2)
+            except Exception:
+                break
