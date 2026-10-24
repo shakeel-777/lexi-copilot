@@ -251,6 +251,10 @@ class SystemActionEngineWindows:
         """Launches resilient scrcpy phone mirror on Windows."""
         return PhoneMirrorManagerWindows.get().start_mirror(stay_awake=stay_awake, turn_screen_off=turn_screen_off)
 
+    def enable_wireless_adb(self, port: int = 5555) -> Dict[str, Any]:
+        """Enables wireless ADB mode (tcpip) so user can mirror wirelessly without USB cable."""
+        return PhoneMirrorManagerWindows.get().enable_wireless_mode(port=port)
+
     def stop_phone_mirror(self) -> Dict[str, Any]:
         """Stops the active phone mirror."""
         return PhoneMirrorManagerWindows.get().stop_mirror()
@@ -373,6 +377,79 @@ class SystemActionEngineWindows:
         except Exception:
             pass
         return {"playing": False, "track": "", "artist": ""}
+
+    def run_system_diagnostics(self) -> Dict[str, Any]:
+        """
+        Runs comprehensive self-test for Windows environment:
+        1. scrcpy executable presence and path
+        2. adb executable presence and path
+        3. connected android devices
+        4. local IP address and LAN subnet
+        5. AI provider configuration and API key readiness
+        """
+        results = {}
+        mirror_mgr = PhoneMirrorManagerWindows.get()
+
+        # 1. Scrcpy check
+        scrcpy_path = mirror_mgr.find_scrcpy()
+        results["scrcpy"] = {
+            "installed": bool(scrcpy_path),
+            "path": scrcpy_path or "Not found",
+            "fix": "Run 'winget install Genymobile.scrcpy' in PowerShell to install scrcpy automatically."
+        }
+
+        # 2. ADB check
+        adb_path = mirror_mgr.find_adb()
+        devices, unauth = mirror_mgr.discover_device() if adb_path else ([], [])
+        results["adb"] = {
+            "installed": bool(adb_path),
+            "path": adb_path or "Not found",
+            "devices": devices,
+            "unauthorized": unauth,
+            "fix": "Connect Android via USB, enable USB Debugging in Developer Options, and allow this computer."
+        }
+
+        # 3. Local Network / ShareMe
+        local_ip = "127.0.0.1"
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+        results["network"] = {
+            "ip": local_ip,
+            "shareme_port": 7890,
+            "beam_ready": local_ip != "127.0.0.1"
+        }
+
+        # 4. AI Provider config
+        from pathlib import Path
+        import json
+        cfg_path = Path(os.path.expanduser("~/.lexi_config.json"))
+        ai_cfg = {"provider": "deepseek", "model": "deepseek-flash", "has_key": False}
+        if cfg_path.exists():
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    provider = data.get("provider", "deepseek")
+                    model = data.get("model", "deepseek-flash")
+                    key = data.get("api_key") or data.get("groq_api_key") or ""
+                    ai_cfg = {
+                        "provider": provider,
+                        "model": model,
+                        "has_key": bool(key.strip()) or provider == "ollama"
+                    }
+            except Exception:
+                pass
+        results["ai"] = ai_cfg
+
+        all_ok = results["scrcpy"]["installed"] and results["adb"]["installed"] and results["ai"]["has_key"]
+        results["all_ok"] = all_ok
+        return results
+
 
 
 class PhoneMirrorManagerWindows:
@@ -531,6 +608,22 @@ class PhoneMirrorManagerWindows:
                     pass
                 self._proc = None
         return {"success": True, "message": "📱 Phone mirror stopped."}
+
+    def enable_wireless_mode(self, port: int = 5555) -> Dict[str, Any]:
+        """Runs 'adb tcpip 5555' so device can be detached from USB and mirrored wirelessly."""
+        adb = self.find_adb()
+        if not adb:
+            return {"success": False, "message": "ADB executable not found. Install scrcpy via winget first."}
+        try:
+            res = subprocess.run([adb, "tcpip", str(port)], capture_output=True, text=True, timeout=6)
+            if res.returncode == 0:
+                return {
+                    "success": True,
+                    "message": f"✓ Wireless ADB enabled on port {port}! You can now unplug the USB cable and mirror wirelessly."
+                }
+            return {"success": False, "message": f"ADB error: {res.stderr.strip() or res.stdout.strip()}"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
 
     def _run_supervisor(self, scrcpy_bin: str, device: str, stay_awake: bool, turn_screen_off: bool):
         codec = "h265"

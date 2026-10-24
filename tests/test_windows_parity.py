@@ -52,6 +52,33 @@ class TestWindowsParity(unittest.TestCase):
         res, msg = self.actions.media_control("invalid_action")
         self.assertFalse(res)
 
+    def test_system_diagnostics(self):
+        diag = self.actions.run_system_diagnostics()
+        self.assertIsInstance(diag, dict)
+        self.assertIn("scrcpy", diag)
+        self.assertIn("adb", diag)
+        self.assertIn("network", diag)
+        self.assertIn("ai", diag)
+        self.assertIn("all_ok", diag)
+        self.assertIn("ip", diag["network"])
+        self.assertEqual(diag["network"]["shareme_port"], 7890)
+
+    def test_enable_wireless_adb_call(self):
+        res = self.actions.enable_wireless_adb()
+        self.assertIsInstance(res, dict)
+        self.assertIn("success", res)
+        self.assertIn("message", res)
+
+    def test_hotkey_listener_instantiation(self):
+        try:
+            import PySide6
+        except ImportError:
+            self.skipTest("PySide6 not installed in current environment")
+        from lexi_win_island import WinGlobalHotkeyListener
+        listener = WinGlobalHotkeyListener()
+        self.assertTrue(listener._running)
+        listener.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

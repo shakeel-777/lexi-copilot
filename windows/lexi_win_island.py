@@ -21,21 +21,24 @@ import sys
 import json
 import time
 import base64
+import ctypes
+import threading
+import subprocess
 import urllib.request
 import urllib.parse
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
-from PySide6.QtCore import Qt, QTimer, QPoint, QSize, Signal, QObject, QThread, QRect
+from PySide6.QtCore import Qt, QTimer, QPoint, QSize, Signal, QObject, QThread, QRect, QUrl
 from PySide6.QtGui import (
     QColor, QFont, QPainter, QBrush, QPen, QLinearGradient, QAction, QIcon,
-    QKeySequence, QPixmap, QCursor, QGuiApplication
+    QKeySequence, QPixmap, QCursor, QGuiApplication, QDesktopServices
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QLineEdit, QPushButton, QTextEdit, QScrollArea, QFrame,
     QFileDialog, QSystemTrayIcon, QMenu, QGraphicsDropShadowEffect,
-    QDialog, QComboBox, QCheckBox, QProgressBar, QMessageBox
+    QDialog, QComboBox, QCheckBox, QProgressBar, QMessageBox, QTabWidget
 )
 
 from lexi_win_actions import SystemActionEngineWindows, PhoneMirrorManagerWindows
@@ -154,6 +157,97 @@ class StreamWorker(QThread):
             self.finished.emit("".join(full_text))
         except Exception as e:
             self.error.emit(str(e))
+
+
+class WinGlobalHotkeyListener(QThread):
+    """
+    Background daemon thread listening for global Windows system hotkeys:
+    - Win + 3 / Ctrl + Shift + C -> Toggle Floating Copilot
+    - Win + Shift + S / Ctrl + Shift + S -> Region Snip
+    - F1 / Ctrl + Shift + H -> User Guide & Diagnostics
+    - Ctrl + Shift + B -> Toggle Side Panel
+    """
+    hotkey_copilot = Signal()
+    hotkey_snip = Signal()
+    hotkey_guide = Signal()
+    hotkey_side = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._running = True
+        self._thread_id = None
+
+    def run(self):
+        if sys.platform != "win32":
+            return
+
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+
+            self._thread_id = kernel32.GetCurrentThreadId()
+
+            MOD_ALT = 0x0001
+            MOD_CONTROL = 0x0002
+            MOD_SHIFT = 0x0004
+            MOD_WIN = 0x0008
+            MOD_NOREPEAT = 0x4000
+
+            HK_COPILOT_WIN = 101   # Win + 3
+            HK_COPILOT_CTRL = 102  # Ctrl + Shift + C
+            HK_SNIP_WIN = 103      # Win + Shift + S
+            HK_SNIP_CTRL = 104     # Ctrl + Shift + S
+            HK_GUIDE_F1 = 105      # F1
+            HK_GUIDE_CTRL = 106    # Ctrl + Shift + H
+            HK_SIDE_CTRL = 107     # Ctrl + Shift + B
+
+            # Register hotkeys
+            user32.RegisterHotKey(None, HK_COPILOT_WIN, MOD_WIN | MOD_NOREPEAT, 0x33)           # '3'
+            user32.RegisterHotKey(None, HK_COPILOT_CTRL, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 0x43) # 'C'
+            user32.RegisterHotKey(None, HK_SNIP_WIN, MOD_WIN | MOD_SHIFT | MOD_NOREPEAT, 0x53)   # 'S'
+            user32.RegisterHotKey(None, HK_SNIP_CTRL, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 0x53)  # 'S'
+            user32.RegisterHotKey(None, HK_GUIDE_F1, MOD_NOREPEAT, 0x70)                       # VK_F1
+            user32.RegisterHotKey(None, HK_GUIDE_CTRL, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 0x48) # 'H'
+            user32.RegisterHotKey(None, HK_SIDE_CTRL, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, 0x42)  # 'B'
+
+            msg = wintypes.MSG()
+            while self._running:
+                res = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+                if res == 0 or res == -1:
+                    break
+
+                if msg.message == 0x0312:  # WM_HOTKEY
+                    hk_id = msg.wParam
+                    if hk_id in (HK_COPILOT_WIN, HK_COPILOT_CTRL):
+                        self.hotkey_copilot.emit()
+                    elif hk_id in (HK_SNIP_WIN, HK_SNIP_CTRL):
+                        self.hotkey_snip.emit()
+                    elif hk_id in (HK_GUIDE_F1, HK_GUIDE_CTRL):
+                        self.hotkey_guide.emit()
+                    elif hk_id == HK_SIDE_CTRL:
+                        self.hotkey_side.emit()
+
+                user32.TranslateMessage(ctypes.byref(msg))
+                user32.DispatchMessageW(ctypes.byref(msg))
+
+            for hid in (HK_COPILOT_WIN, HK_COPILOT_CTRL, HK_SNIP_WIN, HK_SNIP_CTRL, HK_GUIDE_F1, HK_GUIDE_CTRL, HK_SIDE_CTRL):
+                user32.UnregisterHotKey(None, hid)
+
+        except Exception:
+            pass
+
+    def stop(self):
+        self._running = False
+        if sys.platform == "win32" and self._thread_id:
+            try:
+                import ctypes
+                ctypes.windll.user32.PostThreadMessageW(self._thread_id, 0x0012, 0, 0)  # WM_QUIT
+            except Exception:
+                pass
+        self.wait(1000)
+
 
 class LexiSnipOverlay(QWidget):
     """Interactive transparent screen snip overlay with rubber-band crosshair."""
@@ -506,14 +600,357 @@ class LexiBeamDialog(QDialog):
         self.drop_server.beam_file_to_peer(fpath, target["ip"])
         QMessageBox.information(self, "Beam Started", f"Beaming '{os.path.basename(fpath)}' directly to {target['hostname']} at wire speed!")
 
+
+class LexiGuideDialog(QDialog):
+    """
+    Comprehensive User Guide, Cheat Sheet, and System Self-Test Diagnostics for Windows.
+    Empowers users to easily discover and operate all Linux-parity features on Windows.
+    """
+    def __init__(self, actions: SystemActionEngineWindows, parent=None):
+        super().__init__(parent)
+        self.actions = actions
+        self.setWindowTitle("✨ Lexi Copilot — User Guide & Diagnostics")
+        self.resize(720, 600)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #0b0d14;
+                color: #e2e8f0;
+                font-family: 'Segoe UI', system-ui, sans-serif;
+            }
+            QTabWidget::pane {
+                border: 1px solid rgba(168, 85, 247, 0.25);
+                border-radius: 10px;
+                background-color: #0f121d;
+                padding: 10px;
+            }
+            QTabBar::tab {
+                background: rgba(255, 255, 255, 0.05);
+                color: #94a3b8;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                padding: 8px 14px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-size: 12px;
+                font-weight: bold;
+                margin-right: 4px;
+            }
+            QTabBar::tab:selected {
+                background: rgba(168, 85, 247, 0.22);
+                color: #ffffff;
+                border-bottom: 2px solid #a855f7;
+            }
+            QTextEdit {
+                background: #090b10;
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.07);
+                border-radius: 8px;
+                padding: 12px;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                color: #f1f5f9;
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                border-radius: 8px;
+                padding: 7px 14px;
+                font-size: 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: rgba(168, 85, 247, 0.25);
+                color: #ffffff;
+                border-color: rgba(168, 85, 247, 0.5);
+            }
+            QPushButton#primaryAction {
+                background: #a855f7;
+                color: #09090b;
+                border: 1px solid #c084fc;
+            }
+            QPushButton#primaryAction:hover {
+                background: #c084fc;
+            }
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+
+        # Header Title
+        hdr = QHBoxLayout()
+        title_box = QVBoxLayout()
+        title = QLabel("✨ Lexi Copilot — Complete User Guide")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        subtitle = QLabel("Hardware-Accelerated Dynamic Island, 60 FPS Phone Mirror & ShareMe on Windows")
+        subtitle.setStyleSheet("font-size: 12px; color: #a1a1aa;")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        hdr.addLayout(title_box)
+        hdr.addStretch()
+        layout.addLayout(hdr)
+
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        self.init_quickstart_tab()
+        self.init_mirror_tab()
+        self.init_beam_tab()
+        self.init_commands_tab()
+        self.init_diagnostics_tab()
+
+        # Bottom Bar
+        btn_box = QHBoxLayout()
+        btn_box.addStretch()
+        done_btn = QPushButton("Done")
+        done_btn.clicked.connect(self.accept)
+        btn_box.addWidget(done_btn)
+        layout.addLayout(btn_box)
+
+    def init_quickstart_tab(self):
+        tab = QWidget()
+        v = QVBoxLayout(tab)
+        v.setSpacing(10)
+
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setHtml("""
+            <div style="font-family: 'Segoe UI', sans-serif;">
+                <h3 style="color: #c084fc; margin-top: 0;">🏝️ 1. The Dynamic Island Notch</h3>
+                <p>Lexi floats permanently as an OLED pure black capsule notch at the top-center of your screen, keeping your workspace 100% unobstructed.</p>
+                <ul>
+                    <li><b>Hover to Reveal Actions:</b> Move your cursor over the notch to expand instant tools: <code>💬 Copilot</code>, <code>⚡ Beam</code>, <code>📱 Phone</code>, <code>◨ Side</code>, <code>✂️ Snip</code>, <code>🐾 Pet</code>, and <code>⚙️ Settings</code>.</li>
+                    <li><b>Live Media Player:</b> When playing Spotify or web music, the island expands to show current song info with live <code>⏮ ⏯ ⏭</code> controls.</li>
+                    <li><b>Live Download Progress:</b> Monitors active downloads (.crdownload, .part) and displays live transfer throughput (MB/s).</li>
+                    <li><b>Desktop Pet Mode:</b> Click <code>🐾 Pet</code> to detach Lexi into an animated desktop mascot. Double-click the pet to dock back!</li>
+                </ul>
+
+                <h3 style="color: #c084fc;">⌨️ 2. Global Windows Shortcuts</h3>
+                <table border="0" cellpadding="6" style="color: #cbd5e1; font-size: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <tr><td><b style="color: #a855f7;">Win + 3</b> or <b>Ctrl + Shift + C</b></td><td>Toggle Floating Vision Copilot anywhere</td></tr>
+                    <tr><td><b style="color: #a855f7;">Win + Shift + S</b> or <b>Ctrl + Shift + S</b></td><td>Interactive Screen Region Snip</td></tr>
+                    <tr><td><b style="color: #a855f7;">Ctrl + Shift + B</b></td><td>Toggle Right Vertical Side Panel Mode</td></tr>
+                    <tr><td><b style="color: #a855f7;">Ctrl + ,</b></td><td>Open AI Provider Settings Modal</td></tr>
+                    <tr><td><b style="color: #a855f7;">F1</b> or <b>Ctrl + Shift + H</b></td><td>Open this User Guide & Diagnostics</td></tr>
+                    <tr><td><b style="color: #a855f7;">Esc</b></td><td>Dismiss Copilot back into top island</td></tr>
+                </table>
+            </div>
+        """)
+        v.addWidget(txt)
+        self.tabs.addTab(tab, "🚀 Quick Start & Shortcuts")
+
+    def init_mirror_tab(self):
+        tab = QWidget()
+        v = QVBoxLayout(tab)
+        v.setSpacing(10)
+
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setHtml("""
+            <div style="font-family: 'Segoe UI', sans-serif;">
+                <h3 style="color: #4ade80; margin-top: 0;">📱 60 FPS Wireless Phone Mirroring (scrcpy)</h3>
+                <p>Control your Android phone directly from Windows with zero-lag 60 FPS screen mirroring, clipboard sync, and drag-and-drop file transfer.</p>
+
+                <h4 style="color: #f1f5f9;">Quick 30-Second Setup:</h4>
+                <ol>
+                    <li>Connect your Android phone to this PC via USB cable.</li>
+                    <li>On your phone, enable <b>USB Debugging</b> in Developer Options.<br>
+                        <i>(To unlock Developer Options: Go to Phone Settings → About Phone → Tap 'Build Number' 7 times).</i></li>
+                    <li>When prompted on your phone screen, check <b>"Always allow from this computer"</b> and tap Allow.</li>
+                    <li>Click <b>Launch Phone Mirror</b> below.</li>
+                    <li>To go wireless: Click <b>Enable Wireless ADB</b> below, then unplug your USB cable!</li>
+                </ol>
+            </div>
+        """)
+        v.addWidget(txt)
+
+        btn_row = QHBoxLayout()
+        launch_btn = QPushButton("📱 Launch Phone Mirror")
+        launch_btn.setObjectName("primaryAction")
+        launch_btn.clicked.connect(self.launch_mirror)
+        btn_row.addWidget(launch_btn)
+
+        wireless_btn = QPushButton("📶 Enable Wireless ADB (Port 5555)")
+        wireless_btn.clicked.connect(self.enable_wireless)
+        btn_row.addWidget(wireless_btn)
+        btn_row.addStretch()
+
+        v.addLayout(btn_row)
+        self.tabs.addTab(tab, "📱 Phone Mirror (scrcpy)")
+
+    def init_beam_tab(self):
+        tab = QWidget()
+        v = QVBoxLayout(tab)
+        v.setSpacing(10)
+
+        diag = self.actions.run_system_diagnostics()
+        local_ip = diag.get("network", {}).get("ip", "127.0.0.1")
+        web_url = f"http://{local_ip}:7890"
+
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setHtml(f"""
+            <div style="font-family: 'Segoe UI', sans-serif;">
+                <h3 style="color: #38bdf8; margin-top: 0;">⚡ Lexi Beam — Local Wi-Fi AirDrop</h3>
+                <p>Instant peer-to-peer file transfer across Windows, Linux, Android, iPhone, and Mac at raw Wi-Fi speed (100–300 MB/s). No cloud, no size limits, 100% private.</p>
+
+                <h4 style="color: #f1f5f9;">Two Ways to Share:</h4>
+                <ul>
+                    <li><b>PC to Nearby Devices:</b> Click <code>⚡ Beam</code> on the island or Copilot card to choose a file or drag-and-drop.</li>
+                    <li><b>Phone/Device to PC:</b> Open the local web portal on any phone or laptop on your Wi-Fi:</li>
+                </ul>
+                <div style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 10px 14px; margin: 8px 0;">
+                    <span style="font-size: 11px; color: #94a3b8;">Local Wi-Fi Drop Portal URL:</span><br>
+                    <b style="font-size: 15px; color: #38bdf8;">{web_url}</b>
+                </div>
+                <p style="font-size: 12px; color: #94a3b8;">Received files are placed directly into your Windows <code>Downloads</code> folder.</p>
+            </div>
+        """)
+        v.addWidget(txt)
+
+        btn_row = QHBoxLayout()
+        open_web_btn = QPushButton("🌐 Open Web Drop Portal")
+        open_web_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(web_url)))
+        btn_row.addWidget(open_web_btn)
+
+        copy_btn = QPushButton("📋 Copy Web Link")
+        copy_btn.clicked.connect(lambda: self.copy_link(web_url, copy_btn))
+        btn_row.addWidget(copy_btn)
+        btn_row.addStretch()
+
+        v.addLayout(btn_row)
+        self.tabs.addTab(tab, "⚡ Lexi Beam (AirDrop)")
+
+    def init_commands_tab(self):
+        tab = QWidget()
+        v = QVBoxLayout(tab)
+        v.setSpacing(10)
+
+        txt = QTextEdit()
+        txt.setReadOnly(True)
+        txt.setHtml("""
+            <div style="font-family: 'Segoe UI', sans-serif;">
+                <h3 style="color: #f59e0b; margin-top: 0;">🛠️ Dev Tools & Natural Language Commands</h3>
+                <p>Type any of these commands directly into the Copilot chat box for instant execution:</p>
+
+                <table border="0" cellpadding="6" style="color: #cbd5e1; font-size: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                    <tr style="color: #a855f7;"><th>Command</th><th>Action</th></tr>
+                    <tr><td><code>port 3000</code> or <code>inspect port 8080</code></td><td>Shows PID and executable listening on that port</td></tr>
+                    <tr><td><code>kill port 3000</code></td><td>Gracefully frees the port by killing the blocking task</td></tr>
+                    <tr><td><code>top mem</code> or <code>top processes</code></td><td>Lists highest memory/CPU consuming tasks</td></tr>
+                    <tr><td><code>kill process &lt;pid&gt;</code></td><td>Terminates runaway tasks (system shielded)</td></tr>
+                    <tr><td><code>turn on dnd</code> / <code>mute notifications</code></td><td>Suppresses system notifications</td></tr>
+                    <tr><td><code>note &lt;text&gt;</code></td><td>Appends an instant scratch note to markdown vault</td></tr>
+                    <tr><td><code>list notes</code> / <code>clear notes</code></td><td>Views or clears saved notes</td></tr>
+                    <tr><td><code>volume 80%</code> / <code>mute</code></td><td>Controls Windows system audio volume</td></tr>
+                    <tr><td><code>play</code> / <code>pause</code> / <code>next</code></td><td>Media controls for Spotify / Music</td></tr>
+                    <tr><td><code>/provider &lt;name&gt;</code></td><td>Switch provider (<code>deepseek</code>, <code>groq</code>, <code>ollama</code>, <code>openai</code>)</td></tr>
+                    <tr><td><code>/model &lt;name&gt;</code></td><td>Switch active AI model on the fly</td></tr>
+                    <tr><td><code>/clear</code></td><td>Clear conversation history</td></tr>
+                </table>
+            </div>
+        """)
+        v.addWidget(txt)
+        self.tabs.addTab(tab, "🛠️ Commands & Dev Tools")
+
+    def init_diagnostics_tab(self):
+        tab = QWidget()
+        v = QVBoxLayout(tab)
+        v.setSpacing(10)
+
+        desc = QLabel("🩺 Real-Time System Parity Diagnostics")
+        desc.setStyleSheet("font-size: 14px; font-weight: bold; color: #c084fc;")
+        v.addWidget(desc)
+
+        self.diag_display = QTextEdit()
+        self.diag_display.setReadOnly(True)
+        v.addWidget(self.diag_display)
+
+        btn_row = QHBoxLayout()
+        rerun_btn = QPushButton("🔄 Re-Run Diagnostics")
+        rerun_btn.clicked.connect(self.run_diagnostics)
+        btn_row.addWidget(rerun_btn)
+
+        cfg_btn = QPushButton("⚙️ Configure AI Provider")
+        cfg_btn.clicked.connect(self.open_settings_from_diag)
+        btn_row.addWidget(cfg_btn)
+        btn_row.addStretch()
+
+        v.addLayout(btn_row)
+        self.tabs.addTab(tab, "🩺 Diagnostics & Self-Test")
+
+        self.run_diagnostics()
+
+    def run_diagnostics(self):
+        diag = self.actions.run_system_diagnostics()
+        html = ["<div style=\"font-family: 'Segoe UI', sans-serif;\">"]
+
+        # Scrcpy status
+        scrcpy = diag.get("scrcpy", {})
+        if scrcpy.get("installed"):
+            html.append(f"<p>✅ <b>scrcpy Phone Mirror:</b> Installed at <code>{scrcpy.get('path')}</code></p>")
+        else:
+            html.append(f"<p>⚠️ <b>scrcpy Phone Mirror:</b> Not Found<br><span style='color: #fb923c; font-size: 12px;'>Fix: {scrcpy.get('fix')}</span></p>")
+
+        # ADB status
+        adb = diag.get("adb", {})
+        if adb.get("installed"):
+            devs = adb.get("devices", [])
+            dev_str = ", ".join(devs) if devs else "None currently attached"
+            html.append(f"<p>✅ <b>Android ADB:</b> Installed at <code>{adb.get('path')}</code><br><span style='color: #94a3b8; font-size: 12px;'>Connected Devices: <b>{dev_str}</b></span></p>")
+        else:
+            html.append(f"<p>⚠️ <b>Android ADB:</b> Not Found<br><span style='color: #fb923c; font-size: 12px;'>Fix: {adb.get('fix')}</span></p>")
+
+        # Network status
+        net = diag.get("network", {})
+        ip = net.get("ip", "127.0.0.1")
+        html.append(f"<p>✅ <b>Local Network & ShareMe:</b> IP <code>{ip}</code> · Port <code>{net.get('shareme_port', 7890)}</code><br><span style='color: #94a3b8; font-size: 12px;'>LAN Web Portal: <b>http://{ip}:{net.get('shareme_port', 7890)}</b></span></p>")
+
+        # AI status
+        ai = diag.get("ai", {})
+        prov = ai.get("provider", "deepseek").upper()
+        mod = ai.get("model", "deepseek-flash")
+        has_key = ai.get("has_key", False)
+        if has_key:
+            html.append(f"<p>✅ <b>AI Provider:</b> {prov} · Model: <code>{mod}</code> · API Key Configured</p>")
+        else:
+            html.append(f"<p>⚠️ <b>AI Provider:</b> {prov} · Model: <code>{mod}</code> · <span style='color: #ef4444;'>API Key Missing</span><br><span style='color: #fb923c; font-size: 12px;'>Click 'Configure AI Provider' below to add your DeepSeek, Groq, or OpenAI key.</span></p>")
+
+        # Summary badge
+        if diag.get("all_ok"):
+            html.append("<div style='background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; border-radius: 8px; padding: 10px; margin-top: 10px;'><b style='color: #4ade80;'>🎉 All Systems Operational: Full Linux Parity Active on Windows!</b></div>")
+        else:
+            html.append("<div style='background: rgba(245, 158, 11, 0.15); border: 1px solid #f59e0b; border-radius: 8px; padding: 10px; margin-top: 10px;'><b style='color: #fbbf24;'>💡 Ready to use with core features! Follow the hints above for optional tools.</b></div>")
+
+        html.append("</div>")
+        self.diag_display.setHtml("".join(html))
+
+    def launch_mirror(self):
+        res = self.actions.start_phone_mirror()
+        QMessageBox.information(self, "Phone Mirror", res.get("message", "Triggered phone mirror."))
+
+    def enable_wireless(self):
+        res = self.actions.enable_wireless_adb()
+        QMessageBox.information(self, "Wireless ADB", res.get("message", "Configured wireless mode."))
+
+    def copy_link(self, text: str, btn: QPushButton):
+        QApplication.clipboard().setText(text)
+        btn.setText("✓ Copied!")
+        QTimer.singleShot(2000, lambda: btn.setText("📋 Copy Web Link"))
+
+    def open_settings_from_diag(self):
+        LexiSettingsDialog(self).exec()
+        self.run_diagnostics()
+
+
 class LexiCopilotCard(QWidget):
     """Floating multimodal AI copilot card with attachments, reasoning tokens, and intent engine."""
-    def __init__(self, actions: SystemActionEngineWindows, drop_server: LexiWinDropServer, on_request_snip, on_request_beam, parent=None):
+    def __init__(self, actions: SystemActionEngineWindows, drop_server: LexiWinDropServer, on_request_snip, on_request_beam, on_request_guide=None, parent=None):
         super().__init__(parent)
         self.actions = actions
         self.drop_server = drop_server
         self.on_request_snip = on_request_snip
         self.on_request_beam = on_request_beam
+        self.on_request_guide = on_request_guide
         self.config = load_config()
 
         self.current_worker = None
@@ -546,6 +983,7 @@ class LexiCopilotCard(QWidget):
         action_strip.addWidget(make_chip("📱 Phone", self.trigger_phone_mirror))
         action_strip.addWidget(make_chip("📡 Beam", self.on_request_beam))
         action_strip.addWidget(make_chip("✂️ Snip", self.on_request_snip))
+        action_strip.addWidget(make_chip("❓ Guide", self.open_guide))
         action_strip.addWidget(make_chip("🧹 Clear", self.clear_chat))
         action_strip.addWidget(make_chip("Explain", lambda: self.quick_prompt("Explain what is on my screen in detail.")))
         action_strip.addWidget(make_chip("Fix", lambda: self.quick_prompt("Find any error or bug on my screen and fix it.")))
@@ -571,6 +1009,25 @@ class LexiCopilotCard(QWidget):
             padding: 10px;
             font-family: 'Segoe UI', sans-serif;
             font-size: 13px;
+        """)
+        self.chat_display.setHtml("""
+            <div style="font-family: 'Segoe UI', sans-serif;">
+                <h3 style="color: #c084fc; margin-top: 0; margin-bottom: 6px;">✨ Welcome to Lexi Copilot</h3>
+                <p style="color: #94a3b8; font-size: 12px; margin-bottom: 8px;">
+                    100% Linux parity on Windows: Dynamic Island, 60 FPS Phone Mirror, AirDrop & Dev Tools.
+                </p>
+                <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px;">
+                    <b style="color: #f1f5f9; font-size: 12px;">⚡ Key Shortcuts & Features:</b><br>
+                    • <code>Win + 3</code> or <code>Ctrl+Shift+C</code> — Toggle this Copilot window<br>
+                    • <code>Win + Shift + S</code> — Snip screen region & ask questions<br>
+                    • <code>Ctrl + Shift + B</code> — Dock to right screen edge as Side Panel<br>
+                    • <code>F1</code> — Interactive User Guide, Cheat Sheet & Diagnostics<br>
+                    • <i>Hover Top Island</i> — Instant tools, media controls, and desktop pet
+                </div>
+                <div style="color: #cbd5e1; font-size: 12px;">
+                    💡 <i>Try typing:</i> <code>mirror phone</code>, <code>kill port 3000</code>, <code>top mem</code>, or <code>/guide</code>.
+                </div>
+            </div>
         """)
         layout.addWidget(self.chat_display)
 
@@ -715,6 +1172,12 @@ class LexiCopilotCard(QWidget):
         self.current_worker.error.connect(self.on_error)
         self.current_worker.start()
 
+    def open_guide(self):
+        if self.on_request_guide:
+            self.on_request_guide()
+        else:
+            LexiGuideDialog(self.actions, self).exec()
+
     def handle_slash_command(self, cmd: str):
         parts = cmd.split(maxsplit=1)
         c = parts[0].lower()
@@ -726,6 +1189,8 @@ class LexiCopilotCard(QWidget):
             self.on_request_beam()
         elif c == "/snip":
             self.on_request_snip()
+        elif c in ("/guide", "/help", "/diag"):
+            self.open_guide()
         elif c == "/clear":
             self.clear_chat()
         elif c == "/settings":
@@ -745,6 +1210,7 @@ class LexiCopilotCard(QWidget):
         else:
             self.chat_display.append(
                 "<i>Available Slash Commands:</i><br>"
+                "• <b>/guide</b> — Open User Guide & Diagnostics<br>"
                 "• <b>/phone</b> — Launch phone mirror<br>"
                 "• <b>/beam</b> — Open ShareMe P2P radar<br>"
                 "• <b>/snip</b> — Capture screen region<br>"
@@ -756,6 +1222,11 @@ class LexiCopilotCard(QWidget):
 
     def handle_system_intent(self, text: str) -> Tuple[bool, str]:
         t = text.lower().strip()
+        # Guide & Diagnostics
+        if t in ["guide", "help", "how to use", "cheat sheet", "diagnostics", "self test", "selftest"]:
+            self.open_guide()
+            return True, "📖 Opened User Guide & Diagnostics."
+
         # Phone mirror
         if any(w in t for w in ["mirror phone", "phone mirror", "screen mirror", "start scrcpy", "connect phone"]):
             res = self.actions.start_phone_mirror()
@@ -829,10 +1300,11 @@ class LexiCopilotWindow(QMainWindow):
     Multimodal Vision Copilot Window for Windows:
     Floating center card or docked vertical side panel with acrylic glass styling.
     """
-    def __init__(self, actions, drop_server, on_request_snip, on_request_beam, parent=None):
+    def __init__(self, actions, drop_server, on_request_snip, on_request_beam, on_request_guide=None, parent=None):
         super().__init__(parent)
         self.actions = actions
         self.drop_server = drop_server
+        self.on_request_guide = on_request_guide
         self.side_panel_mode = False
 
         self.setWindowFlags(
@@ -866,6 +1338,21 @@ class LexiCopilotWindow(QMainWindow):
         hdr.addWidget(title_lbl)
 
         hdr.addStretch()
+
+        guide_btn = QPushButton("❓ Guide")
+        guide_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                padding: 2px 8px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background: rgba(168, 85, 247, 0.25); color: #fff; }
+        """)
+        guide_btn.clicked.connect(self.open_guide)
+        hdr.addWidget(guide_btn)
 
         self.side_btn = QPushButton("◨ Side")
         self.side_btn.setStyleSheet("""
@@ -902,12 +1389,20 @@ class LexiCopilotWindow(QMainWindow):
             self.actions,
             self.drop_server,
             on_request_snip=on_request_snip,
-            on_request_beam=on_request_beam
+            on_request_beam=on_request_beam,
+            on_request_guide=on_request_guide
         )
         layout.addWidget(self.card)
 
         self.resize(520, 500)
         self.reposition_center()
+
+    def open_guide(self):
+        if self.on_request_guide:
+            self.on_request_guide()
+        else:
+            LexiGuideDialog(self.actions, self).exec()
+
 
     def reposition_center(self):
         screen = QApplication.primaryScreen().geometry()
@@ -954,7 +1449,8 @@ class LexiDynamicIslandWin(QMainWindow):
             self.actions,
             self.drop_server,
             on_request_snip=self.start_region_snip,
-            on_request_beam=self.show_beam_dialog
+            on_request_beam=self.show_beam_dialog,
+            on_request_guide=self.open_guide
         )
 
         self.pet_widget = LexiPetWidget(on_activate=self.expand_copilot, on_dock=self.show_island)
@@ -967,6 +1463,10 @@ class LexiDynamicIslandWin(QMainWindow):
         self.status_timer = QTimer(self)
         self.status_timer.timeout.connect(self.poll_system_status)
         self.status_timer.start(2000)
+
+        # System Tray & Global Hotkeys
+        self.init_tray()
+        self.init_hotkeys()
 
     def init_ui(self):
         self.setWindowFlags(
@@ -1093,6 +1593,7 @@ class LexiDynamicIslandWin(QMainWindow):
         self.actions_layout.addWidget(make_pill_chip("◨ Side", self.toggle_side_panel))
         self.actions_layout.addWidget(make_pill_chip("✂️ Snip", self.start_region_snip))
         self.actions_layout.addWidget(make_pill_chip("🐾 Pet", self.detach_pet))
+        self.actions_layout.addWidget(make_pill_chip("❓ Guide", self.open_guide))
         self.actions_layout.addWidget(make_pill_chip("⚙️", self.open_settings))
 
         self.actions_container.setVisible(False)
@@ -1142,7 +1643,7 @@ class LexiDynamicIslandWin(QMainWindow):
         self.reposition_top()
 
     def expand_to_actions(self):
-        self.resize(620, 38)
+        self.resize(700, 38)
         self.reposition_top()
 
     def reposition_top(self):
@@ -1155,6 +1656,15 @@ class LexiDynamicIslandWin(QMainWindow):
         self.copilot_win.show()
         self.copilot_win.raise_()
         self.copilot_win.activateWindow()
+
+    def toggle_copilot(self):
+        if self.copilot_win.isVisible():
+            self.copilot_win.hide()
+        else:
+            self.expand_copilot()
+
+    def open_guide(self):
+        LexiGuideDialog(self.actions, self).exec()
 
     def toggle_side_panel(self):
         self.copilot_win.show()
@@ -1237,6 +1747,103 @@ class LexiDynamicIslandWin(QMainWindow):
         self.expand_copilot()
         msg = f"✓ <b>Received '{filename}'!</b><br>Saved to: <code>{dest_path}</code><br>"
         self.copilot_win.card.chat_display.append(msg)
+
+    def init_tray(self):
+        self.tray = QSystemTrayIcon(self)
+        app_dir = Path(__file__).parent
+        avatar_path = app_dir / "shakeel_chibi.png"
+        if avatar_path.exists():
+            self.tray.setIcon(QIcon(str(avatar_path)))
+        else:
+            pix = QPixmap(32, 32)
+            pix.fill(QColor(168, 85, 247))
+            self.tray.setIcon(QIcon(pix))
+
+        self.tray.setToolTip("Lexi Copilot — Dynamic Island & AirDrop")
+
+        menu = QMenu()
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #0f121d;
+                color: #e2e8f0;
+                border: 1px solid rgba(168, 85, 247, 0.3);
+                border-radius: 8px;
+                padding: 4px;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 12px;
+            }
+            QMenu::item {
+                padding: 6px 20px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: rgba(168, 85, 247, 0.25);
+                color: #ffffff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: rgba(255, 255, 255, 0.1);
+                margin: 4px 8px;
+            }
+        """)
+
+        act_copilot = menu.addAction("✨ Open Copilot (Win+3)")
+        act_copilot.triggered.connect(self.expand_copilot)
+
+        act_guide = menu.addAction("❓ User Guide & Diagnostics (F1)")
+        act_guide.triggered.connect(self.open_guide)
+
+        menu.addSeparator()
+
+        act_phone = menu.addAction("📱 60 FPS Phone Mirror")
+        act_phone.triggered.connect(self.trigger_phone_mirror)
+
+        act_beam = menu.addAction("⚡ Lexi Beam (AirDrop)")
+        act_beam.triggered.connect(self.show_beam_dialog)
+
+        act_snip = menu.addAction("✂️ Region Snip (Win+Shift+S)")
+        act_snip.triggered.connect(self.start_region_snip)
+
+        act_side = menu.addAction("◨ Side Panel Mode")
+        act_side.triggered.connect(self.toggle_side_panel)
+
+        act_pet = menu.addAction("🐾 Desktop Pet Mode")
+        act_pet.triggered.connect(self.detach_pet)
+
+        act_settings = menu.addAction("⚙️ AI Provider Settings")
+        act_settings.triggered.connect(self.open_settings)
+
+        menu.addSeparator()
+
+        act_exit = menu.addAction("✕ Quit Lexi")
+        act_exit.triggered.connect(self.quit_app)
+
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self.on_tray_activated)
+        self.tray.show()
+
+    def on_tray_activated(self, reason):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
+            self.toggle_copilot()
+
+    def init_hotkeys(self):
+        self.hotkey_listener = WinGlobalHotkeyListener(self)
+        self.hotkey_listener.hotkey_copilot.connect(self.toggle_copilot)
+        self.hotkey_listener.hotkey_snip.connect(self.start_region_snip)
+        self.hotkey_listener.hotkey_guide.connect(self.open_guide)
+        self.hotkey_listener.hotkey_side.connect(self.toggle_side_panel)
+        self.hotkey_listener.start()
+
+    def quit_app(self):
+        if hasattr(self, 'hotkey_listener') and self.hotkey_listener:
+            self.hotkey_listener.stop()
+        if hasattr(self, 'drop_server') and self.drop_server:
+            self.drop_server.stop()
+        QApplication.quit()
+
+    def closeEvent(self, event):
+        self.quit_app()
+        super().closeEvent(event)
 
 
 def main():
