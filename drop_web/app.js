@@ -409,15 +409,15 @@ function renderIncomingTransferCard(file) {
   card.innerHTML = `
     <div class="transfer-header">
       <div class="file-info">
-        <span class="file-glyph">📥</span>
+        <span class="file-glyph">⚡</span>
         <div class="file-meta">
           <span class="file-name" title="${file.name}">${file.name}</span>
-          <span class="file-size">${formatSize(file.size)} · From Shakeel's Linux</span>
+          <span class="file-size">${formatSize(file.size)} · 🟢 Direct Local Wi-Fi (0 MB Internet)</span>
         </div>
       </div>
       <div class="transfer-stats">
         <a href="/api/download/${file.token}" class="btn-download-action" download="${file.name}">
-          ⚡ Download
+          ⚡ Save to Computer
         </a>
       </div>
     </div>
