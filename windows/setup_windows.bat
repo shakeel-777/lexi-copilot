@@ -143,6 +143,16 @@ if not exist "%CONFIG_PATH%" (
         set /p "USER_KEY=Enter your DeepSeek API Key (sk-...): "
     )
     
+    if defined USER_KEY (
+        set "KEY_PREFIX=!USER_KEY:~0,4!"
+        if /i "!KEY_PREFIX!"=="gsk_" (
+            set "PROV=groq"
+            set "API_BASE=https://api.groq.com/openai/v1"
+            set "MODEL=llama-3.3-70b-versatile"
+            echo [i] Auto-detected Groq key: provider set to Groq (Llama 3.3 70B)
+        )
+    )
+    
     (
         echo {
         echo   "provider": "!PROV!",

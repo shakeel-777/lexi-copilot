@@ -106,9 +106,20 @@ def save_config(cfg: Dict[str, Any]):
 
 def get_provider_info(cfg: Dict[str, Any]) -> Dict[str, Any]:
     prov = (cfg.get("provider") or "deepseek").lower().strip()
+    raw_key = (cfg.get("api_key") or "").strip()
+    groq_key = (cfg.get("groq_api_key") or "").strip()
+
+    # Intelligent auto-detection: if a Groq key (gsk_...) is provided, auto-switch to Groq
+    if (raw_key.startswith("gsk_") or groq_key.startswith("gsk_")) and prov not in ("groq", "ollama"):
+        prov = "groq"
+    elif raw_key.startswith("sk-or-") and prov not in ("openrouter", "ollama"):
+        prov = "openrouter"
+    elif raw_key.startswith("sk-proj-") and prov not in ("openai", "ollama"):
+        prov = "openai"
+
     if prov == "groq":
         base = cfg.get("groq_api_base") or "https://api.groq.com/openai/v1"
-        key = cfg.get("groq_api_key") or cfg.get("api_key") or ""
+        key = cfg.get("groq_api_key") or raw_key
         model = cfg.get("groq_model") or "llama-3.3-70b-versatile"
     elif prov == "ollama":
         base = cfg.get("ollama_api_base") or "http://localhost:11434/v1"
@@ -116,20 +127,20 @@ def get_provider_info(cfg: Dict[str, Any]) -> Dict[str, Any]:
         model = cfg.get("ollama_model") or "llama3.2"
     elif prov == "openrouter":
         base = cfg.get("openrouter_api_base") or cfg.get("api_base") or "https://openrouter.ai/api/v1"
-        key = cfg.get("openrouter_api_key") or cfg.get("api_key") or ""
+        key = cfg.get("openrouter_api_key") or raw_key
         model = cfg.get("openrouter_model") or cfg.get("model") or "deepseek/deepseek-v4.1-flash"
     elif prov == "openai":
         base = cfg.get("openai_api_base") or cfg.get("api_base") or "https://api.openai.com/v1"
-        key = cfg.get("openai_api_key") or cfg.get("api_key") or ""
+        key = cfg.get("openai_api_key") or raw_key
         model = cfg.get("openai_model") or cfg.get("model") or "gpt-4o-mini"
     elif prov == "omniroute":
         base = cfg.get("omniroute_api_base") or "http://localhost:8000/v1"
-        key = cfg.get("omniroute_api_key") or cfg.get("api_key") or ""
+        key = cfg.get("omniroute_api_key") or raw_key
         model = cfg.get("omniroute_model") or cfg.get("model") or "deepseek/deepseek-chat"
     else:  # default deepseek
         prov = "deepseek"
         base = cfg.get("deepseek_api_base") or cfg.get("api_base") or "https://api.deepseek.com"
-        key = cfg.get("deepseek_api_key") or cfg.get("api_key") or ""
+        key = cfg.get("deepseek_api_key") or raw_key
         model = cfg.get("deepseek_model") or cfg.get("model") or "deepseek-flash"
 
     if "api.deepseek.com" in base and model in ("deepseek-chat", "deepseek-reasoner", "deepseek-v3"):
@@ -912,7 +923,29 @@ class LexiSettingsDialog(QDialog):
         btn_row.addWidget(self.save_btn)
         layout.addLayout(btn_row)
 
+        self.key_input.textChanged.connect(self.on_key_changed)
         self.on_prov_changed()
+
+    def on_key_changed(self, text: str):
+        val = text.strip()
+        if val.startswith("gsk_") and self.prov_combo.currentIndex() != 1:
+            self.prov_combo.blockSignals(True)
+            self.prov_combo.setCurrentIndex(1)
+            self.prov_combo.blockSignals(False)
+            self.base_input.setText("https://api.groq.com/openai/v1")
+            self.model_input.setText("llama-3.3-70b-versatile")
+        elif val.startswith("sk-or-") and self.prov_combo.currentIndex() != 3:
+            self.prov_combo.blockSignals(True)
+            self.prov_combo.setCurrentIndex(3)
+            self.prov_combo.blockSignals(False)
+            self.base_input.setText("https://openrouter.ai/api/v1")
+            self.model_input.setText("deepseek/deepseek-v4.1-flash")
+        elif val.startswith("sk-proj-") and self.prov_combo.currentIndex() != 4:
+            self.prov_combo.blockSignals(True)
+            self.prov_combo.setCurrentIndex(4)
+            self.prov_combo.blockSignals(False)
+            self.base_input.setText("https://api.openai.com/v1")
+            self.model_input.setText("gpt-4o-mini")
 
     def on_prov_changed(self):
         idx = self.prov_combo.currentIndex()
@@ -1004,13 +1037,21 @@ class LexiSettingsDialog(QDialog):
         idx = self.prov_combo.currentIndex()
         prov_map = {0: "deepseek", 1: "groq", 2: "ollama", 3: "openrouter", 4: "openai"}
         prov = prov_map.get(idx, "deepseek")
-        self.cfg["provider"] = prov
         self.cfg["phone_password"] = self.phone_pw_input.text().strip()
 
         base = self.base_input.text().strip()
         key = self.key_input.text().strip()
         model = self.model_input.text().strip()
 
+        # Enforce Groq auto-apply if key starts with gsk_
+        if key.startswith("gsk_") and prov not in ("groq", "ollama"):
+            prov = "groq"
+            if not base or "groq" not in base:
+                base = "https://api.groq.com/openai/v1"
+            if not model or model in ("deepseek-flash", "gpt-4o-mini"):
+                model = "llama-3.3-70b-versatile"
+
+        self.cfg["provider"] = prov
         self.cfg["api_base"] = base
         self.cfg["api_key"] = key
         self.cfg["model"] = model
@@ -1123,13 +1164,22 @@ class LexiBeamDialog(QDialog):
         fpath, _ = QFileDialog.getOpenFileName(self, "Select Movie or File to Beam")
         if not fpath:
             return
+        res = self.drop_server.stage_file_for_sharing(fpath)
         peers = list(self.drop_server.beacon.lan_peers.values())
-        if not peers:
-            QMessageBox.information(self, "Share via Web", f"No auto-discovered peer found. Tell your friend to open:\nhttp://{self.drop_server.local_ip}:{self.drop_server.port}\nin their browser!")
-            return
-        target = peers[0]
-        self.drop_server.beam_file_to_peer(fpath, target["ip"])
-        QMessageBox.information(self, "Beam Started", f"Beaming '{os.path.basename(fpath)}' directly to {target['hostname']} at wire speed!")
+        if peers:
+            target = peers[0]
+            self.drop_server.beam_file_to_peer(fpath, target["ip"])
+            QMessageBox.information(
+                self,
+                "⚡ Beam In Progress",
+                f"Beaming '{os.path.basename(fpath)}' directly to {target['hostname']} ({target['ip']}) at wire speed!\n\nAlso available via web browser at:\n{res.get('download_url')}"
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "✓ File Ready to Download",
+                f"'{os.path.basename(fpath)}' is staged and ready!\n\nTell any nearby device (phone/PC/Mac) on your Wi-Fi to open:\n{res.get('download_url')}\nor visit http://{self.drop_server.local_ip}:{self.drop_server.port}"
+            )
 
 
 class LexiGuideDialog(QDialog):
@@ -2056,6 +2106,14 @@ class LexiCopilotWindow(QMainWindow):
         self.set_side_panel_mode(not self.side_panel_mode)
 
 
+class BeamSignalBridge(QObject):
+    """Dispatches background thread networking events safely onto Qt's main GUI thread."""
+    incoming_request = Signal(dict)
+    transfer_progress = Signal(str, float, float)
+    transfer_completed = Signal(str, str)
+    download_event = Signal(dict)
+
+
 class LexiDynamicIslandWin(QMainWindow):
     """
     Lexi Dynamic Island for Windows:
@@ -2067,11 +2125,18 @@ class LexiDynamicIslandWin(QMainWindow):
         self.config = load_config()
         self.actions = SystemActionEngineWindows.get()
 
+        # Thread-Safe Signal Bridge
+        self.signal_bridge = BeamSignalBridge()
+        self.signal_bridge.incoming_request.connect(self.on_incoming_beam)
+        self.signal_bridge.transfer_progress.connect(self.on_beam_progress)
+        self.signal_bridge.transfer_completed.connect(self.on_beam_completed)
+        self.signal_bridge.download_event.connect(self.on_download_event)
+
         # ShareMe Beam Server
         self.drop_server = LexiWinDropServer()
-        self.drop_server.on_incoming_request = self.on_incoming_beam
-        self.drop_server.on_transfer_progress = self.on_beam_progress
-        self.drop_server.on_transfer_completed = self.on_beam_completed
+        self.drop_server.on_incoming_request = self.signal_bridge.incoming_request.emit
+        self.drop_server.on_transfer_progress = self.signal_bridge.transfer_progress.emit
+        self.drop_server.on_transfer_completed = self.signal_bridge.transfer_completed.emit
         self.drop_server.start()
 
         # Overlays & Secondary Windows
@@ -2098,9 +2163,15 @@ class LexiDynamicIslandWin(QMainWindow):
         self.init_ui()
         self.collapse_to_resting(animated=False)
 
+        # Keyboard shortcuts when Dynamic Island is focused/active
+        QShortcut(QKeySequence("Ctrl+Space"), self, self.expand_copilot)
+        QShortcut(QKeySequence("F9"), self, self.expand_copilot)
+        QShortcut(QKeySequence("Ctrl+D"), self, self.detach_pet)
+        QShortcut(QKeySequence("Ctrl+B"), self, self.toggle_side_panel)
+
         # Downloads Sentinel for Windows
         self.download_sentinel = DownloadSentinelWindows.get()
-        self.download_sentinel.add_listener(self.on_download_event)
+        self.download_sentinel.add_listener(self.signal_bridge.download_event.emit)
         self.download_sentinel.start()
 
         # Background Media & Download Watcher Timer

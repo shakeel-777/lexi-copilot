@@ -5,6 +5,16 @@
 #   irm https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/install.ps1 | iex
 # ==============================================================================
 
+[CmdletBinding()]
+param(
+    [string]$ApiKey = "",
+    [string]$Provider = "",
+    [string]$Model = "",
+    [switch]$Unattended,
+    [switch]$Force,
+    [switch]$NoLaunch
+)
+
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
@@ -174,49 +184,122 @@ if (!(Get-Command scrcpy -ErrorAction SilentlyContinue) -and !(Test-Path "$env:L
     Write-Host "      [OK] Found scrcpy phone mirror engine." -ForegroundColor Green
 }
 
+# 4c. Setup Windows Firewall Rules for ShareMe Beam LAN P2P
+Write-Host "      Configuring Windows Firewall rules for ShareMe Beam (Ports 7890, 7891)..." -ForegroundColor Yellow
+try {
+    New-NetFirewallRule -DisplayName "Lexi Beam TCP (Port 7890)" -Direction Inbound -LocalPort 7890 -Protocol TCP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+    New-NetFirewallRule -DisplayName "Lexi Beam UDP Beacon (Port 7891)" -Direction Inbound -LocalPort 7891 -Protocol UDP -Action Allow -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "      [OK] Firewall rules configured for local LAN zero-data drop." -ForegroundColor Green
+} catch {
+    $null = $_
+}
+
 # 5. Configuration & API Key Setup
 $configPath = "$env:USERPROFILE\.lexi_config.json"
-if (!(Test-Path $configPath)) {
-    Write-Host ""
-    Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
-    Write-Host "  [*] Configure AI Provider for Lexi" -ForegroundColor Yellow
-    Write-Host "     1. DeepSeek Direct (V4.1-Flash Vision)" -ForegroundColor Gray
-    Write-Host "     2. Groq (Ultra-Fast 500+ T/s | Llama 3.3)" -ForegroundColor Gray
-    Write-Host "     3. OpenRouter (100+ Models)" -ForegroundColor Gray
-    Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
-    
-    $choice = Read-Host "Choose provider [1=DeepSeek, 2=Groq, 3=OpenRouter, Enter to skip]"
-    $prov = "deepseek"
-    $base = "https://api.deepseek.com"
-    $model = "deepseek-flash"
-    $apiKey = ""
 
-    if ($choice -eq "2") {
-        $prov = "groq"
-        $base = "https://api.groq.com/openai/v1"
-        $model = "llama-3.3-70b-versatile"
-        $apiKey = Read-Host "Enter your Groq API Key (gsk_...)"
-    } elseif ($choice -eq "3") {
-        $prov = "openrouter"
-        $base = "https://openrouter.ai/api/v1"
-        $model = "deepseek/deepseek-v4.1-flash"
-        $apiKey = Read-Host "Enter your OpenRouter API Key (sk-or-...)"
+# Check if environment is interactive (protect against hanging on piped iex)
+$isInteractive = $true
+try {
+    if ([Console]::IsInputRedirected) { $isInteractive = $false }
+} catch {
+    $isInteractive = $false
+}
+if ($Unattended) { $isInteractive = $false }
+
+# Resolve API key from arguments or environment variables
+if ([string]::IsNullOrWhiteSpace($ApiKey)) {
+    if ($env:GROQ_API_KEY) {
+        $ApiKey = $env:GROQ_API_KEY
+        if (!$Provider) { $Provider = "groq" }
+    } elseif ($env:LEXI_API_KEY) {
+        $ApiKey = $env:LEXI_API_KEY
+    }
+}
+
+$prov = if ($Provider) { $Provider.ToLower().Trim() } else { "deepseek" }
+$base = "https://api.deepseek.com"
+$model = if ($Model) { $Model.Trim() } else { "deepseek-flash" }
+
+# Auto-detect provider from API key signature
+if ($ApiKey.Trim().StartsWith("gsk_")) {
+    $prov = "groq"
+    $base = "https://api.groq.com/openai/v1"
+    $model = if ($Model) { $Model.Trim() } else { "llama-3.3-70b-versatile" }
+    Write-Host "      [i] Auto-detected Groq API key: provider set to Groq ($model)" -ForegroundColor Green
+} elseif ($ApiKey.Trim().StartsWith("sk-or-")) {
+    $prov = "openrouter"
+    $base = "https://openrouter.ai/api/v1"
+    $model = if ($Model) { $Model.Trim() } else { "deepseek/deepseek-v4.1-flash" }
+} elseif ($ApiKey.Trim().StartsWith("sk-proj-")) {
+    $prov = "openai"
+    $base = "https://api.openai.com/v1"
+    $model = if ($Model) { $Model.Trim() } else { "gpt-4o-mini" }
+}
+
+if (Test-Path $configPath) {
+    if ($ApiKey -or $Provider -or $Force) {
+        Write-Host "      Updating existing configuration with provided parameters..." -ForegroundColor Cyan
+        try {
+            $cfgObj = Get-Content $configPath -Raw | ConvertFrom-Json
+        } catch {
+            $cfgObj = [PSCustomObject]@{}
+        }
+        $cfgObj.provider = $prov
+        if ($ApiKey) { $cfgObj.api_key = $ApiKey.Trim() }
+        if ($prov -eq "groq") {
+            $cfgObj.groq_api_base = "https://api.groq.com/openai/v1"
+            $cfgObj.groq_model = $model
+            if ($ApiKey) { $cfgObj.groq_api_key = $ApiKey.Trim() }
+        }
+        $cfgObj | ConvertTo-Json -Depth 4 | Set-Content -Path $configPath -Encoding UTF8
+        Write-Host "      [OK] Updated $configPath successfully." -ForegroundColor Green
     } else {
-        $apiKey = Read-Host "Enter your DeepSeek API Key (sk-...)"
+        Write-Host "      [OK] Preserving existing configuration ($configPath)." -ForegroundColor Green
+    }
+} else {
+    # No configuration exists yet
+    if ($isInteractive -and -not $ApiKey) {
+        Write-Host ""
+        Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
+        Write-Host "  [*] Configure AI Provider for Lexi" -ForegroundColor Yellow
+        Write-Host "     1. DeepSeek Direct (V4.1-Flash Vision)" -ForegroundColor Gray
+        Write-Host "     2. Groq (Ultra-Fast 500+ T/s | Llama 3.3)" -ForegroundColor Gray
+        Write-Host "     3. OpenRouter (100+ Models)" -ForegroundColor Gray
+        Write-Host "--------------------------------------------------------" -ForegroundColor Cyan
+
+        $choice = Read-Host "Choose provider [1=DeepSeek, 2=Groq, 3=OpenRouter, Enter to skip]"
+        if ($choice -eq "2") {
+            $prov = "groq"
+            $base = "https://api.groq.com/openai/v1"
+            $model = "llama-3.3-70b-versatile"
+            $ApiKey = Read-Host "Enter your Groq API Key (gsk_...)"
+        } elseif ($choice -eq "3") {
+            $prov = "openrouter"
+            $base = "https://openrouter.ai/api/v1"
+            $model = "deepseek/deepseek-v4.1-flash"
+            $ApiKey = Read-Host "Enter your OpenRouter API Key (sk-or-...)"
+        } else {
+            $ApiKey = Read-Host "Enter your DeepSeek API Key (sk-...)"
+        }
+
+        # Check again if user pasted a Groq key into choice 1 or 3
+        if ($ApiKey.Trim().StartsWith("gsk_")) {
+            $prov = "groq"
+            $base = "https://api.groq.com/openai/v1"
+            $model = "llama-3.3-70b-versatile"
+            Write-Host "      [i] Auto-detected Groq key: setting provider to Groq (Llama 3.3 70B)" -ForegroundColor Green
+        }
     }
 
-    $groqKey = ""
-    if ($prov -eq "groq") { $groqKey = $apiKey.Trim() }
-    $deepseekKey = ""
-    if ($prov -eq "deepseek") { $deepseekKey = $apiKey.Trim() }
-    $openrouterKey = ""
-    if ($prov -eq "openrouter") { $openrouterKey = $apiKey.Trim() }
+    $groqKey = if ($prov -eq "groq") { $ApiKey.Trim() } else { "" }
+    $deepseekKey = if ($prov -eq "deepseek") { $ApiKey.Trim() } else { "" }
+    $openrouterKey = if ($prov -eq "openrouter") { $ApiKey.Trim() } else { "" }
 
     $cfg = @{
         provider = $prov
         api_base = $base
         model = $model
-        api_key = $apiKey.Trim()
+        api_key = $ApiKey.Trim()
         groq_api_base = "https://api.groq.com/openai/v1"
         groq_api_key = $groqKey
         groq_model = "llama-3.3-70b-versatile"
@@ -272,5 +355,9 @@ Write-Host "  [OK] INSTALLATION COMPLETE! Launching Lexi Island...     " -Foregr
 Write-Host "========================================================" -ForegroundColor Green
 Write-Host ""
 
-Start-Process $venvPythonW -ArgumentList "`"$installDir\lexi_win_island.py`""
-Write-Host "Lexi is now live in your top-screen notch! Enjoy." -ForegroundColor Cyan
+if (-not $NoLaunch) {
+    Start-Process $venvPythonW -ArgumentList "`"$installDir\lexi_win_island.py`""
+    Write-Host "Lexi is now live in your top-screen notch! Enjoy." -ForegroundColor Cyan
+} else {
+    Write-Host "Installation complete. (Skipped auto-launch due to -NoLaunch flag)" -ForegroundColor Cyan
+}

@@ -25,3 +25,8 @@ windows/*.zip
 windows/get-pip.py
 windows/wheels/
 windows/vm_test_runner.ps1
+windows/.venv/
+windows/.cache/
+windows/dist/
+windows/build/
+.lexi_config.json

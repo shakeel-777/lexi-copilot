@@ -18,12 +18,280 @@ import socket
 import asyncio
 import threading
 import urllib.request
+import urllib.parse
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 from aiohttp import web
 
 PORT = 7890
 BEACON_PORT = 7891
+
+BEAM_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lexi ShareMe Beam · Windows</title>
+<style>
+  :root {
+    --bg: #0d0f17;
+    --card: #161926;
+    --card-border: rgba(255, 255, 255, 0.08);
+    --accent: #6366f1;
+    --accent-hover: #4f46e5;
+    --success: #10b981;
+    --text: #f1f5f9;
+    --text-muted: #94a3b8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+  .container { width: 100%; max-width: 580px; }
+  .header { text-align: center; margin-bottom: 24px; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 4px 12px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+  p.subtitle { color: var(--text-muted); font-size: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  }
+  .dropzone {
+    border: 2px dashed rgba(99, 102, 241, 0.4);
+    border-radius: 12px;
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: rgba(99, 102, 241, 0.04);
+  }
+  .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.15);
+    transform: scale(1.01);
+  }
+  .drop-icon { font-size: 40px; margin-bottom: 12px; display: block; }
+  .btn {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 14px;
+    display: inline-block;
+    transition: background 0.15s ease;
+  }
+  .btn:hover { background: var(--accent-hover); }
+  .progress-wrap { display: none; margin-top: 18px; }
+  .progress-bar-bg {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    height: 10px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #6366f1, #10b981);
+    transition: width 0.15s ease;
+  }
+  .progress-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+  .files-section h2 { font-size: 16px; margin-bottom: 12px; color: var(--text); }
+  .file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+  .file-name { font-weight: 600; font-size: 14px; }
+  .file-size { color: var(--text-muted); font-size: 12px; }
+  .file-download {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--success);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .empty-state { color: var(--text-muted); font-size: 13px; text-align: center; padding: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="badge">● Zero-Data Direct LAN Beam</div>
+    <h1 id="hostTitle">⚡ Lexi ShareMe Beam</h1>
+    <p class="subtitle">Direct Wi-Fi file transfer · Saved to Windows Downloads</p>
+  </div>
+
+  <div class="card">
+    <div class="dropzone" id="dropzone">
+      <span class="drop-icon">📁</span>
+      <h3>Drop movies or files to send to PC</h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">or click to select from your phone/device</p>
+      <input type="file" id="fileInput" multiple style="display: none;">
+      <button class="btn" onclick="document.getElementById('fileInput').click()">Select Files</button>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-info">
+        <span id="progressText">Uploading...</span>
+        <span id="speedText">0 MB/s</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card files-section">
+    <h2>Available Files from PC</h2>
+    <div id="fileList"><div class="empty-state">No files currently shared by PC</div></div>
+  </div>
+</div>
+
+<script>
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const progressWrap = document.getElementById('progressWrap');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const speedText = document.getElementById('speedText');
+  const fileList = document.getElementById('fileList');
+
+  fetch('/api/status').then(r => r.json()).then(data => {
+    if (data.device) {
+      document.getElementById('hostTitle').textContent = `⚡ Beam to ${data.device}`;
+    }
+  }).catch(() => {});
+
+  function loadSharedFiles() {
+    fetch('/api/files').then(r => r.json()).then(data => {
+      if (data.files && data.files.length > 0) {
+        fileList.innerHTML = data.files.map(f => `
+          <div class="file-item">
+            <div>
+              <div class="file-name">${f.name}</div>
+              <div class="file-size">${f.size_formatted}</div>
+            </div>
+            <a href="${f.url}" download="${f.name}" class="file-download">Download</a>
+          </div>
+        `).join('');
+      } else {
+        fileList.innerHTML = '<div class="empty-state">No files currently shared by PC</div>';
+      }
+    }).catch(() => {});
+  }
+  loadSharedFiles();
+  setInterval(loadSharedFiles, 3000);
+
+  ['dragenter', 'dragover'].forEach(name => {
+    dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(name => {
+    dropzone.addEventListener(name, (e) => { e.preventDefault(); dropzone.classList.remove('dragover'); });
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+      uploadFiles(Array.from(e.dataTransfer.files));
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files.length > 0) {
+      uploadFiles(Array.from(fileInput.files));
+    }
+  });
+
+  async function uploadFiles(files) {
+    for (const file of files) {
+      await uploadSingleFile(file);
+    }
+  }
+
+  function uploadSingleFile(file) {
+    return new Promise((resolve) => {
+      progressWrap.style.display = 'block';
+      progressFill.style.width = '0%';
+      progressText.textContent = `Uploading ${file.name}... (0%)`;
+      speedText.textContent = '0 MB/s';
+
+      const xhr = new XMLHttpRequest();
+      const startTime = Date.now();
+
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          progressFill.style.width = pct + '%';
+          const elapsed = (Date.now() - startTime) / 1000;
+          const mb = e.loaded / (1024 * 1024);
+          const speed = elapsed > 0 ? (mb / elapsed).toFixed(1) : '0';
+          progressText.textContent = `Uploading ${file.name}... (${pct}%)`;
+          speedText.textContent = `${speed} MB/s`;
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        progressFill.style.width = '100%';
+        progressText.textContent = `✓ Uploaded ${file.name}!`;
+        setTimeout(() => { progressWrap.style.display = 'none'; }, 3000);
+        resolve();
+      });
+
+      xhr.addEventListener('error', () => {
+        progressText.textContent = `⚠️ Failed to upload ${file.name}`;
+        resolve();
+      });
+
+      xhr.open('POST', `/api/upload?filename=${encodeURIComponent(file.name)}`);
+      xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+      xhr.send(file);
+    });
+  }
+</script>
+</body>
+</html>
+"""
+
 def _resolve_downloads_dir() -> Path:
     if sys.platform == "win32":
         try:
@@ -211,15 +479,32 @@ class LexiWinDropServer:
         self.thread = threading.Thread(target=self._run_server, daemon=True, name="LexiWinDropServer")
         self.thread.start()
 
+    def stop(self):
+        """Stops the UDP beacon and gracefully shuts down the aiohttp server."""
+        if hasattr(self, 'beacon') and self.beacon:
+            self.beacon.stop()
+        if self.loop and self.loop.is_running():
+            try:
+                if self.site:
+                    asyncio.run_coroutine_threadsafe(self.site.stop(), self.loop)
+                if self.runner:
+                    asyncio.run_coroutine_threadsafe(self.runner.cleanup(), self.loop)
+                self.loop.call_soon_threadsafe(self.loop.stop)
+            except Exception:
+                pass
+
     def _run_server(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.app = web.Application()
 
+        self.app.router.add_get("/", self.handle_index)
+        self.app.router.add_get("/api/status", self.handle_status)
+        self.app.router.add_get("/api/files", self.handle_files_list)
+        self.app.router.add_post("/api/upload", self.handle_upload)
         self.app.router.add_post("/api/peer/incoming", self.handle_peer_incoming)
         self.app.router.add_post("/api/peer/respond", self.handle_peer_respond)
         self.app.router.add_get("/api/download/{token}", self.handle_download)
-        self.app.router.add_get("/api/status", self.handle_status)
 
         self.runner = web.AppRunner(self.app)
         self.loop.run_until_complete(self.runner.setup())
@@ -227,6 +512,104 @@ class LexiWinDropServer:
         self.loop.run_until_complete(self.site.start())
         print(f"[LexiWinDrop] Ready on http://{self.local_ip}:{self.port}")
         self.loop.run_forever()
+
+    async def handle_index(self, request):
+        return web.Response(text=BEAM_HTML, content_type="text/html")
+
+    async def handle_files_list(self, request):
+        files = []
+        for token, rec in list(self.active_shared_files.items()):
+            if os.path.exists(rec["path"]):
+                files.append({
+                    "token": token,
+                    "name": rec["name"],
+                    "size": rec["size"],
+                    "size_formatted": format_size(rec["size"]),
+                    "url": f"/api/download/{token}"
+                })
+        return web.json_response({"files": files})
+
+    async def handle_upload(self, request):
+        """Streaming file upload handler (Phone/Browser/Peer -> Windows ~/Downloads)."""
+        filename = request.query.get("filename") or request.headers.get("X-Filename")
+        if not filename and request.content_type.startswith("multipart/form-data"):
+            reader = await request.multipart()
+            field = await reader.next()
+            if field:
+                filename = field.filename or f"upload_{int(time.time())}.bin"
+                filename = urllib.parse.unquote(filename)
+                dest_path = DOWNLOADS_DIR / filename
+                stem = dest_path.stem
+                suffix = dest_path.suffix
+                idx = 1
+                while dest_path.exists():
+                    dest_path = DOWNLOADS_DIR / f"{stem} ({idx}){suffix}"
+                    idx += 1
+                part_path = dest_path.with_name(f".{dest_path.name}.lexipart")
+                total_bytes = 0
+                t0 = time.time()
+                try:
+                    with open(part_path, "wb") as f:
+                        while True:
+                            chunk = await field.read_chunk(4 * 1024 * 1024)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            total_bytes += len(chunk)
+                    os.replace(part_path, dest_path)
+                except Exception:
+                    if part_path.exists():
+                        try:
+                            part_path.unlink()
+                        except Exception:
+                            pass
+                    raise
+                elapsed = max(time.time() - t0, 0.001)
+                speed_mb = (total_bytes / (1024 * 1024)) / elapsed
+                if self.on_transfer_completed:
+                    self.on_transfer_completed(dest_path.name, str(dest_path))
+                return web.json_response({
+                    "success": True,
+                    "filename": dest_path.name,
+                    "size": total_bytes,
+                    "speed_mbps": round(speed_mb, 2)
+                })
+
+        filename = filename or f"upload_{int(time.time())}.bin"
+        filename = urllib.parse.unquote(filename)
+        dest_path = DOWNLOADS_DIR / filename
+        stem = dest_path.stem
+        suffix = dest_path.suffix
+        idx = 1
+        while dest_path.exists():
+            dest_path = DOWNLOADS_DIR / f"{stem} ({idx}){suffix}"
+            idx += 1
+        part_path = dest_path.with_name(f".{dest_path.name}.lexipart")
+        total_bytes = 0
+        t0 = time.time()
+        try:
+            with open(part_path, "wb") as f:
+                async for chunk in request.content.iter_chunked(4 * 1024 * 1024):
+                    f.write(chunk)
+                    total_bytes += len(chunk)
+            os.replace(part_path, dest_path)
+        except Exception:
+            if part_path.exists():
+                try:
+                    part_path.unlink()
+                except Exception:
+                    pass
+            raise
+        elapsed = max(time.time() - t0, 0.001)
+        speed_mb = (total_bytes / (1024 * 1024)) / elapsed
+        if self.on_transfer_completed:
+            self.on_transfer_completed(dest_path.name, str(dest_path))
+        return web.json_response({
+            "success": True,
+            "filename": dest_path.name,
+            "size": total_bytes,
+            "speed_mbps": round(speed_mb, 2)
+        })
 
     async def handle_status(self, request):
         return web.json_response({
@@ -345,6 +728,27 @@ class LexiWinDropServer:
                 except Exception:
                     pass
 
+    def stage_file_for_sharing(self, file_path: str) -> Dict[str, Any]:
+        """Stages a local file for download by peers and browser clients."""
+        p = Path(file_path)
+        if not p.exists():
+            return {"success": False, "error": "File does not exist"}
+        token = uuid.uuid4().hex[:12]
+        self.active_shared_files[token] = {
+            "token": token,
+            "path": str(p.resolve()),
+            "name": p.name,
+            "size": p.stat().st_size
+        }
+        url = f"http://{self.local_ip}:{self.port}/api/download/{token}"
+        return {
+            "success": True,
+            "token": token,
+            "filename": p.name,
+            "size": p.stat().st_size,
+            "download_url": url
+        }
+
     def beam_file_to_peer(self, file_path: str, peer_ip: str) -> Dict[str, Any]:
         """Pushes a file from Windows to a nearby Linux or Windows Lexi machine."""
         p = Path(file_path)
@@ -353,6 +757,7 @@ class LexiWinDropServer:
 
         token = uuid.uuid4().hex[:12]
         self.active_shared_files[token] = {
+            "token": token,
             "path": str(p.resolve()),
             "name": p.name,
             "size": p.stat().st_size

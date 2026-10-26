@@ -7,6 +7,13 @@
 #   irm https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/windows/uninstall.ps1 | iex
 # ==============================================================================
 
+[CmdletBinding()]
+param(
+    [switch]$Purge,
+    [switch]$Quiet,
+    [switch]$Force
+)
+
 $ErrorActionPreference = "SilentlyContinue"
 
 Write-Host ""
@@ -45,6 +52,15 @@ if (Test-Path $startupLnk) {
     Write-Host "      ✓ Removed Windows Startup auto-launch entry." -ForegroundColor Green
 }
 
+# Remove Windows Firewall rules
+try {
+    Remove-NetFirewallRule -DisplayName "Lexi Beam TCP (Port 7890)" -ErrorAction SilentlyContinue | Out-Null
+    Remove-NetFirewallRule -DisplayName "Lexi Beam UDP Beacon (Port 7891)" -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "      ✓ Removed ShareMe Beam firewall rules." -ForegroundColor Green
+} catch {
+    $null = $_
+}
+
 # 3. Remove Installation & Virtual Environment Directory
 $installDir = "$env:LOCALAPPDATA\Lexi"
 Write-Host "[3/4] Removing Lexi application directory ($installDir)..." -ForegroundColor Cyan
@@ -59,17 +75,25 @@ if (Test-Path $installDir) {
 $configPath = "$env:USERPROFILE\.lexi_config.json"
 Write-Host "[4/4] Checking configuration and API keys..." -ForegroundColor Cyan
 if (Test-Path $configPath) {
-    $purge = $false
-    if ($args -contains "--purge" -or $args -contains "-y") {
-        $purge = $true
+    $shouldPurge = $false
+    if ($Purge -or $Force -or ($args -contains "--purge") -or ($args -contains "-y")) {
+        $shouldPurge = $true
     } else {
-        $choice = Read-Host "Do you want to delete your stored API keys & settings? (y/N)"
-        if ($choice -match "^[Yy]") {
-            $purge = $true
+        $isInteractive = $true
+        try {
+            if ([Console]::IsInputRedirected) { $isInteractive = $false }
+        } catch {
+            $isInteractive = $false
+        }
+        if ($isInteractive) {
+            $choice = Read-Host "Do you want to delete your stored API keys & settings? (y/N)"
+            if ($choice -match "^[Yy]") {
+                $shouldPurge = $true
+            }
         }
     }
 
-    if ($purge) {
+    if ($shouldPurge) {
         Remove-Item -Path $configPath -Force -ErrorAction SilentlyContinue
         Write-Host "      ✓ Removed configuration file ($configPath)." -ForegroundColor Green
     } else {

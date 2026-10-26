@@ -22,7 +22,8 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 - Auto-detects or installs Python 3.11 via Windows `winget`
 - Auto-installs **`scrcpy`** for Android Phone Mirroring via `winget install Genymobile.scrcpy`
 - Clones and sets up the isolated runtime in `%LOCALAPPDATA%\Lexi`
-- Prompts for your **DeepSeek** (`sk-...`) or **Groq** (`gsk_...`) API key
+- **Intelligent Provider Detection**: Enter any **Groq** (`gsk_...`), **OpenRouter** (`sk-or-...`), or **DeepSeek** key — Lexi auto-detects and configures high-speed LPU and optimal models automatically
+- Auto-configures **Windows Firewall** rules for LAN ShareMe Beam (Ports 7890 TCP / 7891 UDP)
 - Creates a Desktop shortcut and auto-start shortcut on Windows boot (`shell:startup`)
 - Launches the top-docked Dynamic Island notch immediately!
 
@@ -109,6 +110,11 @@ curl.exe -sSL https://raw.githubusercontent.com/shakeel-777/lexi-copilot/master/
 1. Click the **⚡ Beam** button on the Windows notch.
 2. Select any movie, video, or folder.
 3. Lexi discovers your nearby Linux laptop on the LAN automatically and pushes it straight to Linux `~/Downloads`!
+
+### 3. Web Drop from Any Phone or Browser (Zero App Installation)
+1. Open `http://<your-pc-ip>:7890` from any smartphone (Android / iPhone) or computer on your Wi-Fi.
+2. Drop or select movies, documents, or photos.
+3. Files stream directly over local Wi-Fi straight into your Windows `Downloads` folder at maximum hardware speed!
 
 ---
 

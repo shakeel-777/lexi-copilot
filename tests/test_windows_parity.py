@@ -98,12 +98,43 @@ class TestWindowsParity(unittest.TestCase):
         headers_ds = build_api_headers(info_ds)
         self.assertIn("Mozilla", headers_ds["User-Agent"])
 
-        # 3. Groq
+        # 3. Groq explicit
         cfg_groq = {"provider": "groq", "groq_api_key": "gsk_test"}
         info_groq = get_provider_info(cfg_groq)
         self.assertEqual(info_groq["provider"], "groq")
         self.assertEqual(info_groq["api_base"], "https://api.groq.com/openai/v1")
         self.assertEqual(info_groq["model"], "llama-3.3-70b-versatile")
+
+        # 4. Groq auto-detection from gsk_ prefix (even when provider was unset or deepseek)
+        cfg_auto_groq = {"provider": "deepseek", "api_key": "gsk_live_12345abcdef"}
+        info_auto_groq = get_provider_info(cfg_auto_groq)
+        self.assertEqual(info_auto_groq["provider"], "groq")
+        self.assertEqual(info_auto_groq["api_base"], "https://api.groq.com/openai/v1")
+        self.assertEqual(info_auto_groq["model"], "llama-3.3-70b-versatile")
+        self.assertEqual(info_auto_groq["api_key"], "gsk_live_12345abcdef")
+
+        # 5. OpenRouter auto-detection from sk-or- prefix
+        cfg_auto_or = {"api_key": "sk-or-test12345"}
+        info_auto_or = get_provider_info(cfg_auto_or)
+        self.assertEqual(info_auto_or["provider"], "openrouter")
+        self.assertEqual(info_auto_or["model"], "deepseek/deepseek-v4.1-flash")
+
+    def test_beam_server_staging_and_routes(self):
+        from windows.lexi_win_drop import LexiWinDropServer
+        import tempfile
+        server = LexiWinDropServer(port=7999)
+        with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tf:
+            tf.write(b"Beam Test Content 12345")
+            tf_path = tf.name
+
+        try:
+            res = server.stage_file_for_sharing(tf_path)
+            self.assertTrue(res["success"])
+            self.assertIn("download_url", res)
+            self.assertIn(res["token"], server.active_shared_files)
+        finally:
+            if os.path.exists(tf_path):
+                os.unlink(tf_path)
 
     def test_media_status_caching(self):
         import time
