@@ -20,3 +20,8 @@ clipboard_history.json
 dnd_state.json
 quick_notes.md
 brag-output/
+windows/*.exe
+windows/*.zip
+windows/get-pip.py
+windows/wheels/
+windows/vm_test_runner.ps1

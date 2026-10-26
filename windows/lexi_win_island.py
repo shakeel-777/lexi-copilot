@@ -22,6 +22,8 @@ import json
 import time
 import base64
 import ctypes
+import math
+import random
 import tempfile
 import threading
 import subprocess
@@ -36,7 +38,8 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import (
     QColor, QFont, QPainter, QBrush, QPen, QLinearGradient, QAction, QIcon,
-    QKeySequence, QPixmap, QCursor, QGuiApplication, QDesktopServices
+    QKeySequence, QPixmap, QCursor, QGuiApplication, QDesktopServices,
+    QPainterPath, QRadialGradient
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -45,7 +48,11 @@ from PySide6.QtWidgets import (
     QDialog, QComboBox, QCheckBox, QProgressBar, QMessageBox, QTabWidget
 )
 
-from lexi_win_actions import SystemActionEngineWindows, PhoneMirrorManagerWindows
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from lexi_win_actions import SystemActionEngineWindows, PhoneMirrorManagerWindows, DownloadSentinelWindows
 from lexi_win_drop import LexiWinDropServer, format_size
 
 CONFIG_FILE = Path(os.path.expanduser("~/.lexi_config.json"))
@@ -251,6 +258,252 @@ class WinGlobalHotkeyListener(QThread):
             except Exception:
                 pass
         self.wait(1000)
+
+
+class LexiEqualizerWidgetQt(QWidget):
+    """
+    Animated Spotify / Music neon equalizer bars (4 rounded bars).
+    Dynamically pulses in Spotify neon green (#1ed760) when media is playing,
+    settles to resting dots when paused.
+    """
+    def __init__(self, width: int = 20, height: int = 16, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(width, height)
+        self.is_playing = False
+        self.phase = 0.0
+        self.bar_count = 4
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self._on_tick)
+
+    def set_playing(self, playing: bool):
+        if self.is_playing == playing:
+            return
+        self.is_playing = playing
+        if playing:
+            if not self.timer.isActive():
+                self.timer.start(70)
+        else:
+            self.timer.stop()
+            self.update()
+
+    def _on_tick(self):
+        self.phase += 0.28
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+        n = self.bar_count
+        bar_w = 2.4
+        gap = 2.0
+        total_w = n * bar_w + (n - 1) * gap
+        start_x = (w - total_w) / 2.0
+
+        painter.setBrush(QBrush(QColor(30, 215, 96)))
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        for i in range(n):
+            if self.is_playing:
+                amp = (math.sin(self.phase * 1.5 + i * 1.2) + 1.0) / 2.0
+                bar_h = 3.0 + amp * (h - 5.0)
+            else:
+                bar_h = 2.5
+            x = start_x + i * (bar_w + gap)
+            y = (h - bar_h) / 2.0
+            r = bar_w / 2.0
+            painter.drawRoundedRect(QRect(int(x), int(y), max(2, int(bar_w)), max(2, int(bar_h))), int(r), int(r))
+
+
+class LexiMascotWidgetQt(QWidget):
+    """
+    Handcrafted Celestial Anime Chibi Screen Spirit (Lexi) for Windows.
+    Animated mini-avatar featuring:
+    - Perky chibi cat/fox ears with soft inner pink fluff
+    - Pearlescent gradient head contour
+    - Soft blushing pink cheeks
+    - Sparkling purple anime iris with cosmic shine highlights
+    - Smooth natural eye blinking every ~3.5 seconds
+    - Mouse gaze tracking (eyes look toward the cursor)
+    - Cute :3 kitty mouth
+    """
+    clicked = Signal()
+
+    def __init__(self, width: int = 24, height: int = 24, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(width, height)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.look_x = 0.0
+        self.look_y = 0.0
+        self.is_blinking = False
+        self.mood = "normal"
+
+        self.blink_timer = QTimer(self)
+        self.blink_timer.timeout.connect(self._trigger_blink)
+        self.blink_timer.start(3500)
+
+    def _trigger_blink(self):
+        if not self.is_blinking and self.isVisible():
+            self.is_blinking = True
+            self.update()
+            QTimer.singleShot(140, self._finish_blink)
+
+    def _finish_blink(self):
+        self.is_blinking = False
+        self.update()
+
+    def set_gaze(self, lx: float, ly: float):
+        self.look_x = max(-1.0, min(1.0, lx))
+        self.look_y = max(-1.0, min(1.0, ly))
+        self.update()
+
+    def set_mood(self, mood: str):
+        self.mood = mood
+        self.update()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        w = self.width()
+        h = self.height()
+        s = min(w / 48.0, h / 46.0)
+        cx = w / 2.0
+        cy = h / 2.0 + 3.0 * s
+
+        painter.save()
+        painter.translate(cx, cy)
+
+        # 1. Ears
+        for sign in (-1, 1):
+            painter.save()
+            ear_x = sign * 11.5 * s
+            ear_y = -12.5 * s
+            painter.translate(ear_x, ear_y)
+
+            path_outer = QPainterPath()
+            path_outer.moveTo(-sign * 5.5 * s, 5 * s)
+            path_outer.cubicTo(-sign * 2.5 * s, -5 * s, sign * 2 * s, -16 * s, sign * 5.5 * s, -14 * s)
+            path_outer.cubicTo(sign * 9.5 * s, -10 * s, sign * 7.5 * s, 1 * s, sign * 4.5 * s, 6 * s)
+            path_outer.closeSubpath()
+
+            grad_outer = QLinearGradient(0, -16 * s, 0, 6 * s)
+            grad_outer.setColorAt(0.0, QColor(250, 250, 255))
+            grad_outer.setColorAt(1.0, QColor(225, 230, 250))
+            painter.setBrush(QBrush(grad_outer))
+            painter.setPen(QPen(QColor(165, 175, 215, 120), 0.9 * s))
+            painter.drawPath(path_outer)
+
+            path_inner = QPainterPath()
+            path_inner.moveTo(-sign * 3.5 * s, 3.5 * s)
+            path_inner.cubicTo(-sign * 1.5 * s, -3 * s, sign * 1.5 * s, -10 * s, sign * 4.5 * s, -9 * s)
+            path_inner.cubicTo(sign * 7.0 * s, -7 * s, sign * 5.5 * s, 0, sign * 3.0 * s, 4.5 * s)
+            path_inner.closeSubpath()
+
+            grad_inner = QLinearGradient(0, -10 * s, 0, 4 * s)
+            grad_inner.setColorAt(0.0, QColor(255, 115, 165, 230))
+            grad_inner.setColorAt(1.0, QColor(250, 180, 205, 130))
+            painter.setBrush(QBrush(grad_inner))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawPath(path_inner)
+            painter.restore()
+
+        # 2. Head contour
+        path_head = QPainterPath()
+        path_head.moveTo(0, -19 * s)
+        path_head.cubicTo(16 * s, -19 * s, 21 * s, -9 * s, 21 * s, 0)
+        path_head.cubicTo(21 * s, 10 * s, 13 * s, 15 * s, 0, 15 * s)
+        path_head.cubicTo(-13 * s, 15 * s, -21 * s, 10 * s, -21 * s, 0)
+        path_head.cubicTo(-21 * s, -9 * s, -16 * s, -19 * s, 0, -19 * s)
+        path_head.closeSubpath()
+
+        rad_head = QRadialGradient(-4 * s, -8 * s, 24 * s)
+        rad_head.setColorAt(0.0, QColor(255, 255, 255))
+        rad_head.setColorAt(0.7, QColor(245, 248, 255))
+        rad_head.setColorAt(1.0, QColor(220, 228, 250))
+        painter.setBrush(QBrush(rad_head))
+        painter.setPen(QPen(QColor(165, 180, 215, 140), 1.0 * s))
+        painter.drawPath(path_head)
+
+        # 3. Soft blushing cheeks
+        for sign in (-1, 1):
+            bx = sign * 12.0 * s
+            by = 4.0 * s
+            rad_b = QRadialGradient(bx, by, 5.5 * s)
+            rad_b.setColorAt(0.0, QColor(255, 100, 150, 140))
+            rad_b.setColorAt(1.0, QColor(255, 100, 150, 0))
+            painter.setBrush(QBrush(rad_b))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPoint(int(bx), int(by)), int(5.5 * s), int(4.0 * s))
+
+        # 4. Eyes
+        eye_dx = 8.5 * s
+        eye_dy = -1.0 * s
+        for sign in (-1, 1):
+            ex = sign * eye_dx
+            ey = eye_dy
+
+            if self.is_blinking:
+                path_blink = QPainterPath()
+                path_blink.moveTo(ex - sign * 3.8 * s, ey)
+                path_blink.cubicTo(ex - sign * 1.5 * s, ey - 3.0 * s, ex + sign * 1.5 * s, ey - 3.0 * s, ex + sign * 3.8 * s, ey)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(QPen(QColor(45, 30, 70), 1.2 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawPath(path_blink)
+            else:
+                path_lash = QPainterPath()
+                path_lash.moveTo(ex - sign * 5.0 * s, ey - 4.5 * s)
+                path_lash.cubicTo(ex - sign * 2.5 * s, ey - 6.5 * s, ex + sign * 2.5 * s, ey - 6.5 * s, ex + sign * 5.0 * s, ey - 4.5 * s)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(QPen(QColor(45, 30, 70), 1.2 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawPath(path_lash)
+
+                painter.save()
+                path_eye = QPainterPath()
+                path_eye.addEllipse(QPoint(int(ex), int(ey)), int(3.8 * s), int(4.4 * s))
+                painter.setClipPath(path_eye)
+
+                painter.setBrush(QBrush(QColor(255, 255, 255)))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawPath(path_eye)
+
+                iris_x = ex + self.look_x * 0.8 * s
+                iris_y = ey + self.look_y * 0.8 * s
+                grad_iris = QLinearGradient(iris_x, iris_y - 4 * s, iris_x, iris_y + 4 * s)
+                grad_iris.setColorAt(0.0, QColor(64, 12, 107))
+                grad_iris.setColorAt(0.5, QColor(158, 45, 217))
+                grad_iris.setColorAt(1.0, QColor(235, 98, 217))
+                painter.setBrush(QBrush(grad_iris))
+                painter.drawEllipse(QPoint(int(iris_x), int(iris_y)), int(3.4 * s), int(3.8 * s))
+
+                painter.setBrush(QBrush(QColor(255, 255, 255, 245)))
+                painter.drawEllipse(QPoint(int(iris_x + sign * 1.0 * s), int(iris_y - 1.2 * s)), int(1.2 * s), int(1.2 * s))
+                painter.drawEllipse(QPoint(int(iris_x - sign * 1.1 * s), int(iris_y + 1.1 * s)), int(0.7 * s), int(0.7 * s))
+
+                painter.restore()
+
+        # 5. Nose & cute kitty mouth (:3)
+        painter.setBrush(QBrush(QColor(255, 115, 155, 240)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPoint(0, int(2.8 * s)), int(0.7 * s), int(0.7 * s))
+
+        path_mouth = QPainterPath()
+        path_mouth.moveTo(-2.8 * s, 5.0 * s)
+        path_mouth.cubicTo(-1.8 * s, 6.8 * s, -0.6 * s, 6.8 * s, 0, 5.4 * s)
+        path_mouth.cubicTo(0.6 * s, 6.8 * s, 1.8 * s, 6.8 * s, 2.8 * s, 5.0 * s)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(60, 45, 90, 220), 0.85 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        painter.drawPath(path_mouth)
+
+        painter.restore()
 
 
 class LexiSnipOverlay(QWidget):
@@ -1459,9 +1712,15 @@ class LexiDynamicIslandWin(QMainWindow):
 
         self.pet_widget = LexiPetWidget(on_activate=self.expand_copilot, on_dock=self.show_island)
         self.is_hovered = False
+        self.setMouseTracking(True)
 
         self.init_ui()
-        self.collapse_to_resting()
+        self.collapse_to_resting(animated=False)
+
+        # Downloads Sentinel for Windows
+        self.download_sentinel = DownloadSentinelWindows.get()
+        self.download_sentinel.add_listener(self.on_download_event)
+        self.download_sentinel.start()
 
         # Background Media & Download Watcher Timer
         self.status_timer = QTimer(self)
@@ -1479,44 +1738,40 @@ class LexiDynamicIslandWin(QMainWindow):
             Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAcceptDrops(True)
 
         self.root_widget = QWidget(self)
         self.setCentralWidget(self.root_widget)
 
+        # Transparent padding buffer allowing drop shadow and neon glow to spread without clipping
         root_layout = QVBoxLayout(self.root_widget)
-        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setContentsMargins(16, 6, 16, 12)
         root_layout.setSpacing(0)
 
-        # The Exact OLED Black Capsule Pill
+        # The Exact OLED Black Capsule Pill (border-radius: 18px on 36px height)
         self.pill = QFrame()
         self.pill.setObjectName("dynamicIslandPill")
-        self.apply_pill_style("default")
+        self.pill.setFixedHeight(36)
+        self.pill.setAcceptDrops(True)
+
+        # Dual Deep Black Drop Shadow & Neon Purple Stardust Rim Glow
+        self.pill_shadow = QGraphicsDropShadowEffect(self)
+        self.pill_shadow.setBlurRadius(22)
+        self.pill_shadow.setOffset(0, 4)
+        self.pill_shadow.setColor(QColor(168, 85, 247, 120))
+        self.pill.setGraphicsEffect(self.pill_shadow)
 
         self.pill_layout = QHBoxLayout(self.pill)
-        self.pill_layout.setContentsMargins(10, 4, 12, 4)
+        self.pill_layout.setContentsMargins(10, 0, 12, 0)
         self.pill_layout.setSpacing(8)
 
-        # 1. Mascot Avatar
-        self.mascot_btn = QPushButton("✨")
-        self.mascot_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.mascot_btn.setStyleSheet("background: transparent; border: none; font-size: 15px;")
-        
-        # Check if lexi_icon.png exists
-        app_dir = Path(__file__).parent
-        avatar_path = app_dir / "lexi_icon.png"
-        if not avatar_path.exists():
-            avatar_path = app_dir.parent / "drop_web" / "icon-512.png"
-        if avatar_path.exists():
-            pix = QPixmap(str(avatar_path)).scaled(22, 22, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            self.mascot_btn.setIcon(QIcon(pix))
-            self.mascot_btn.setIconSize(QSize(22, 22))
-            self.mascot_btn.setText("")
-
-        self.mascot_btn.clicked.connect(self.expand_copilot)
-        self.pill_layout.addWidget(self.mascot_btn)
+        # 1. Animated Anime Chibi Mascot Widget
+        self.mini_mascot = LexiMascotWidgetQt(width=24, height=24)
+        self.mini_mascot.clicked.connect(self.expand_copilot)
+        self.pill_layout.addWidget(self.mini_mascot)
 
         # 2. Status Label & Pulsing Dot
-        self.status_label = QLabel("Lexi")
+        self.status_label = QLabel("✨ Lexi")
         self.status_label.setStyleSheet("color: #f4f4f5; font-size: 12px; font-weight: bold; letter-spacing: -0.2px;")
         self.pill_layout.addWidget(self.status_label)
 
@@ -1524,11 +1779,18 @@ class LexiDynamicIslandWin(QMainWindow):
         self.pulse_dot.setStyleSheet("color: #10b981; font-size: 8px; margin-right: 2px;")
         self.pill_layout.addWidget(self.pulse_dot)
 
-        # 3. Media Controls (Visible on hover during media playback)
+        # 3. Media Controls & Live Equalizer Waveform
         self.media_container = QWidget()
         m_layout = QHBoxLayout(self.media_container)
         m_layout.setContentsMargins(0, 0, 0, 0)
-        m_layout.setSpacing(4)
+        m_layout.setSpacing(5)
+
+        self.media_eq = LexiEqualizerWidgetQt(width=20, height=16)
+        m_layout.addWidget(self.media_eq)
+
+        self.media_label = QLabel("")
+        self.media_label.setStyleSheet("color: #ffffff; font-size: 11px; font-weight: bold;")
+        m_layout.addWidget(self.media_label)
 
         def make_media_btn(icon, cb):
             b = QPushButton(icon)
@@ -1555,7 +1817,7 @@ class LexiDynamicIslandWin(QMainWindow):
         self.media_container.setVisible(False)
         self.pill_layout.addWidget(self.media_container)
 
-        # 4. Action Buttons Container (Morphs open on hover)
+        # 4. Action Buttons Container (Morphs open smoothly on hover)
         self.actions_container = QWidget()
         self.actions_layout = QHBoxLayout(self.actions_container)
         self.actions_layout.setContentsMargins(0, 0, 0, 0)
@@ -1606,17 +1868,18 @@ class LexiDynamicIslandWin(QMainWindow):
         self.pill_layout.addWidget(self.actions_container)
 
         root_layout.addWidget(self.pill)
+        self.apply_pill_style("default")
 
     def apply_pill_style(self, mode="default"):
         glows = {
-            "default": "border: 1.5px solid rgba(255, 255, 255, 0.28);",
-            "hover": "border: 1.5px solid rgba(192, 132, 252, 0.9);",
-            "green": "border: 1.5px solid #22c55e;",
-            "cyan": "border: 1.5px solid #06b6d4;",
-            "amber": "border: 1.5px solid #f59e0b;",
-            "purple": "border: 1.5px solid #c084fc;"
+            "default": ("border: 1.5px solid rgba(255, 255, 255, 0.28);", QColor(168, 85, 247, 110), 20),
+            "hover": ("border: 1.5px solid rgba(192, 132, 252, 0.9);", QColor(192, 132, 252, 180), 26),
+            "green": ("border: 1.5px solid #22c55e;", QColor(34, 197, 94, 200), 24),
+            "cyan": ("border: 1.5px solid #06b6d4;", QColor(6, 182, 212, 200), 24),
+            "amber": ("border: 1.5px solid #f59e0b;", QColor(245, 158, 11, 200), 24),
+            "purple": ("border: 1.5px solid #c084fc;", QColor(192, 132, 252, 220), 26)
         }
-        border_css = glows.get(mode, glows["default"])
+        border_css, shadow_col, blur_rad = glows.get(mode, glows["default"])
         self.pill.setStyleSheet(f"""
             #dynamicIslandPill {{
                 background-color: #000000;
@@ -1624,6 +1887,17 @@ class LexiDynamicIslandWin(QMainWindow):
                 {border_css}
             }}
         """)
+        if hasattr(self, "pill_shadow") and self.pill_shadow:
+            self.pill_shadow.setColor(shadow_col)
+            self.pill_shadow.setBlurRadius(blur_rad)
+
+    def mouseMoveEvent(self, event):
+        if hasattr(self, "mini_mascot"):
+            pos = event.pos()
+            dx = (pos.x() - 40.0) / 200.0
+            dy = (pos.y() - 20.0) / 40.0
+            self.mini_mascot.set_gaze(dx, dy)
+        super().mouseMoveEvent(event)
 
     def enterEvent(self, event):
         self.is_hovered = True
@@ -1641,7 +1915,61 @@ class LexiDynamicIslandWin(QMainWindow):
             self.apply_pill_style("default")
             self.collapse_to_resting()
 
-    def animate_to_geometry(self, target_w: int, target_h: int = 38, duration_ms: int = 220, on_finished=None):
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.apply_pill_style("green")
+            self.status_label.setText("Drop to Beam / AI")
+            self.animate_to_geometry(340, 54, 180)
+
+    def dragLeaveEvent(self, event):
+        self.apply_pill_style("default")
+        self.status_label.setText("✨ Lexi")
+        self.collapse_to_resting()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if urls:
+            paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
+            if paths:
+                event.acceptProposedAction()
+                self.handle_dropped_files(paths)
+
+    def handle_dropped_files(self, paths: List[str]):
+        first_path = paths[0]
+        fname = os.path.basename(first_path)
+        self.trigger_alert("📄", f"Loaded {fname[:14]}", "green", 3.0)
+        self.expand_copilot()
+        # If image, attach to vision
+        ext = os.path.splitext(fname)[1].lower()
+        if ext in ('.png', '.jpg', '.jpeg', '.webp', '.bmp'):
+            try:
+                with open(first_path, 'rb') as f:
+                    b64 = base64.b64encode(f.read()).decode('utf-8')
+                self.copilot_win.card.add_image_attachment(b64)
+                self.copilot_win.card.chat_display.append(f"<i>[📎 Image '{fname}' attached for AI analysis. Ask anything!]</i><br>")
+            except Exception:
+                pass
+        else:
+            self.copilot_win.card.chat_display.append(
+                f"<b>📄 File Dropped:</b> <code>{first_path}</code><br>"
+                f"• Say <i>'beam this file'</i> or click <b>[⚡ Beam]</b> to send to nearby devices.<br>"
+            )
+
+    def on_download_event(self, data: Dict[str, Any]):
+        ev = data.get("event")
+        if ev == "progress":
+            spd = data.get("speed_str", "")
+            if not self.is_hovered and (self.status_label.text().startswith("✨") or self.status_label.text().startswith("⬇️")):
+                self.status_label.setText(f"⬇️ {spd}")
+        elif ev == "completed":
+            fname = data.get("filename", "File")
+            self.trigger_alert("✅", f"Downloaded {fname[:14]}", "green", 4.0)
+        elif ev == "idle":
+            if not self.is_hovered and self.status_label.text().startswith("⬇️"):
+                self.status_label.setText("✨ Lexi")
+
+    def animate_to_geometry(self, target_w: int, target_h: int = 54, duration_ms: int = 220, on_finished=None):
         screen = QApplication.primaryScreen().geometry()
         target_x = (screen.width() - target_w) // 2
         target_y = 6
@@ -1660,31 +1988,31 @@ class LexiDynamicIslandWin(QMainWindow):
         self._geom_anim.start()
 
     def collapse_to_resting(self, animated=True):
-        w = 180
-        if self.status_label.text() != "Lexi":
-            w = 260
+        w = 216  # 180px pill + 36px shadow margin
+        if self.status_label.text() != "✨ Lexi":
+            w = 296
         if animated and self.isVisible():
             def _after():
                 if not self.is_hovered:
                     self.actions_container.setVisible(False)
-            self.animate_to_geometry(w, 38, 200, on_finished=_after)
+            self.animate_to_geometry(w, 54, 200, on_finished=_after)
         else:
             self.actions_container.setVisible(False)
-            self.resize(w, 38)
+            self.resize(w, 54)
             self.reposition_top()
 
     def expand_to_actions(self, animated=True):
         self.actions_container.setVisible(True)
         if animated and self.isVisible():
-            self.animate_to_geometry(700, 38, 220)
+            self.animate_to_geometry(736, 54, 220)
         else:
-            self.resize(700, 38)
+            self.resize(736, 54)
             self.reposition_top()
 
     def reposition_top(self):
         screen = QApplication.primaryScreen().geometry()
         x = (screen.width() - self.width()) // 2
-        y = 6  # Pinned smoothly at the very top
+        y = 6
         self.move(x, y)
 
     def expand_copilot(self):
@@ -1723,14 +2051,13 @@ class LexiDynamicIslandWin(QMainWindow):
             QMessageBox.information(self, "Phone Mirror", res.get("message", "Error connecting phone"))
 
     def trigger_alert(self, icon: str, text: str, glow_color: str = "green", duration: float = 3.0):
-        self.mascot_btn.setText(icon)
-        self.status_label.setText(text)
+        self.status_label.setText(f"{icon} {text}")
         self.apply_pill_style(glow_color)
-        self.animate_to_geometry(320, 38, 200)
+        self.animate_to_geometry(356, 54, 200)
         QTimer.singleShot(int(duration * 1000), self.restore_resting_state)
 
     def restore_resting_state(self):
-        self.status_label.setText("Lexi")
+        self.status_label.setText("✨ Lexi")
         self.apply_pill_style("default")
         self.collapse_to_resting()
 
@@ -1750,17 +2077,22 @@ class LexiDynamicIslandWin(QMainWindow):
 
     def poll_system_status(self):
         media = self.actions.get_media_status()
+        was_playing = getattr(self.media_eq, "is_playing", False)
         if media.get("playing") and media.get("track"):
-            track = media.get("track")
-            artist = media.get("artist")
-            self.status_label.setText(f"🎵 {artist} - {track[:18]}")
+            track = media.get("track", "")
+            artist = media.get("artist", "")
+            display_title = f"{artist} - {track[:16]}" if artist else track[:20]
+            self.media_label.setText(display_title)
+            self.media_eq.set_playing(True)
             self.media_container.setVisible(True)
-            if not self.is_hovered and not self.status_label.text().startswith("🎵"):
-                self.animate_to_geometry(300, 38, 200)
+            if not self.is_hovered and not was_playing:
+                self.status_label.setText("🎵")
+                self.animate_to_geometry(356, 54, 200)
         else:
+            self.media_eq.set_playing(False)
             self.media_container.setVisible(False)
-            if not self.is_hovered and self.status_label.text().startswith("🎵"):
-                self.status_label.setText("Lexi")
+            if not self.is_hovered and was_playing:
+                self.status_label.setText("✨ Lexi")
                 self.collapse_to_resting()
 
     def on_incoming_beam(self, info: Dict[str, Any]):

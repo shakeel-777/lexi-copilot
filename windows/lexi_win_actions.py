@@ -15,7 +15,7 @@ import threading
 import subprocess
 import urllib.parse
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, Callable
 
 try:
     from PIL import ImageGrab
@@ -658,3 +658,137 @@ class PhoneMirrorManagerWindows:
                 time.sleep(2)
             except Exception:
                 break
+
+
+class DownloadSentinelWindows:
+    """
+    Monitors Windows Downloads directory for active browser/system downloads
+    (.crdownload, .part, .download, .tmp).
+    Calculates live transfer throughput (MB/s) and detects completed files.
+    """
+    _instance = None
+    _lock = threading.Lock()
+
+    @classmethod
+    def get(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = DownloadSentinelWindows()
+            return cls._instance
+
+    def __init__(self):
+        self._listeners = []
+        self._running = False
+        self._thread = None
+        self._last_sizes = {}
+        self._known_active = set()
+        self._downloads_dir = self._detect_downloads_folder()
+
+    def _detect_downloads_folder(self) -> Path:
+        # Check Windows Known Folder {374DE290-123F-4565-9164-39C4925E467B} via winreg
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+            )
+            val, _ = winreg.QueryValueEx(key, "{374DE290-123F-4565-9164-39C4925E467B}")
+            winreg.CloseKey(key)
+            if val and os.path.exists(val):
+                return Path(val)
+        except Exception:
+            pass
+        fallback = Path.home() / "Downloads"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+    def add_listener(self, cb: Callable[[Dict[str, Any]], None]):
+        if cb not in self._listeners:
+            self._listeners.append(cb)
+
+    def start(self):
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._poll_loop, name="LexiWinDownloadsWatcher", daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._running = False
+
+    def check_status(self) -> Dict[str, Any]:
+        """Returns immediate snapshot of active downloads and estimated speed."""
+        active_files = []
+        try:
+            if self._downloads_dir.exists():
+                for entry in self._downloads_dir.iterdir():
+                    if entry.is_file() and entry.suffix.lower() in (".crdownload", ".part", ".download"):
+                        try:
+                            sz = entry.stat().st_size
+                            active_files.append({"name": entry.name, "path": str(entry), "size": sz})
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        return {
+            "active": len(active_files) > 0,
+            "count": len(active_files),
+            "files": active_files
+        }
+
+    def _poll_loop(self):
+        last_time = time.time()
+        while self._running:
+            time.sleep(1.5)
+            now = time.time()
+            dt = max(0.1, now - last_time)
+            last_time = now
+
+            try:
+                status = self.check_status()
+                current_active = set()
+                total_bytes_delta = 0
+
+                for f in status["files"]:
+                    p = f["path"]
+                    sz = f["size"]
+                    current_active.add(p)
+                    prev_sz = self._last_sizes.get(p, sz)
+                    if sz > prev_sz:
+                        total_bytes_delta += (sz - prev_sz)
+                    self._last_sizes[p] = sz
+
+                # Clean up completed
+                completed = self._known_active - current_active
+                for comp in completed:
+                    clean_name = Path(comp).stem
+                    self._dispatch({
+                        "event": "completed",
+                        "filename": clean_name,
+                        "path": comp
+                    })
+                    self._last_sizes.pop(comp, None)
+
+                self._known_active = current_active
+
+                if current_active:
+                    speed_bps = total_bytes_delta / dt
+                    speed_mb = speed_bps / (1024 * 1024)
+                    self._dispatch({
+                        "event": "progress",
+                        "count": len(current_active),
+                        "speed_mb": speed_mb,
+                        "speed_str": f"{speed_mb:.1f} MB/s" if speed_mb >= 0.1 else "Downloading..."
+                    })
+                elif completed:
+                    self._dispatch({"event": "idle"})
+            except Exception:
+                pass
+
+    def _dispatch(self, data: Dict[str, Any]):
+        for l in list(self._listeners):
+            try:
+                l(data)
+            except Exception:
+                pass
+

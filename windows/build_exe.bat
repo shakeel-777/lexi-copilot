@@ -12,8 +12,10 @@ if not exist "%~dp0.venv" (
 )
 
 call "%~dp0.venv\Scripts\activate.bat"
+echo [*] Ensuring PyInstaller build tools are installed...
+"%~dp0.venv\Scripts\python.exe" -m pip install -r "%~dp0requirements-build.txt" --quiet
 echo [*] Bundling Lexi into standalone executable...
-pyinstaller --noconsole --onefile --clean ^
+"%~dp0.venv\Scripts\python.exe" -m PyInstaller --noconsole --onefile --clean ^
     --name "Lexi" ^
     --icon "%~dp0lexi.ico" ^
     --add-data "%~dp0lexi_win_actions.py;." ^
