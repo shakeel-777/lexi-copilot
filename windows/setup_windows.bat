@@ -155,6 +155,9 @@ if not exist "%CONFIG_PATH%" (
         echo   "deepseek_api_base": "https://api.deepseek.com",
         echo   "deepseek_api_key": "!USER_KEY!",
         echo   "deepseek_model": "deepseek-flash",
+        echo   "openrouter_api_base": "https://openrouter.ai/api/v1",
+        echo   "openrouter_api_key": "!USER_KEY!",
+        echo   "openrouter_model": "deepseek/deepseek-v4.1-flash",
         echo   "max_tokens": 4096,
         echo   "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion on Windows created by Shakeel. Keep answers concise, direct, and conversational."
         echo }

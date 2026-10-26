@@ -67,6 +67,12 @@ DEFAULT_CONFIG = {
     "groq_model": "llama-3.3-70b-versatile",
     "ollama_api_base": "http://localhost:11434/v1",
     "ollama_model": "llama3.2",
+    "openrouter_api_base": "https://openrouter.ai/api/v1",
+    "openrouter_api_key": "",
+    "openrouter_model": "deepseek/deepseek-v4.1-flash",
+    "openai_api_base": "https://api.openai.com/v1",
+    "openai_api_key": "",
+    "openai_model": "gpt-4o-mini",
     "max_tokens": 4096,
     "phone_password": "",
     "system_prompt": (
@@ -78,9 +84,14 @@ DEFAULT_CONFIG = {
 
 def load_config() -> Dict[str, Any]:
     cfg = dict(DEFAULT_CONFIG)
-    if CONFIG_FILE.exists():
+    target = CONFIG_FILE
+    if not target.exists():
+        alt = _SCRIPT_DIR.parent / "config.json"
+        if alt.exists():
+            target = alt
+    if target.exists():
         try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            with open(target, "r", encoding="utf-8") as f:
                 cfg.update(json.load(f))
         except Exception:
             pass
@@ -92,6 +103,58 @@ def save_config(cfg: Dict[str, Any]):
             json.dump(cfg, f, indent=4)
     except Exception as e:
         print(f"Error saving config: {e}")
+
+def get_provider_info(cfg: Dict[str, Any]) -> Dict[str, Any]:
+    prov = (cfg.get("provider") or "deepseek").lower().strip()
+    if prov == "groq":
+        base = cfg.get("groq_api_base") or "https://api.groq.com/openai/v1"
+        key = cfg.get("groq_api_key") or cfg.get("api_key") or ""
+        model = cfg.get("groq_model") or "llama-3.3-70b-versatile"
+    elif prov == "ollama":
+        base = cfg.get("ollama_api_base") or "http://localhost:11434/v1"
+        key = cfg.get("ollama_api_key") or "ollama"
+        model = cfg.get("ollama_model") or "llama3.2"
+    elif prov == "openrouter":
+        base = cfg.get("openrouter_api_base") or cfg.get("api_base") or "https://openrouter.ai/api/v1"
+        key = cfg.get("openrouter_api_key") or cfg.get("api_key") or ""
+        model = cfg.get("openrouter_model") or cfg.get("model") or "deepseek/deepseek-v4.1-flash"
+    elif prov == "openai":
+        base = cfg.get("openai_api_base") or cfg.get("api_base") or "https://api.openai.com/v1"
+        key = cfg.get("openai_api_key") or cfg.get("api_key") or ""
+        model = cfg.get("openai_model") or cfg.get("model") or "gpt-4o-mini"
+    elif prov == "omniroute":
+        base = cfg.get("omniroute_api_base") or "http://localhost:8000/v1"
+        key = cfg.get("omniroute_api_key") or cfg.get("api_key") or ""
+        model = cfg.get("omniroute_model") or cfg.get("model") or "deepseek/deepseek-chat"
+    else:  # default deepseek
+        prov = "deepseek"
+        base = cfg.get("deepseek_api_base") or cfg.get("api_base") or "https://api.deepseek.com"
+        key = cfg.get("deepseek_api_key") or cfg.get("api_key") or ""
+        model = cfg.get("deepseek_model") or cfg.get("model") or "deepseek-flash"
+
+    if "api.deepseek.com" in base and model in ("deepseek-chat", "deepseek-reasoner", "deepseek-v3"):
+        model = "deepseek-flash"
+
+    return {
+        "provider": prov,
+        "api_base": (base or "").rstrip("/"),
+        "api_key": (key or "").strip(),
+        "model": (model or "deepseek-flash").strip()
+    }
+
+def build_api_headers(prov_info: Dict[str, Any]) -> Dict[str, str]:
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 LexiCopilot/2.0",
+    }
+    key = prov_info.get("api_key", "")
+    if key and key != "ollama":
+        headers["Authorization"] = f"Bearer {key}"
+    if prov_info.get("provider") == "openrouter":
+        headers["HTTP-Referer"] = "https://lexi.desktop"
+        headers["X-Title"] = "Lexi Screen Copilot"
+    return headers
 
 class StreamWorker(QThread):
     token_received = Signal(str)
@@ -105,21 +168,17 @@ class StreamWorker(QThread):
         self.prompt = prompt
         self.images_b64 = images_b64 or []
 
-        provider = (self.config.get("provider") or "deepseek").lower()
-        if provider == "groq":
-            self.api_base = (self.config.get("groq_api_base") or "https://api.groq.com/openai/v1").rstrip("/")
-            self.api_key = self.config.get("groq_api_key") or self.config.get("api_key") or ""
-            self.model = self.config.get("groq_model") or self.config.get("model") or "llama-3.3-70b-versatile"
-            if self.images_b64 and "vision" not in self.model.lower():
+        self.prov_info = get_provider_info(self.config)
+        self.api_base = self.prov_info["api_base"]
+        self.api_key = self.prov_info["api_key"]
+        self.model = self.prov_info["model"]
+        self.provider = self.prov_info["provider"]
+
+        if self.images_b64 and "vision" not in self.model.lower():
+            if self.provider == "groq":
                 self.model = "llama-3.2-11b-vision-preview"
-        elif provider == "ollama":
-            self.api_base = (self.config.get("ollama_api_base") or "http://localhost:11434/v1").rstrip("/")
-            self.api_key = "ollama"
-            self.model = self.config.get("ollama_model") or "llama3.2"
-        else:
-            self.api_key = self.config.get("api_key") or self.config.get("deepseek_api_key") or ""
-            self.api_base = (self.config.get("api_base") or "https://api.deepseek.com").rstrip("/")
-            self.model = self.config.get("model") or "deepseek-flash"
+            elif self.provider == "openrouter":
+                self.model = "google/gemini-flash-1.5"
 
     def run(self):
         messages = [{"role": "system", "content": self.config.get("system_prompt", "")}]
@@ -138,18 +197,53 @@ class StreamWorker(QThread):
             "max_tokens": self.config.get("max_tokens", 4096)
         }
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
-        }
-
         url = f"{self.api_base}/chat/completions"
+        headers = build_api_headers(self.prov_info)
         full_text = []
 
+        # 1. Primary: Use requests for connection pooling, SSL certificates, and bot-bypass
+        try:
+            import requests
+            with requests.post(url, json=payload, headers=headers, stream=True, timeout=40) as resp:
+                if resp.status_code != 200:
+                    err_msg = ""
+                    try:
+                        err_data = resp.json()
+                        err_msg = err_data.get("error", {}).get("message", "")
+                    except Exception:
+                        err_msg = resp.text[:200]
+                    self.error.emit(f"HTTP {resp.status_code}: {err_msg or resp.reason}")
+                    return
+
+                for line in resp.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    line = line.strip()
+                    if line.startswith("data: ") and line != "data: [DONE]":
+                        try:
+                            chunk = json.loads(line[6:])
+                            delta_obj = chunk["choices"][0]["delta"]
+                            delta = delta_obj.get("content") or ""
+                            reasoning = delta_obj.get("reasoning_content") or ""
+                            if reasoning:
+                                self.reasoning_received.emit(reasoning)
+                            if delta:
+                                full_text.append(delta)
+                                self.token_received.emit(delta)
+                        except Exception:
+                            pass
+            self.finished.emit("".join(full_text))
+            return
+        except ImportError:
+            pass
+        except Exception as e:
+            self.error.emit(str(e))
+            return
+
+        # 2. Fallback: urllib with full headers
         try:
             req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(req, timeout=35) as resp:
+            with urllib.request.urlopen(req, timeout=40) as resp:
                 for line in resp:
                     line = line.decode("utf-8").strip()
                     if line.startswith("data: ") and line != "data: [DONE]":
@@ -166,6 +260,15 @@ class StreamWorker(QThread):
                         except Exception:
                             pass
             self.finished.emit("".join(full_text))
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8")
+                err_json = json.loads(body)
+                body = err_json.get("error", {}).get("message", body)
+            except Exception:
+                pass
+            self.error.emit(f"HTTP {e.code}: {body or e.reason}")
         except Exception as e:
             self.error.emit(str(e))
 
@@ -708,36 +811,84 @@ class LexiSettingsDialog(QDialog):
         idx = self.prov_combo.currentIndex()
         if idx == 1:  # Groq
             self.base_input.setText(self.cfg.get("groq_api_base") or "https://api.groq.com/openai/v1")
-            self.key_input.setText(self.cfg.get("groq_api_key") or "")
+            self.key_input.setText(self.cfg.get("groq_api_key") or self.cfg.get("api_key") or "")
             self.model_input.setText(self.cfg.get("groq_model") or "llama-3.3-70b-versatile")
         elif idx == 2:  # Ollama
             self.base_input.setText(self.cfg.get("ollama_api_base") or "http://localhost:11434/v1")
             self.key_input.setText("ollama")
             self.model_input.setText(self.cfg.get("ollama_model") or "llama3.2")
         elif idx == 3:  # OpenRouter
-            self.base_input.setText("https://openrouter.ai/api/v1")
-            self.key_input.setText(self.cfg.get("api_key") or "")
-            self.model_input.setText("deepseek/deepseek-v4.1-flash")
+            self.base_input.setText(self.cfg.get("openrouter_api_base") or "https://openrouter.ai/api/v1")
+            self.key_input.setText(self.cfg.get("openrouter_api_key") or self.cfg.get("api_key") or "")
+            self.model_input.setText(self.cfg.get("openrouter_model") or "deepseek/deepseek-v4.1-flash")
         elif idx == 4:  # OpenAI
-            self.base_input.setText("https://api.openai.com/v1")
-            self.key_input.setText(self.cfg.get("api_key") or "")
-            self.model_input.setText("gpt-4o")
+            self.base_input.setText(self.cfg.get("openai_api_base") or "https://api.openai.com/v1")
+            self.key_input.setText(self.cfg.get("openai_api_key") or self.cfg.get("api_key") or "")
+            self.model_input.setText(self.cfg.get("openai_model") or "gpt-4o-mini")
         else:  # DeepSeek
-            self.base_input.setText(self.cfg.get("api_base") or "https://api.deepseek.com")
-            self.key_input.setText(self.cfg.get("api_key") or "")
-            self.model_input.setText(self.cfg.get("model") or "deepseek-flash")
+            self.base_input.setText(self.cfg.get("deepseek_api_base") or self.cfg.get("api_base") or "https://api.deepseek.com")
+            self.key_input.setText(self.cfg.get("deepseek_api_key") or self.cfg.get("api_key") or "")
+            self.model_input.setText(self.cfg.get("deepseek_model") or self.cfg.get("model") or "deepseek-flash")
 
     def test_connection(self):
-        self.test_lbl.setText("Testing endpoint latency...")
-        url = f"{self.base_input.text().rstrip('/')}/models"
-        headers = {"Authorization": f"Bearer {self.key_input.text().strip()}"}
+        self.test_lbl.setText("Testing endpoint...")
+        self.test_lbl.setStyleSheet("color: #94a3b8;")
+        QApplication.processEvents()
+
+        idx = self.prov_combo.currentIndex()
+        prov_map = {0: "deepseek", 1: "groq", 2: "ollama", 3: "openrouter", 4: "openai"}
+        prov = prov_map.get(idx, "deepseek")
+        base = self.base_input.text().strip().rstrip("/")
+        key = self.key_input.text().strip()
+        model = self.model_input.text().strip()
+
+        prov_info = {
+            "provider": prov,
+            "api_base": base,
+            "api_key": key,
+            "model": model
+        }
+        headers = build_api_headers(prov_info)
+        t0 = time.time()
+
+        if prov == "ollama":
+            url = f"{base}/models"
+            try:
+                import requests
+                resp = requests.get(url, headers=headers, timeout=6)
+                if resp.status_code == 200:
+                    ms = int((time.time() - t0) * 1000)
+                    self.test_lbl.setStyleSheet("color: #10b981;")
+                    self.test_lbl.setText(f"✓ Ollama connected! ({ms} ms)")
+                    return
+            except Exception as e:
+                self.test_lbl.setStyleSheet("color: #ef4444;")
+                self.test_lbl.setText(f"⚠️ Ollama error: {e}")
+                return
+
+        url = f"{base}/chat/completions"
+        payload = {
+            "model": model or "default",
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+            "stream": False
+        }
+
         try:
-            t0 = time.time()
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                ms = int((time.time() - t0) * 1000)
+            import requests
+            resp = requests.post(url, json=payload, headers=headers, timeout=10)
+            ms = int((time.time() - t0) * 1000)
+            if resp.status_code == 200:
                 self.test_lbl.setStyleSheet("color: #10b981;")
                 self.test_lbl.setText(f"✓ Connected successfully! ({ms} ms latency)")
+            else:
+                err_detail = ""
+                try:
+                    err_detail = resp.json().get("error", {}).get("message", "")
+                except Exception:
+                    err_detail = resp.text[:120]
+                self.test_lbl.setStyleSheet("color: #ef4444;")
+                self.test_lbl.setText(f"⚠️ HTTP {resp.status_code}: {err_detail or resp.reason}")
         except Exception as e:
             self.test_lbl.setStyleSheet("color: #ef4444;")
             self.test_lbl.setText(f"⚠️ Connection error: {e}")
@@ -749,17 +900,33 @@ class LexiSettingsDialog(QDialog):
         self.cfg["provider"] = prov
         self.cfg["phone_password"] = self.phone_pw_input.text().strip()
 
+        base = self.base_input.text().strip()
+        key = self.key_input.text().strip()
+        model = self.model_input.text().strip()
+
+        self.cfg["api_base"] = base
+        self.cfg["api_key"] = key
+        self.cfg["model"] = model
+
         if prov == "groq":
-            self.cfg["groq_api_base"] = self.base_input.text().strip()
-            self.cfg["groq_api_key"] = self.key_input.text().strip()
-            self.cfg["groq_model"] = self.model_input.text().strip()
+            self.cfg["groq_api_base"] = base
+            self.cfg["groq_api_key"] = key
+            self.cfg["groq_model"] = model
         elif prov == "ollama":
-            self.cfg["ollama_api_base"] = self.base_input.text().strip()
-            self.cfg["ollama_model"] = self.model_input.text().strip()
-        else:
-            self.cfg["api_base"] = self.base_input.text().strip()
-            self.cfg["api_key"] = self.key_input.text().strip()
-            self.cfg["model"] = self.model_input.text().strip()
+            self.cfg["ollama_api_base"] = base
+            self.cfg["ollama_model"] = model
+        elif prov == "openrouter":
+            self.cfg["openrouter_api_base"] = base
+            self.cfg["openrouter_api_key"] = key
+            self.cfg["openrouter_model"] = model
+        elif prov == "openai":
+            self.cfg["openai_api_base"] = base
+            self.cfg["openai_api_key"] = key
+            self.cfg["openai_model"] = model
+        elif prov == "deepseek":
+            self.cfg["deepseek_api_base"] = base
+            self.cfg["deepseek_api_key"] = key
+            self.cfg["deepseek_model"] = model
 
         save_config(self.cfg)
         self.accept()
@@ -1217,10 +1384,7 @@ class LexiCopilotCard(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        # Quick Action Strip
-        action_strip = QHBoxLayout()
-        action_strip.setSpacing(6)
-
+        # Quick Action Strips (2 Rows for clean wrapping in both Card and Side Panel modes)
         def make_chip(text, cb):
             btn = QPushButton(text)
             btn.setStyleSheet("""
@@ -1228,8 +1392,8 @@ class LexiCopilotCard(QWidget):
                     background: rgba(255, 255, 255, 0.08);
                     color: #cbd5e1;
                     border: 1px solid rgba(255, 255, 255, 0.12);
-                    border-radius: 12px;
-                    padding: 3px 10px;
+                    border-radius: 11px;
+                    padding: 3px 9px;
                     font-size: 11px;
                 }
                 QPushButton:hover { background: rgba(99, 102, 241, 0.25); color: #fff; }
@@ -1237,16 +1401,25 @@ class LexiCopilotCard(QWidget):
             btn.clicked.connect(cb)
             return btn
 
-        action_strip.addWidget(make_chip("📱 Phone", self.trigger_phone_mirror))
-        action_strip.addWidget(make_chip("📡 Beam", self.on_request_beam))
-        action_strip.addWidget(make_chip("✂️ Snip", self.on_request_snip))
-        action_strip.addWidget(make_chip("❓ Guide", self.open_guide))
-        action_strip.addWidget(make_chip("🧹 Clear", self.clear_chat))
-        action_strip.addWidget(make_chip("Explain", lambda: self.quick_prompt("Explain what is on my screen in detail.")))
-        action_strip.addWidget(make_chip("Fix", lambda: self.quick_prompt("Find any error or bug on my screen and fix it.")))
-        action_strip.addWidget(make_chip("Summarize", lambda: self.quick_prompt("Summarize the content on my screen.")))
-        action_strip.addStretch()
-        layout.addLayout(action_strip)
+        # Row 1: System Actions
+        row1 = QHBoxLayout()
+        row1.setSpacing(5)
+        row1.addWidget(make_chip("📱 Phone", self.trigger_phone_mirror))
+        row1.addWidget(make_chip("📡 Beam", self.on_request_beam))
+        row1.addWidget(make_chip("✂️ Snip", self.on_request_snip))
+        row1.addWidget(make_chip("❓ Guide", self.open_guide))
+        row1.addStretch()
+        layout.addLayout(row1)
+
+        # Row 2: Prompt Shortcuts & Chat Control
+        row2 = QHBoxLayout()
+        row2.setSpacing(5)
+        row2.addWidget(make_chip("Explain", lambda: self.quick_prompt("Explain what is on my screen in detail.")))
+        row2.addWidget(make_chip("Fix", lambda: self.quick_prompt("Find any error or bug on my screen and fix it.")))
+        row2.addWidget(make_chip("Summarize", lambda: self.quick_prompt("Summarize the content on my screen.")))
+        row2.addWidget(make_chip("🧹 Clear", self.clear_chat))
+        row2.addStretch()
+        layout.addLayout(row2)
 
         # Attachment previews row
         self.attach_strip = QHBoxLayout()
@@ -1255,9 +1428,11 @@ class LexiCopilotCard(QWidget):
         self.attach_container.setVisible(False)
         layout.addWidget(self.attach_container)
 
-        # Chat display area
+        # Chat display area (hardware accelerated opaque viewport to eliminate compositing lag)
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
+        if self.chat_display.viewport():
+            self.chat_display.viewport().setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
         self.chat_display.setStyleSheet("""
             background: rgba(15, 17, 23, 0.9);
             color: #e2e8f0;
@@ -1556,12 +1731,14 @@ class LexiCopilotWindow(QMainWindow):
     """
     Multimodal Vision Copilot Window for Windows:
     Floating center card or docked vertical side panel with acrylic glass styling.
+    Seamlessly collapses back to the Dynamic Island on close, Escape, or Ctrl+W.
     """
-    def __init__(self, actions, drop_server, on_request_snip, on_request_beam, on_request_guide=None, parent=None):
+    def __init__(self, actions, drop_server, on_request_snip, on_request_beam, on_request_guide=None, island=None, parent=None):
         super().__init__(parent)
         self.actions = actions
         self.drop_server = drop_server
         self.on_request_guide = on_request_guide
+        self.island = island
         self.side_panel_mode = False
 
         self.setWindowFlags(
@@ -1590,9 +1767,9 @@ class LexiCopilotWindow(QMainWindow):
         hdr = QHBoxLayout()
         hdr.setContentsMargins(4, 2, 4, 4)
         
-        title_lbl = QLabel("✨ Lexi Multimodal Copilot")
-        title_lbl.setStyleSheet("color: #f4f4f5; font-size: 13px; font-weight: bold;")
-        hdr.addWidget(title_lbl)
+        self.title_lbl = QLabel("✨ Lexi Copilot")
+        self.title_lbl.setStyleSheet("color: #f4f4f5; font-size: 13px; font-weight: bold;")
+        hdr.addWidget(self.title_lbl)
 
         hdr.addStretch()
 
@@ -1637,7 +1814,7 @@ class LexiCopilotWindow(QMainWindow):
             }
             QPushButton:hover { color: #ef4444; }
         """)
-        close_btn.clicked.connect(self.hide)
+        close_btn.clicked.connect(self.collapse_to_island)
         hdr.addWidget(close_btn)
 
         layout.addLayout(hdr)
@@ -1651,8 +1828,37 @@ class LexiCopilotWindow(QMainWindow):
         )
         layout.addWidget(self.card)
 
-        self.resize(520, 500)
+        self.resize(540, 560)
         self.reposition_center()
+
+    def collapse_to_island(self):
+        """Collapses window and seamlessly restores the Dynamic Island at screen top."""
+        self.hide()
+        if self.island:
+            self.island.show()
+            self.island.raise_()
+            self.island.reposition_top()
+            self.island.collapse_to_resting(animated=False)
+
+    def closeEvent(self, event):
+        event.ignore()
+        self.collapse_to_island()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.collapse_to_island()
+            event.accept()
+        elif event.key() == Qt.Key.Key_B and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            self.toggle_side_panel()
+            event.accept()
+        elif event.key() in (Qt.Key.Key_W, Qt.Key.Key_Q) and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            self.collapse_to_island()
+            event.accept()
+        elif event.key() == Qt.Key.Key_L and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            self.card.clear_chat()
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     def open_guide(self):
         if self.on_request_guide:
@@ -1660,24 +1866,50 @@ class LexiCopilotWindow(QMainWindow):
         else:
             LexiGuideDialog(self.actions, self).exec()
 
-
     def reposition_center(self):
         screen = QApplication.primaryScreen().geometry()
-        x = (screen.width() - 520) // 2
-        y = 50  # Just below top dynamic island
+        x = (screen.width() - self.width()) // 2
+        y = 48
         self.move(x, y)
 
-    def toggle_side_panel(self):
-        self.side_panel_mode = not self.side_panel_mode
+    def set_side_panel_mode(self, is_side: bool):
+        self.side_panel_mode = is_side
         screen = QApplication.primaryScreen().geometry()
         if self.side_panel_mode:
             self.side_btn.setText("🗗 Center")
-            self.move(screen.width() - 440, 0)
-            self.resize(440, screen.height())
+            self.title_lbl.setText("◨ Lexi Side Panel")
+            panel_w = 440
+            panel_h = screen.height()
+            self.move(screen.width() - panel_w, 0)
+            self.resize(panel_w, panel_h)
+            self.root.setStyleSheet("""
+                #copilotRoot {
+                    background-color: #0b0d14;
+                    border-left: 1.5px solid rgba(168, 85, 247, 0.45);
+                    border-top: none;
+                    border-right: none;
+                    border-bottom: none;
+                    border-radius: 0px;
+                }
+            """)
+            # Force opaque paint event in docked mode to eliminate translucent alpha compositing lag
+            self.root.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
         else:
             self.side_btn.setText("◨ Side")
-            self.resize(520, 500)
+            self.title_lbl.setText("✨ Lexi Copilot")
+            self.resize(540, 560)
             self.reposition_center()
+            self.root.setStyleSheet("""
+                #copilotRoot {
+                    background-color: rgba(13, 15, 22, 0.96);
+                    border: 1.5px solid rgba(168, 85, 247, 0.35);
+                    border-radius: 14px;
+                }
+            """)
+            self.root.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+
+    def toggle_side_panel(self):
+        self.set_side_panel_mode(not self.side_panel_mode)
 
 
 class LexiDynamicIslandWin(QMainWindow):
@@ -1707,7 +1939,8 @@ class LexiDynamicIslandWin(QMainWindow):
             self.drop_server,
             on_request_snip=self.start_region_snip,
             on_request_beam=self.show_beam_dialog,
-            on_request_guide=self.open_guide
+            on_request_guide=self.open_guide,
+            island=self
         )
 
         self.pet_widget = LexiPetWidget(on_activate=self.expand_copilot, on_dock=self.show_island)
@@ -1867,6 +2100,7 @@ class LexiDynamicIslandWin(QMainWindow):
         self.actions_container.setVisible(False)
         self.pill_layout.addWidget(self.actions_container)
 
+        self.pill.mousePressEvent = self.on_pill_mouse_press
         root_layout.addWidget(self.pill)
         self.apply_pill_style("default")
 
@@ -2015,14 +2249,28 @@ class LexiDynamicIslandWin(QMainWindow):
         y = 6
         self.move(x, y)
 
+    def on_pill_mouse_press(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.expand_copilot()
+        elif event.button() == Qt.MouseButton.RightButton:
+            if hasattr(self, 'tray') and self.tray and self.tray.contextMenu():
+                self.tray.contextMenu().exec(event.globalPosition().toPoint())
+
+    def mousePressEvent(self, event):
+        self.on_pill_mouse_press(event)
+        super().mousePressEvent(event)
+
     def expand_copilot(self):
+        """Seamlessly transitions from Dynamic Island to Floating Center Copilot Card."""
+        self.hide()
+        self.copilot_win.set_side_panel_mode(False)
         self.copilot_win.show()
         self.copilot_win.raise_()
         self.copilot_win.activateWindow()
 
     def toggle_copilot(self):
         if self.copilot_win.isVisible():
-            self.copilot_win.hide()
+            self.copilot_win.collapse_to_island()
         else:
             self.expand_copilot()
 
@@ -2030,8 +2278,12 @@ class LexiDynamicIslandWin(QMainWindow):
         LexiGuideDialog(self.actions, self).exec()
 
     def toggle_side_panel(self):
+        """Seamlessly transitions from Dynamic Island to Docked Vertical Side Panel."""
+        self.hide()
+        self.copilot_win.set_side_panel_mode(True)
         self.copilot_win.show()
-        self.copilot_win.toggle_side_panel()
+        self.copilot_win.raise_()
+        self.copilot_win.activateWindow()
 
     def detach_pet(self):
         screen = QApplication.primaryScreen().geometry()
@@ -2040,7 +2292,10 @@ class LexiDynamicIslandWin(QMainWindow):
         self.hide()
 
     def show_island(self):
+        if hasattr(self, "pet_widget"):
+            self.pet_widget.hide()
         self.show()
+        self.reposition_top()
         self.collapse_to_resting(animated=False)
 
     def trigger_phone_mirror(self):
@@ -2223,6 +2478,7 @@ def main():
             pass
 
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     
     app_dir = Path(__file__).parent
     icon_path = app_dir / "lexi.ico"

@@ -209,6 +209,8 @@ if (!(Test-Path $configPath)) {
     if ($prov -eq "groq") { $groqKey = $apiKey.Trim() }
     $deepseekKey = ""
     if ($prov -eq "deepseek") { $deepseekKey = $apiKey.Trim() }
+    $openrouterKey = ""
+    if ($prov -eq "openrouter") { $openrouterKey = $apiKey.Trim() }
 
     $cfg = @{
         provider = $prov
@@ -221,6 +223,9 @@ if (!(Test-Path $configPath)) {
         deepseek_api_base = "https://api.deepseek.com"
         deepseek_api_key = $deepseekKey
         deepseek_model = "deepseek-flash"
+        openrouter_api_base = "https://openrouter.ai/api/v1"
+        openrouter_api_key = $openrouterKey
+        openrouter_model = "deepseek/deepseek-v4.1-flash"
         max_tokens = 4096
         system_prompt = "You are Lexi, an intelligent autonomous desktop AI companion on Windows created by Shakeel. Keep answers concise, direct, and conversational."
     } | ConvertTo-Json -Depth 4

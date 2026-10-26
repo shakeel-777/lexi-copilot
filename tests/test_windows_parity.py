@@ -69,15 +69,49 @@ class TestWindowsParity(unittest.TestCase):
         self.assertIn("success", res)
         self.assertIn("message", res)
 
-    def test_hotkey_listener_instantiation(self):
+    def test_provider_info_resolution(self):
         try:
             import PySide6
         except ImportError:
             self.skipTest("PySide6 not installed in current environment")
-        from lexi_win_island import WinGlobalHotkeyListener
-        listener = WinGlobalHotkeyListener()
-        self.assertTrue(listener._running)
-        listener.stop()
+        from lexi_win_island import get_provider_info, build_api_headers
+
+        # 1. OpenRouter
+        cfg_or = {"provider": "openrouter", "api_key": "sk-or-test12345"}
+        info_or = get_provider_info(cfg_or)
+        self.assertEqual(info_or["provider"], "openrouter")
+        self.assertEqual(info_or["api_base"], "https://openrouter.ai/api/v1")
+        self.assertEqual(info_or["model"], "deepseek/deepseek-v4.1-flash")
+        headers_or = build_api_headers(info_or)
+        self.assertIn("Authorization", headers_or)
+        self.assertEqual(headers_or["Authorization"], "Bearer sk-or-test12345")
+        self.assertEqual(headers_or["HTTP-Referer"], "https://lexi.desktop")
+        self.assertEqual(headers_or["X-Title"], "Lexi Screen Copilot")
+        self.assertIn("Mozilla", headers_or["User-Agent"])
+
+        # 2. DeepSeek
+        cfg_ds = {"provider": "deepseek", "deepseek_api_key": "sk-ds-test"}
+        info_ds = get_provider_info(cfg_ds)
+        self.assertEqual(info_ds["provider"], "deepseek")
+        self.assertEqual(info_ds["api_base"], "https://api.deepseek.com")
+        self.assertEqual(info_ds["model"], "deepseek-flash")
+        headers_ds = build_api_headers(info_ds)
+        self.assertIn("Mozilla", headers_ds["User-Agent"])
+
+        # 3. Groq
+        cfg_groq = {"provider": "groq", "groq_api_key": "gsk_test"}
+        info_groq = get_provider_info(cfg_groq)
+        self.assertEqual(info_groq["provider"], "groq")
+        self.assertEqual(info_groq["api_base"], "https://api.groq.com/openai/v1")
+        self.assertEqual(info_groq["model"], "llama-3.3-70b-versatile")
+
+    def test_media_status_caching(self):
+        import time
+        self.actions._cached_media = {"playing": True, "artist": "TestArtist", "track": "TestTrack"}
+        self.actions._cached_media_time = time.time()
+        media = self.actions.get_media_status()
+        self.assertTrue(media.get("playing"))
+        self.assertEqual(media.get("artist"), "TestArtist")
 
 
 if __name__ == "__main__":

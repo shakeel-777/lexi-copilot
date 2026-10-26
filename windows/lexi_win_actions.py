@@ -352,31 +352,51 @@ class SystemActionEngineWindows:
             return {"success": False, "message": f"Failed to kill process '{clean}': {e}"}
 
     def get_media_status(self) -> Dict[str, Any]:
-        """Queries active audio player window title on Windows (Spotify, Chrome, VLC)."""
+        """Queries active audio player window title on Windows (Spotify, Chrome, VLC) with caching."""
+        now = time.time()
+        cached = getattr(self, "_cached_media", None)
+        cached_time = getattr(self, "_cached_media_time", 0)
+        if cached is not None and (now - cached_time) < 2.5:
+            return cached
+
         if not self.user32:
             return {"playing": False, "track": "", "artist": ""}
+
         try:
-            # Query window titles
             found = []
+            checked = 0
             def enum_proc(hwnd, lParam):
+                nonlocal checked
+                checked += 1
+                if checked > 60:
+                    return False  # Cap window enumeration to avoid stalling the UI thread
                 if self.user32.IsWindowVisible(hwnd):
                     length = self.user32.GetWindowTextLengthW(hwnd)
-                    if length > 0:
+                    if 3 < length < 256:
                         buf = ctypes.create_unicode_buffer(length + 1)
                         self.user32.GetWindowTextW(hwnd, buf, length + 1)
                         title = buf.value.strip()
                         if " - " in title and not title.endswith(" - Google Chrome") and not title.endswith(" - Microsoft Edge"):
                             found.append(title)
+                            return False  # Stop enumeration immediately upon finding active player
                 return True
+
             WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
             self.user32.EnumWindows(WNDENUMPROC(enum_proc), 0)
             if found:
                 first = found[0]
                 parts = first.split(" - ", 1)
-                return {"playing": True, "artist": parts[0].strip(), "track": parts[1].strip(), "raw": first}
+                result = {"playing": True, "artist": parts[0].strip(), "track": parts[1].strip(), "raw": first}
+                self._cached_media = result
+                self._cached_media_time = now
+                return result
         except Exception:
             pass
-        return {"playing": False, "track": "", "artist": ""}
+
+        result = {"playing": False, "track": "", "artist": ""}
+        self._cached_media = result
+        self._cached_media_time = now
+        return result
 
     def run_system_diagnostics(self) -> Dict[str, Any]:
         """
