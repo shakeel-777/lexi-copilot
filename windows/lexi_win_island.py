@@ -39,7 +39,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import (
     QColor, QFont, QPainter, QBrush, QPen, QLinearGradient, QAction, QIcon,
     QKeySequence, QPixmap, QCursor, QGuiApplication, QDesktopServices,
-    QPainterPath, QRadialGradient
+    QPainterPath, QRadialGradient, QShortcut
 )
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -537,15 +537,16 @@ class LexiMascotWidgetQt(QWidget):
         painter.drawPath(path_head)
 
         # 3. Soft blushing cheeks
+        blush_alpha = 220 if self.mood == "happy" else 140
         for sign in (-1, 1):
             bx = sign * 12.0 * s
             by = 4.0 * s
-            rad_b = QRadialGradient(bx, by, 5.5 * s)
-            rad_b.setColorAt(0.0, QColor(255, 100, 150, 140))
-            rad_b.setColorAt(1.0, QColor(255, 100, 150, 0))
+            rad_b = QRadialGradient(bx, by, 6.0 * s if self.mood == "happy" else 5.5 * s)
+            rad_b.setColorAt(0.0, QColor(255, 90, 150, blush_alpha))
+            rad_b.setColorAt(1.0, QColor(255, 90, 150, 0))
             painter.setBrush(QBrush(rad_b))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(QPoint(int(bx), int(by)), int(5.5 * s), int(4.0 * s))
+            painter.drawEllipse(QPoint(int(bx), int(by)), int(6.0 * s), int(4.5 * s))
 
         # 4. Eyes
         eye_dx = 8.5 * s
@@ -554,12 +555,17 @@ class LexiMascotWidgetQt(QWidget):
             ex = sign * eye_dx
             ey = eye_dy
 
-            if self.is_blinking:
+            if self.is_blinking or self.mood == "happy":
                 path_blink = QPainterPath()
-                path_blink.moveTo(ex - sign * 3.8 * s, ey)
-                path_blink.cubicTo(ex - sign * 1.5 * s, ey - 3.0 * s, ex + sign * 1.5 * s, ey - 3.0 * s, ex + sign * 3.8 * s, ey)
+                if self.mood == "happy":
+                    # Cute happy anime smiling arch eyes (^ ^)
+                    path_blink.moveTo(ex - sign * 4.2 * s, ey + 0.8 * s)
+                    path_blink.cubicTo(ex - sign * 2.0 * s, ey - 3.8 * s, ex + sign * 2.0 * s, ey - 3.8 * s, ex + sign * 4.2 * s, ey + 0.8 * s)
+                else:
+                    path_blink.moveTo(ex - sign * 3.8 * s, ey)
+                    path_blink.cubicTo(ex - sign * 1.5 * s, ey - 3.0 * s, ex + sign * 1.5 * s, ey - 3.0 * s, ex + sign * 3.8 * s, ey)
                 painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.setPen(QPen(QColor(45, 30, 70), 1.2 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.setPen(QPen(QColor(45, 30, 70), 1.3 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 painter.drawPath(path_blink)
             else:
                 path_lash = QPainterPath()
@@ -667,54 +673,155 @@ class LexiSnipOverlay(QWidget):
             painter.drawRect(rect)
 
 class LexiPetWidget(QWidget):
-    """Detached cute roaming anime desktop pet mascot."""
-    def __init__(self, on_activate, on_dock):
-        super().__init__()
+    """
+    Detached interactive anime chibi desktop pet mascot for Windows.
+    - Full animated mascot widget (LexiMascotWidgetQt) with blushing cheeks and expressive eyes
+    - Continuous cursor gaze tracking across the entire screen
+    - Left-click to pet (blushing / happy anime arch eyes ^ ^)
+    - Double-click to expand Copilot card
+    - Drag-and-drop anywhere across the desktop
+    - Drag & drop files onto the pet to feed them to Copilot
+    - Right-click context menu for actions and docking
+    """
+    def __init__(self, on_activate, on_dock, on_drop_files=None, parent=None):
+        super().__init__(parent)
         self.on_activate = on_activate
         self.on_dock = on_dock
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)
+        self.on_drop_files = on_drop_files
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint |
+            Qt.WindowType.Tool
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.drag_pos = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(0)
 
-        self.label = QLabel("✨")
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setStyleSheet(
-            "background: rgba(13, 15, 22, 0.88);"
-            "border: 2px solid rgba(99, 102, 241, 0.6);"
-            "border-radius: 28px;"
-            "font-size: 24px;"
-            "min-width: 56px;"
-            "min-height: 56px;"
-        )
-        layout.addWidget(self.label)
-        self.resize(68, 68)
+        # Translucent capsule container with purple aura outline
+        self.bubble = QWidget()
+        self.bubble.setObjectName("petBubble")
+        self.bubble.setStyleSheet("""
+            #petBubble {
+                background: rgba(13, 15, 22, 0.78);
+                border: 1.5px solid rgba(168, 85, 247, 0.50);
+                border-radius: 44px;
+            }
+            #petBubble:hover {
+                background: rgba(13, 15, 22, 0.92);
+                border: 1.5px solid rgba(192, 132, 252, 0.90);
+            }
+        """)
+        bubble_layout = QVBoxLayout(self.bubble)
+        bubble_layout.setContentsMargins(8, 8, 8, 8)
+        bubble_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.mascot = LexiMascotWidgetQt(width=84, height=84)
+        bubble_layout.addWidget(self.mascot)
+        layout.addWidget(self.bubble)
+
+        self.resize(112, 112)
+        self.setAcceptDrops(True)
+
+        # Continuous cursor tracking timer (eyes track mouse anywhere on desktop)
+        self.gaze_timer = QTimer(self)
+        self.gaze_timer.timeout.connect(self._track_cursor_gaze)
+        self.gaze_timer.start(50)
+
+    def _track_cursor_gaze(self):
+        if not self.isVisible():
+            return
+        c_pos = QCursor.pos()
+        center = self.geometry().center()
+        dx = (c_pos.x() - center.x()) / 400.0
+        dy = (c_pos.y() - center.y()) / 300.0
+        self.mascot.set_gaze(dx, dy)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            # Petting feedback: trigger happy smiling blush animation
+            self.mascot.set_mood("happy")
+            QTimer.singleShot(1400, lambda: self.mascot.set_mood("normal"))
         elif event.button() == Qt.MouseButton.RightButton:
-            menu = QMenu(self)
-            a_copilot = menu.addAction("💬 Open Copilot")
-            a_phone = menu.addAction("📱 Mirror Phone")
-            a_dock = menu.addAction("🏝️ Dock to Dynamic Island")
-            act = menu.exec(QCursor.pos())
-            if act == a_copilot:
-                self.on_activate()
-            elif act == a_phone:
-                SystemActionEngineWindows.get().start_phone_mirror()
-            elif act == a_dock:
-                self.hide()
-                self.on_dock()
+            self.show_context_menu(event.globalPosition().toPoint())
 
     def mouseMoveEvent(self, event):
-        if self.drag_pos and event.buttons() == Qt.MouseButton.LeftButton:
+        if self.drag_pos and (event.buttons() & Qt.MouseButton.LeftButton):
             self.move(event.globalPosition().toPoint() - self.drag_pos)
 
     def mouseDoubleClickEvent(self, event):
-        self.on_activate()
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.hide()
+            self.on_activate()
+
+    def show_context_menu(self, global_pos):
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #0f111a;
+                color: #e2e8f0;
+                border: 1px solid rgba(168, 85, 247, 0.4);
+                border-radius: 8px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 6px 18px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: rgba(168, 85, 247, 0.25);
+                color: #fff;
+            }
+        """)
+        a_copilot = menu.addAction("💬 Open Copilot (Double-click)")
+        a_phone = menu.addAction("📱 Mirror Phone")
+        menu.addSeparator()
+        a_dock = menu.addAction("🏝️ Dock to Dynamic Island")
+        act = menu.exec(global_pos)
+        if act == a_copilot:
+            self.hide()
+            self.on_activate()
+        elif act == a_phone:
+            SystemActionEngineWindows.get().start_phone_mirror()
+        elif act == a_dock:
+            self.hide()
+            self.on_dock()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.bubble.setStyleSheet("""
+                #petBubble {
+                    background: rgba(16, 185, 129, 0.25);
+                    border: 2px solid #10b981;
+                    border-radius: 44px;
+                }
+            """)
+
+    def dragLeaveEvent(self, event):
+        self.bubble.setStyleSheet("""
+            #petBubble {
+                background: rgba(13, 15, 22, 0.78);
+                border: 1.5px solid rgba(168, 85, 247, 0.50);
+                border-radius: 44px;
+            }
+        """)
+
+    def dropEvent(self, event):
+        self.dragLeaveEvent(event)
+        urls = event.mimeData().urls()
+        if urls:
+            paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
+            if paths:
+                event.acceptProposedAction()
+                self.hide()
+                if self.on_drop_files:
+                    self.on_drop_files(paths)
+                else:
+                    self.on_activate()
 
 class LexiSettingsDialog(QDialog):
     """Multi-Provider AI Configuration Dialog with live connection tester."""
@@ -1368,13 +1475,14 @@ class LexiGuideDialog(QDialog):
 
 class LexiCopilotCard(QWidget):
     """Floating multimodal AI copilot card with attachments, reasoning tokens, and intent engine."""
-    def __init__(self, actions: SystemActionEngineWindows, drop_server: LexiWinDropServer, on_request_snip, on_request_beam, on_request_guide=None, parent=None):
+    def __init__(self, actions: SystemActionEngineWindows, drop_server: LexiWinDropServer, on_request_snip, on_request_beam, on_request_guide=None, on_request_pet=None, parent=None):
         super().__init__(parent)
         self.actions = actions
         self.drop_server = drop_server
         self.on_request_snip = on_request_snip
         self.on_request_beam = on_request_beam
         self.on_request_guide = on_request_guide
+        self.on_request_pet = on_request_pet
         self.config = load_config()
 
         self.current_worker = None
@@ -1407,6 +1515,8 @@ class LexiCopilotCard(QWidget):
         row1.addWidget(make_chip("📱 Phone", self.trigger_phone_mirror))
         row1.addWidget(make_chip("📡 Beam", self.on_request_beam))
         row1.addWidget(make_chip("✂️ Snip", self.on_request_snip))
+        if self.on_request_pet:
+            row1.addWidget(make_chip("🐾 Pet", self.on_request_pet))
         row1.addWidget(make_chip("❓ Guide", self.open_guide))
         row1.addStretch()
         layout.addLayout(row1)
@@ -1773,6 +1883,22 @@ class LexiCopilotWindow(QMainWindow):
 
         hdr.addStretch()
 
+        self.pet_btn = QPushButton("🐾 Pet")
+        self.pet_btn.setToolTip("Detach Lexi onto your desktop wallpaper (Ctrl+D)")
+        self.pet_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(255, 255, 255, 0.08);
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                border-radius: 10px;
+                padding: 2px 8px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background: rgba(168, 85, 247, 0.25); color: #fff; }
+        """)
+        self.pet_btn.clicked.connect(self.detach_to_desktop)
+        hdr.addWidget(self.pet_btn)
+
         guide_btn = QPushButton("❓ Guide")
         guide_btn.setStyleSheet("""
             QPushButton {
@@ -1824,9 +1950,18 @@ class LexiCopilotWindow(QMainWindow):
             self.drop_server,
             on_request_snip=on_request_snip,
             on_request_beam=on_request_beam,
-            on_request_guide=on_request_guide
+            on_request_guide=on_request_guide,
+            on_request_pet=self.detach_to_desktop
         )
         layout.addWidget(self.card)
+
+        # Window-wide hotkeys that trigger even when input fields or chat display are focused
+        QShortcut(QKeySequence("Ctrl+D"), self, self.detach_to_desktop)
+        QShortcut(QKeySequence("Ctrl+B"), self, self.toggle_side_panel)
+        QShortcut(QKeySequence("Escape"), self, self.collapse_to_island)
+        QShortcut(QKeySequence("Ctrl+W"), self, self.collapse_to_island)
+        QShortcut(QKeySequence("Ctrl+Q"), self, self.collapse_to_island)
+        QShortcut(QKeySequence("Ctrl+L"), self, self.card.clear_chat)
 
         self.resize(540, 560)
         self.reposition_center()
@@ -1840,6 +1975,12 @@ class LexiCopilotWindow(QMainWindow):
             self.island.reposition_top()
             self.island.collapse_to_resting(animated=False)
 
+    def detach_to_desktop(self):
+        """Detaches Lexi onto the desktop wallpaper as an interactive roaming anime mascot."""
+        self.hide()
+        if self.island:
+            self.island.detach_pet()
+
     def closeEvent(self, event):
         event.ignore()
         self.collapse_to_island()
@@ -1847,6 +1988,9 @@ class LexiCopilotWindow(QMainWindow):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.collapse_to_island()
+            event.accept()
+        elif event.key() == Qt.Key.Key_D and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            self.detach_to_desktop()
             event.accept()
         elif event.key() == Qt.Key.Key_B and (event.modifiers() & Qt.KeyboardModifier.ControlModifier):
             self.toggle_side_panel()
@@ -1943,7 +2087,11 @@ class LexiDynamicIslandWin(QMainWindow):
             island=self
         )
 
-        self.pet_widget = LexiPetWidget(on_activate=self.expand_copilot, on_dock=self.show_island)
+        self.pet_widget = LexiPetWidget(
+            on_activate=self.expand_copilot,
+            on_dock=self.show_island,
+            on_drop_files=self.handle_dropped_files
+        )
         self.is_hovered = False
         self.setMouseTracking(True)
 
@@ -2287,8 +2435,10 @@ class LexiDynamicIslandWin(QMainWindow):
 
     def detach_pet(self):
         screen = QApplication.primaryScreen().geometry()
-        self.pet_widget.move(screen.width() - 100, screen.height() - 120)
+        self.pet_widget.move(screen.width() - 140, screen.height() - 165)
         self.pet_widget.show()
+        self.pet_widget.raise_()
+        self.pet_widget.activateWindow()
         self.hide()
 
     def show_island(self):

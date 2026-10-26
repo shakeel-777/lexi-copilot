@@ -376,9 +376,29 @@ class SystemActionEngineWindows:
                         buf = ctypes.create_unicode_buffer(length + 1)
                         self.user32.GetWindowTextW(hwnd, buf, length + 1)
                         title = buf.value.strip()
-                        if " - " in title and not title.endswith(" - Google Chrome") and not title.endswith(" - Microsoft Edge"):
+                        lower_title = title.lower()
+
+                        # Ignore non-media windows like terminals, dev tools, and file managers
+                        ignored = (
+                            "cmd.exe", "powershell", "terminal", "command prompt",
+                            "visual studio", "code", "notepad", "settings", "explorer",
+                            "task manager", "registry editor", "python", "gvncviewer",
+                            "qemu", "hiren", "administrator:", "bash", "git", "setup"
+                        )
+                        if any(ig in lower_title for ig in ignored):
+                            return True
+
+                        # Known media players
+                        is_spotify = "spotify" in lower_title
+                        is_media_app = any(app in lower_title for app in ("vlc", "foobar", "aimp", "music", "deezer", "tidal", "winamp", "itunes"))
+                        is_web_media = any(stream in lower_title for stream in (" - youtube", "soundcloud", "bandcamp", "pandora"))
+
+                        if is_spotify or is_media_app or is_web_media:
                             found.append(title)
                             return False  # Stop enumeration immediately upon finding active player
+                        elif " - " in title and not title.endswith(" - Google Chrome") and not title.endswith(" - Microsoft Edge") and not title.endswith(" - Mozilla Firefox"):
+                            found.append(title)
+                            return False
                 return True
 
             WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)

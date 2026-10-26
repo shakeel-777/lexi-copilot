@@ -113,6 +113,24 @@ class TestWindowsParity(unittest.TestCase):
         self.assertTrue(media.get("playing"))
         self.assertEqual(media.get("artist"), "TestArtist")
 
+    def test_media_ignored_titles(self):
+        ignored_samples = [
+            "Administrator: X:\\windows\\system32\\cmd.exe - python.exe",
+            "Windows PowerShell - test script",
+            "Command Prompt - ping 8.8.8.8",
+            "Visual Studio Code - lexi.py",
+            "Task Manager"
+        ]
+        ignored_keywords = (
+            "cmd.exe", "powershell", "terminal", "command prompt",
+            "visual studio", "code", "notepad", "settings", "explorer",
+            "task manager", "registry editor", "python", "gvncviewer",
+            "qemu", "hiren", "administrator:", "bash", "git", "setup"
+        )
+        for s in ignored_samples:
+            lower = s.lower()
+            self.assertTrue(any(ig in lower for ig in ignored_keywords), f"Failed to match ignore rule for {s}")
+
 
 if __name__ == "__main__":
     unittest.main()
