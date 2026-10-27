@@ -23,6 +23,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config libgirepository1.0-dev libgirepository-2.0-dev gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-xdp-1.0
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r windows/requirements-windows.txt || true
@@ -33,7 +34,8 @@ jobs:
 
       - name: Run Core & Parity Unit Tests
         run: |
-          python -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers tests.test_windows_parity tests.test_windows_modules
+          sudo apt-get install -y xvfb
+          xvfb-run -a python -m unittest test_lexi_core tests.test_productivity_features tests.test_lexi_copilot_upgrades tests.test_security_remediation tests.test_phone_mirror tests.test_settings_and_providers tests.test_windows_parity tests.test_windows_modules
 
   test-windows:
     name: Windows CI & PowerShell Validation
