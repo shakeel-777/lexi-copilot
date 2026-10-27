@@ -8,8 +8,6 @@ intent router or from LLM output.
 Pure Python (no GTK / subprocess) so it is unit-testable.
 """
 
-from __future__ import annotations
-
 import json
 import re
 import urllib.parse
