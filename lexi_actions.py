@@ -6,8 +6,6 @@ User-facing text is produced from the structured result here, never from
 model prose.  Pure Python: executors are injected, so tests need no desktop.
 """
 
-from __future__ import annotations
-
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Optional
