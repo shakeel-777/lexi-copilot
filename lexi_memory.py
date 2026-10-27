@@ -6,8 +6,6 @@ folded into the summary locally (no LLM call, no network).  Images/base64
 never enter memory.
 """
 
-from __future__ import annotations
-
 import hashlib
 import re
 import zlib
