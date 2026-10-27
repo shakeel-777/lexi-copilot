@@ -162,15 +162,46 @@ class SystemActionEngineWindows:
 
     def capture_screen(self, save_path: str) -> Optional[str]:
         """Captures full virtual desktop across all active monitors."""
-        try:
-            if ImageGrab:
+        p = Path(save_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+
+        # 1. Try Pillow ImageGrab if available
+        if ImageGrab is not None:
+            try:
                 img = ImageGrab.grab(all_screens=True)
-                p = Path(save_path)
-                p.parent.mkdir(parents=True, exist_ok=True)
                 img.save(str(p), "JPEG", quality=85)
                 return str(p)
-        except Exception as e:
-            print(f"[LexiWinActions] Screen capture error: {e}", file=sys.stderr)
+            except Exception as e:
+                print(f"[LexiWinActions] ImageGrab failed: {e}", file=sys.stderr)
+
+        # 2. Try native Qt screen grab (PySide6)
+        try:
+            from PySide6.QtGui import QGuiApplication
+            screen = QGuiApplication.primaryScreen()
+            if screen:
+                pixmap = screen.grabWindow(0)
+                pixmap.save(str(p), "JPG", 85)
+                return str(p)
+        except Exception:
+            pass
+
+        # 3. Native Win32 / PowerShell screen capture fallback
+        try:
+            ps_cmd = (
+                f"Add-Type -AssemblyName System.Windows.Forms,System.Drawing; "
+                f"$b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; "
+                f"$bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height; "
+                f"$g = [System.Drawing.Graphics]::FromImage($bmp); "
+                f"$g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); "
+                f"$bmp.Save('{str(p)}', [System.Drawing.Imaging.ImageFormat]::Jpeg); "
+                f"$g.Dispose(); $bmp.Dispose()"
+            )
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps_cmd], capture_output=True, timeout=5)
+            if p.exists() and p.stat().st_size > 0:
+                return str(p)
+        except Exception:
+            pass
+
         return None
 
     def get_active_window(self) -> Dict[str, str]:

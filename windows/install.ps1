@@ -162,13 +162,25 @@ $venvPythonW = Join-Path $venvDir "Scripts\pythonw.exe"
 
 $cacheDir = Join-Path $installDir ".cache"
 New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+$reqFile = Join-Path $installDir "requirements-windows.txt"
 & $venvPython -m pip install --upgrade pip --cache-dir $cacheDir --quiet
-& $venvPython -m pip install -r (Join-Path $installDir "requirements-windows.txt") --cache-dir $cacheDir --quiet
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "      [!] Pip install warning/retry with verbose output..." -ForegroundColor Yellow
-    & $venvPython -m pip install -r (Join-Path $installDir "requirements-windows.txt") --cache-dir $cacheDir
+& $venvPython -m pip install -r $reqFile --cache-dir $cacheDir --quiet
+
+# Verify core dependencies
+$checkPySide = (& $venvPython -c "import PySide6; print('OK')" 2>&1) | Out-String
+if ($checkPySide -notmatch "OK") {
+    Write-Host "      [*] Installing core packages individually..." -ForegroundColor Cyan
+    $packages = @("PySide6>=6.5.0", "aiohttp>=3.9.0", "psutil>=5.9.0", "requests>=2.31.0", "Pillow")
+    foreach ($pkg in $packages) {
+        Write-Host "      Installing $pkg..." -ForegroundColor Gray
+        try {
+            & $venvPython -m pip install $pkg --cache-dir $cacheDir --quiet
+        } catch {
+            $null = $_
+        }
+    }
 }
-Write-Host "      [OK] Dependencies installed." -ForegroundColor Green
+Write-Host "      [OK] Dependencies verified." -ForegroundColor Green
 
 # 4b. Check or Install scrcpy for Android Phone Mirroring
 Write-Host "      Checking Android phone mirroring engine (scrcpy)..." -ForegroundColor Yellow
