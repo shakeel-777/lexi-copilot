@@ -29,6 +29,10 @@ def cmd_tag(body):
 
 
 class PolicyTests(unittest.TestCase):
+    def test_empty_command_is_blocked(self):
+        for c in ("", "   ", None):
+            self.assertEqual(P.classify_command(c), (P.BLOCKED, "No command provided"))
+
     def test_ordinary_file_work_is_allowed(self):
         with tempfile.TemporaryDirectory() as d:
             for c in (f"mkdir -p {d}/proj", f"touch {d}/a.txt", f"echo hello > {d}/new.txt",
