@@ -8454,7 +8454,25 @@ class LexiBeamWindow(Gtk.Window):
         root.add_css_class('lexi-beam-box')
         self.set_child(root)
 
-        # Header
+        self._build_header(root, title)
+        self._build_file_tray(root)
+        self._update_file_preview()
+        self._build_devices_section(root)
+        self._build_qr_fallback(root, target_url)
+
+        # Status text
+        self.status_lbl = Gtk.Label(label="📡 Scanning LAN for nearby Lexi peers...", xalign=0.5)
+        self.status_lbl.add_css_class('lexi-qr-status')
+        root.append(self.status_lbl)
+
+        self._setup_drag_and_drop()
+
+        # Refresh peers immediately & on timer
+        self._refresh_peers()
+        self.poll_timer_id = GLib.timeout_add_seconds(2, self._refresh_peers)
+        self.connect('destroy', self._on_destroy)
+
+    def _build_header(self, root, title):
         head_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         title_lbl = Gtk.Label(label=title, xalign=0, hexpand=True)
         title_lbl.add_css_class('lexi-beam-title')
@@ -8467,7 +8485,7 @@ class LexiBeamWindow(Gtk.Window):
         head_box.append(close_btn)
         root.append(head_box)
 
-        # Active File Preview Tray or File Selector
+    def _build_file_tray(self, root):
         self.file_tray = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.file_tray.add_css_class('lexi-beam-file-tray')
         self.file_lbl = Gtk.Label(label="", xalign=0, hexpand=True)
@@ -8481,9 +8499,7 @@ class LexiBeamWindow(Gtk.Window):
         self.file_tray.append(self.pick_file_btn)
         root.append(self.file_tray)
 
-        self._update_file_preview()
-
-        # Section Label: Nearby Devices & Direct IP
+    def _build_devices_section(self, root):
         sec_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         pulse_dot = Gtk.Label(label="●")
         pulse_dot.add_css_class('lexi-beam-pulse-dot')
@@ -8500,7 +8516,6 @@ class LexiBeamWindow(Gtk.Window):
         sec_box.append(direct_ip_btn)
         root.append(sec_box)
 
-        # Direct IP Entry Tray (revealed on click)
         self.direct_ip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.direct_ip_box.set_visible(False)
         self.direct_ip_entry = Gtk.Entry()
@@ -8516,7 +8531,6 @@ class LexiBeamWindow(Gtk.Window):
         self.direct_ip_box.append(pair_btn)
         root.append(self.direct_ip_box)
 
-        # Peers Scroll Area / Box
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroller.set_min_content_height(160)
@@ -8526,11 +8540,10 @@ class LexiBeamWindow(Gtk.Window):
         scroller.set_child(self.peers_box)
         root.append(scroller)
 
-        # Web / QR fallback toggle & container
+    def _build_qr_fallback(self, root, target_url):
         self.qr_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         self.qr_box.set_visible(False)
 
-        # QR Code setup
         qr_path = "/tmp/lexi_beam_qr.png"
         server = lexi_drop.get_lexi_drop_instance() if lexi_drop else None
         if server:
@@ -8561,7 +8574,6 @@ class LexiBeamWindow(Gtk.Window):
 
         root.append(self.qr_box)
 
-        # Toggle Button: "📱 Show QR / Web Receiver"
         self.toggle_qr_btn = Gtk.Button(label="📱 Non-Lexi Devices (Show QR / Web)")
         self.toggle_qr_btn.set_focusable(False)
         self.toggle_qr_btn.add_css_class('lexi-beam-tab-btn')
@@ -8576,12 +8588,7 @@ class LexiBeamWindow(Gtk.Window):
         self.toggle_qr_btn.connect('clicked', _toggle_qr)
         root.append(self.toggle_qr_btn)
 
-        # Status text
-        self.status_lbl = Gtk.Label(label="📡 Scanning LAN for nearby Lexi peers...", xalign=0.5)
-        self.status_lbl.add_css_class('lexi-qr-status')
-        root.append(self.status_lbl)
-
-        # Drag and drop support for files directly into window
+    def _setup_drag_and_drop(self):
         drop_target = Gtk.DropTarget.new(Gio.File, Gdk.DragAction.COPY)
         def _on_file_drop(target, value, x, y):
             if value and hasattr(value, 'get_path'):
@@ -8594,11 +8601,6 @@ class LexiBeamWindow(Gtk.Window):
             return False
         drop_target.connect('drop', _on_file_drop)
         self.add_controller(drop_target)
-
-        # Refresh peers immediately & on timer
-        self._refresh_peers()
-        self.poll_timer_id = GLib.timeout_add_seconds(2, self._refresh_peers)
-        self.connect('destroy', self._on_destroy)
 
     def _on_destroy(self, *_):
         if self.poll_timer_id:
