@@ -1,6 +1,6 @@
 pyside6>=6.5.0
 aiohttp>=3.9.0
-Pillow>=9.0.0
+Pillow
 requests>=2.31.0
 psutil>=5.9.0
 typing-extensions>=4.4.0
