@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import re
 import zlib
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 MAX_RECENT_MESSAGES = 8        # 4 exchanges kept verbatim
 MAX_SUMMARY_CHARS = 900
