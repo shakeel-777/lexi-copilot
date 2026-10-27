@@ -10748,248 +10748,196 @@ class LexiWindow(Adw.ApplicationWindow):
         self.text_view.scroll_to_mark(mark, 0.0, False, 0.0, 0.0)
         self.text_buffer.delete_mark(mark)
 
-    def handle_direct_command(self, raw_text):
-        cmd = raw_text.strip()
-        if not cmd:
-            return
 
-        if len(self.conversation) == 0:
-            self.text_buffer.set_text("")
+    def _handle_help_command(self, cmd):
+        help_text = (
+            "🌟 **Lexi System Access & Action Shortcuts**\n\n"
+            "• `/settings` : Open AI Provider & API Key Settings dialog (or press `Ctrl+,`)\n"
+            "• `/provider [name]` : Show or switch active LLM provider (`ollama`, `openai`, `deepseek`, `openrouter`, `omniroute`)\n"
+            "• `/model [name]` : Show or switch active LLM model (`/model gpt-4o-mini`, `/model llama3.2`)\n"
+            "• `/key [token]` : Show key status or set provider API key securely\n"
+            "• `$ <command>` : Execute terminal command (`$ uname -a`, `$ df -h`, `$ git status`)\n"
+            "• `/open <app|url|path>` : Launch app, website, or folder (`/open chrome`, `/open https://youtube.com`)\n"
+            "• `/vol <0-100%|mute|+10%|-10%>` : Control system volume (`/vol 80%`, `/vol mute`)\n"
+            "• `/bright <0-100%|+10%|-10%>` : Control screen brightness (`/bright 60%`)\n"
+            "• `/media <play-pause|next|prev>` : Control music/media player (`/media next`)\n"
+            "• `/wa <contact|phone> <msg>` : Send WhatsApp message (`/wa Mom Hello!`, `/wa +1234567890 Meeting now`)\n"
+            "• `/lock` : Lock desktop session\n"
+            "• `/mirror [--off]` : Mirror & control Android phone at 60 FPS (Mouse, Keyboard, Audio)\n"
+            "• `/qr` : Show Wi-Fi QR code for Android phone connection\n"
+            "• `/snip` : Interactive screen region snip\n"
+            "• `/screen` : Full screen capture\n"
+            "• `/clear` : Clear chat history (Ctrl+L)\n\n"
+            "💡 **Natural Language works seamlessly too!** Just ask Lexi directly:\n"
+            "• *\"Can you open Chrome and send hi to Mom on WhatsApp?\"*\n"
+            "• *\"Turn volume up to 80% and play music\"*\n"
+            "• *\"What is using the most disk space on my system?\"*\n"
+        )
+        render_markdown_to_buffer(self.text_buffer, help_text)
+        self.scroll_to_end()
+        self.update_mascot_mood("happy")
+
+    def _handle_settings_command(self, cmd):
+        self.open_settings_dialog()
+        render_markdown_to_buffer(self.text_buffer, "⚙️ Opened AI & Provider Settings dialog.")
+        self.scroll_to_end()
+
+    def _handle_provider_command(self, cmd):
+        parts = cmd.split(maxsplit=1)
+        if len(parts) == 1:
+            active = get_active_provider_info(self.config)
+            p_list = ", ".join([f"`{k}`" for k in PROVIDER_PRESETS.keys()])
+            masked_k = (active['api_key'][:6] + "..." + active['api_key'][-4:]) if len(active['api_key']) > 10 else ("Configured" if active['api_key'] else ("Not needed" if not active['requires_key'] else "None"))
+            resp = (
+                f"🤖 **Current AI Provider**: `{active['provider']}` ({active['preset']['name']})\n\n"
+                f"• **Base URL**: `{active['api_base']}`\n"
+                f"• **Model**: `{active['model']}`\n"
+                f"• **Key**: `{masked_k}`\n\n"
+                f"**Available Providers**: {p_list}\n"
+                f"Switch provider with `/provider <name>` (e.g. `/provider ollama` or `/provider openai`), or open `/settings`."
+            )
         else:
-            self.text_buffer.insert_with_tags_by_name(
-                self.text_buffer.get_end_iter(),
-                "\n────────────────────────────────────────\n\n",
-                "divider"
-            )
-
-        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "👤 You: ", "user_header")
-        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), f"{cmd}\n\n", "bold")
-        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "✨ Lexi:\n", "lexi_header")
-
-        # Check for /help
-        if cmd.lower() in ('/help', 'help'):
-            help_text = (
-                "🌟 **Lexi System Access & Action Shortcuts**\n\n"
-                "• `/settings` : Open AI Provider & API Key Settings dialog (or press `Ctrl+,`)\n"
-                "• `/provider [name]` : Show or switch active LLM provider (`ollama`, `openai`, `deepseek`, `openrouter`, `omniroute`)\n"
-                "• `/model [name]` : Show or switch active LLM model (`/model gpt-4o-mini`, `/model llama3.2`)\n"
-                "• `/key [token]` : Show key status or set provider API key securely\n"
-                "• `$ <command>` : Execute terminal command (`$ uname -a`, `$ df -h`, `$ git status`)\n"
-                "• `/open <app|url|path>` : Launch app, website, or folder (`/open chrome`, `/open https://youtube.com`)\n"
-                "• `/vol <0-100%|mute|+10%|-10%>` : Control system volume (`/vol 80%`, `/vol mute`)\n"
-                "• `/bright <0-100%|+10%|-10%>` : Control screen brightness (`/bright 60%`)\n"
-                "• `/media <play-pause|next|prev>` : Control music/media player (`/media next`)\n"
-                "• `/wa <contact|phone> <msg>` : Send WhatsApp message (`/wa Mom Hello!`, `/wa +1234567890 Meeting now`)\n"
-                "• `/lock` : Lock desktop session\n"
-                "• `/mirror [--off]` : Mirror & control Android phone at 60 FPS (Mouse, Keyboard, Audio)\n"
-                "• `/qr` : Show Wi-Fi QR code for Android phone connection\n"
-                "• `/snip` : Interactive screen region snip\n"
-                "• `/screen` : Full screen capture\n"
-                "• `/clear` : Clear chat history (Ctrl+L)\n\n"
-                "💡 **Natural Language works seamlessly too!** Just ask Lexi directly:\n"
-                "• *\"Can you open Chrome and send hi to Mom on WhatsApp?\"*\n"
-                "• *\"Turn volume up to 80% and play music\"*\n"
-                "• *\"What is using the most disk space on my system?\"*\n"
-            )
-            render_markdown_to_buffer(self.text_buffer, help_text)
-            self.scroll_to_end()
-            self.update_mascot_mood("happy")
-            return
-
-        # Check for /settings or /config
-        if cmd.lower() in ('/settings', 'settings', '/config', 'config'):
-            self.open_settings_dialog()
-            render_markdown_to_buffer(self.text_buffer, "⚙️ Opened AI & Provider Settings dialog.")
-            self.scroll_to_end()
-            return
-
-        # Check for /provider
-        if cmd.lower().startswith(('/provider', 'provider')):
-            parts = cmd.split(maxsplit=1)
-            if len(parts) == 1:
+            target = parts[1].strip().lower()
+            if target in PROVIDER_PRESETS:
+                self.config['provider'] = target
+                save_config(self.config)
                 active = get_active_provider_info(self.config)
-                p_list = ", ".join([f"`{k}`" for k in PROVIDER_PRESETS.keys()])
-                masked_k = (active['api_key'][:6] + "..." + active['api_key'][-4:]) if len(active['api_key']) > 10 else ("Configured" if active['api_key'] else ("Not needed" if not active['requires_key'] else "None"))
-                resp = (
-                    f"🤖 **Current AI Provider**: `{active['provider']}` ({active['preset']['name']})\n\n"
-                    f"• **Base URL**: `{active['api_base']}`\n"
-                    f"• **Model**: `{active['model']}`\n"
-                    f"• **Key**: `{masked_k}`\n\n"
-                    f"**Available Providers**: {p_list}\n"
-                    f"Switch provider with `/provider <name>` (e.g. `/provider ollama` or `/provider openai`), or open `/settings`."
-                )
-            else:
-                target = parts[1].strip().lower()
-                if target in PROVIDER_PRESETS:
-                    self.config['provider'] = target
-                    save_config(self.config)
-                    active = get_active_provider_info(self.config)
-                    disp_m = active['model'].split('/')[-1]
-                    self.status_pill.set_text(f"● {disp_m}")
-                    resp = f"✓ Switched AI provider to **{PROVIDER_PRESETS[target]['name']}**\n• Model: `{active['model']}`\n• Base URL: `{active['api_base']}`"
-                else:
-                    valid = ", ".join([f"`{k}`" for k in PROVIDER_PRESETS.keys()])
-                    resp = f"⚠️ Unknown provider `{target}`. Available: {valid}"
-            render_markdown_to_buffer(self.text_buffer, resp)
-            self.scroll_to_end()
-            return
-
-        # Check for /key
-        if cmd.lower().startswith(('/key', 'key')):
-            parts = cmd.split(maxsplit=1)
-            active = get_active_provider_info(self.config)
-            prov = active['provider']
-            if len(parts) == 1:
-                if active['api_key']:
-                    masked = (active['api_key'][:6] + "..." + active['api_key'][-4:]) if len(active['api_key']) > 12 else "******"
-                    resp = f"🔑 **API Key for {prov}**: `{masked}`\n\nTo update, run `/key <your_new_key>` or open `/settings`."
-                else:
-                    if not active['requires_key']:
-                        resp = f"🟢 **{prov} does not require an API key** (Runs locally/offline).\n\nTo set one anyway, run `/key <token>`."
-                    else:
-                        resp = f"⚠️ **No API Key set for {prov}**.\n\nSet your key with `/key <token>` or open `/settings`."
-            else:
-                new_key = parts[1].strip()
-                if prov == 'openai':
-                    self.config['openai_api_key'] = new_key
-                elif prov == 'deepseek':
-                    self.config['deepseek_api_key'] = new_key
-                elif prov == 'groq':
-                    self.config['groq_api_key'] = new_key
-                elif prov == 'ollama':
-                    self.config['ollama_api_key'] = new_key
-                elif prov == 'omniroute':
-                    self.config['omniroute_api_key'] = new_key
-                elif prov == 'custom':
-                    self.config['custom_api_key'] = new_key
-                else:
-                    self.config['api_key'] = new_key
-                save_config(self.config)
-                masked = (new_key[:6] + "..." + new_key[-4:]) if len(new_key) > 12 else "******"
-                resp = f"✓ API key for **{prov}** updated to `{masked}` (saved securely with 0600 permissions)."
-            render_markdown_to_buffer(self.text_buffer, resp)
-            self.scroll_to_end()
-            return
-
-        # Check for /model
-        if cmd.lower().startswith(('/model', 'model')):
-            parts = cmd.split(maxsplit=1)
-            active = get_active_provider_info(self.config)
-            prov = active['provider']
-            if len(parts) == 1:
-                resp = f"🧠 **Active Model ({prov})**: `{active['model']}`\n\nTo switch model, run `/model <name>` (e.g. `/model gpt-4o-mini`, `/model deepseek-chat`, `/model llama3.2`)."
-            else:
-                new_model = parts[1].strip()
-                if prov == 'openai':
-                    self.config['openai_model'] = new_model
-                elif prov == 'deepseek':
-                    new_model = normalize_deepseek_model(new_model)
-                    self.config['deepseek_model'] = new_model
-                elif prov == 'groq':
-                    self.config['groq_model'] = new_model
-                elif prov == 'ollama':
-                    self.config['ollama_model'] = new_model
-                elif prov == 'omniroute':
-                    self.config['omniroute_model'] = new_model
-                elif prov == 'custom':
-                    self.config['custom_model'] = new_model
-                else:
-                    self.config['model'] = new_model
-                save_config(self.config)
-                disp_m = new_model.split('/')[-1]
+                disp_m = active['model'].split('/')[-1]
                 self.status_pill.set_text(f"● {disp_m}")
-                resp = f"✓ Model for **{prov}** switched to `{new_model}`."
-            render_markdown_to_buffer(self.text_buffer, resp)
-            self.scroll_to_end()
-            return
-
-        # Check for /clear
-        if cmd.lower() in ('/clear', 'clear'):
-            self.on_clear_chat(None)
-            return
-
-        # Check for /snip
-        if cmd.lower() in ('/snip', 'snip'):
-            self.on_snip(None)
-            return
-
-        # Check for /screen
-        if cmd.lower() in ('/screen', 'screen'):
-            self.on_fullscreen_snap(None)
-            return
-
-        # Check for /qr (Android Phone Scan)
-        if cmd.lower() in ('/qr', 'qr'):
-            qr_win = LexiQrPopoverWindow()
-            qr_win.present()
-            self.update_mascot_mood("happy")
-            return
-
-        # Check for /mirror or /phone (Android Screen Mirroring & Control)
-        if cmd.lower().startswith(('/mirror', '/phone', 'mirror', 'phone')):
-            parts = cmd.split()
-            turn_screen_off = '--off' in parts or '-off' in parts
-            res = SystemActionEngine.get().start_phone_mirror(turn_screen_off=turn_screen_off)
-            render_markdown_to_buffer(self.text_buffer, res.get("message", ""))
-            self.scroll_to_end()
-            self.update_mascot_mood("happy" if res.get("success") else "neutral")
-            return
-
-        # Check for /beam or /share
-        if cmd.lower().startswith(('/beam', '/share')):
-            parts = cmd.split(maxsplit=1)
-            target_path = parts[1].strip() if len(parts) > 1 else None
-            if not target_path and self.captured_pages:
-                target_path = self.captured_pages[-1].get("path")
-
-            if lexi_drop:
-                server = lexi_drop.get_lexi_drop_instance()
-                server_url = server.get_server_url()
-                peers = server.get_all_peers()
-                peer_desc = f"Connected ({len(peers)}): " + ", ".join([f"**{p['device']}** ({p['ip']})" for p in peers]) if peers else "No peers discovered yet"
-
-                if target_path and os.path.exists(target_path):
-                    try:
-                        info = None
-                        try:
-                            import urllib.request
-                            req = urllib.request.Request(
-                                'http://127.0.0.1:7890/api/share',
-                                data=json.dumps({'filepath': os.path.abspath(target_path)}).encode('utf-8'),
-                                headers={'Content-Type': 'application/json'},
-                                method='POST'
-                            )
-                            with urllib.request.urlopen(req, timeout=1.5) as resp:
-                                info = json.loads(resp.read().decode('utf-8'))
-                        except Exception:
-                            info = server.share_file(target_path)
-                        sz_str = converter.format_size(info['size']) if hasattr(converter, 'format_size') else f"{info['size']}B"
-                        beam_resp = (
-                            f"⚡ **Lexi Beam — Zero-Copy Share**\n\n"
-                            f"• **File**: `{info['name']}` ({sz_str})\n"
-                            f"• **Direct Download**: [{info['url']}]({info['url']})\n"
-                            f"• **LAN Portal**: [{server_url}]({server_url})\n"
-                            f"• **Peers**: {peer_desc}\n\n"
-                            f"*Streamed over local Wi-Fi with kernel zero-copy os.sendfile at wire speed.*"
-                        )
-                    except Exception as e:
-                        beam_resp = f"⚠️ Failed to beam `{target_path}`: {e}"
-                else:
-                    beam_resp = (
-                        f"⚡ **Lexi Beam — High-Speed Local LAN File Sharing**\n\n"
-                        f"• **Web & PWA Receiver**: [{server_url}]({server_url})\n"
-                        f"• **Peers**: {peer_desc}\n"
-                        f"• **Usage**: `/beam <path/to/file.zip>` or drag any file onto Dynamic Island\n"
-                        f"• **Windows Support**: Open link in Edge to install 1-click desktop app"
-                    )
+                resp = f"✓ Switched AI provider to **{PROVIDER_PRESETS[target]['name']}**\n• Model: `{active['model']}`\n• Base URL: `{active['api_base']}`"
             else:
-                beam_resp = "⚠️ Lexi Drop server is not running."
-            render_markdown_to_buffer(self.text_buffer, beam_resp)
-            self.scroll_to_end()
-            self.update_mascot_mood("happy")
-            return
+                valid = ", ".join([f"`{k}`" for k in PROVIDER_PRESETS.keys()])
+                resp = f"⚠️ Unknown provider `{target}`. Available: {valid}"
+        render_markdown_to_buffer(self.text_buffer, resp)
+        self.scroll_to_end()
 
-        # Parse action from direct shortcut
+    def _handle_key_command(self, cmd):
+        parts = cmd.split(maxsplit=1)
+        active = get_active_provider_info(self.config)
+        prov = active['provider']
+        if len(parts) == 1:
+            if active['api_key']:
+                masked = (active['api_key'][:6] + "..." + active['api_key'][-4:]) if len(active['api_key']) > 12 else "******"
+                resp = f"🔑 **API Key for {prov}**: `{masked}`\n\nTo update, run `/key <your_new_key>` or open `/settings`."
+            else:
+                if not active['requires_key']:
+                    resp = f"🟢 **{prov} does not require an API key** (Runs locally/offline).\n\nTo set one anyway, run `/key <token>`."
+                else:
+                    resp = f"⚠️ **No API Key set for {prov}**.\n\nSet your key with `/key <token>` or open `/settings`."
+        else:
+            new_key = parts[1].strip()
+            if prov == 'openai':
+                self.config['openai_api_key'] = new_key
+            elif prov == 'deepseek':
+                self.config['deepseek_api_key'] = new_key
+            elif prov == 'groq':
+                self.config['groq_api_key'] = new_key
+            elif prov == 'ollama':
+                self.config['ollama_api_key'] = new_key
+            elif prov == 'omniroute':
+                self.config['omniroute_api_key'] = new_key
+            elif prov == 'custom':
+                self.config['custom_api_key'] = new_key
+            else:
+                self.config['api_key'] = new_key
+            save_config(self.config)
+            masked = (new_key[:6] + "..." + new_key[-4:]) if len(new_key) > 12 else "******"
+            resp = f"✓ API key for **{prov}** updated to `{masked}` (saved securely with 0600 permissions)."
+        render_markdown_to_buffer(self.text_buffer, resp)
+        self.scroll_to_end()
+
+    def _handle_model_command(self, cmd):
+        parts = cmd.split(maxsplit=1)
+        active = get_active_provider_info(self.config)
+        prov = active['provider']
+        if len(parts) == 1:
+            resp = f"🧠 **Active Model ({prov})**: `{active['model']}`\n\nTo switch model, run `/model <name>` (e.g. `/model gpt-4o-mini`, `/model deepseek-chat`, `/model llama3.2`)."
+        else:
+            new_model = parts[1].strip()
+            if prov == 'openai':
+                self.config['openai_model'] = new_model
+            elif prov == 'deepseek':
+                new_model = normalize_deepseek_model(new_model)
+                self.config['deepseek_model'] = new_model
+            elif prov == 'groq':
+                self.config['groq_model'] = new_model
+            elif prov == 'ollama':
+                self.config['ollama_model'] = new_model
+            elif prov == 'omniroute':
+                self.config['omniroute_model'] = new_model
+            elif prov == 'custom':
+                self.config['custom_model'] = new_model
+            else:
+                self.config['model'] = new_model
+            save_config(self.config)
+            disp_m = new_model.split('/')[-1]
+            self.status_pill.set_text(f"● {disp_m}")
+            resp = f"✓ Model for **{prov}** switched to `{new_model}`."
+        render_markdown_to_buffer(self.text_buffer, resp)
+        self.scroll_to_end()
+
+    def _handle_mirror_command(self, cmd):
+        parts = cmd.split()
+        turn_screen_off = '--off' in parts or '-off' in parts
+        res = SystemActionEngine.get().start_phone_mirror(turn_screen_off=turn_screen_off)
+        render_markdown_to_buffer(self.text_buffer, res.get("message", ""))
+        self.scroll_to_end()
+        self.update_mascot_mood("happy" if res.get("success") else "neutral")
+
+    def _handle_beam_command(self, cmd):
+        parts = cmd.split(maxsplit=1)
+        target_path = parts[1].strip() if len(parts) > 1 else None
+        if not target_path and self.captured_pages:
+            target_path = self.captured_pages[-1].get("path")
+
+        if lexi_drop:
+            server = lexi_drop.get_lexi_drop_instance()
+            server_url = server.get_server_url()
+            peers = server.get_all_peers()
+            peer_desc = f"Connected ({len(peers)}): " + ", ".join([f"**{p['device']}** ({p['ip']})" for p in peers]) if peers else "No peers discovered yet"
+
+            if target_path and os.path.exists(target_path):
+                try:
+                    info = None
+                    try:
+                        import urllib.request
+                        import json
+                        req = urllib.request.Request(
+                            'http://127.0.0.1:7890/api/share',
+                            data=json.dumps({'filepath': os.path.abspath(target_path)}).encode('utf-8'),
+                            headers={'Content-Type': 'application/json'},
+                            method='POST'
+                        )
+                        with urllib.request.urlopen(req, timeout=1.5) as resp:
+                            info = json.loads(resp.read().decode('utf-8'))
+                    except Exception:
+                        info = server.share_file(target_path)
+                    sz_str = converter.format_size(info['size']) if hasattr(converter, 'format_size') else f"{info['size']}B"
+                    beam_resp = (
+                        f"⚡ **Lexi Beam — Zero-Copy Share**\n\n"
+                        f"• **File**: `{info['name']}` ({sz_str})\n"
+                        f"• **Direct Download**: [{info['url']}]({info['url']})\n"
+                        f"• **LAN Portal**: [{server_url}]({server_url})\n"
+                        f"• **Peers**: {peer_desc}\n\n"
+                        f"*Streamed over local Wi-Fi with kernel zero-copy os.sendfile at wire speed.*"
+                    )
+                except Exception as e:
+                    beam_resp = f"⚠️ Failed to beam `{target_path}`: {e}"
+            else:
+                beam_resp = (
+                    f"⚡ **Lexi Beam — High-Speed Local LAN File Sharing**\n\n"
+                    f"• **Web & PWA Receiver**: [{server_url}]({server_url})\n"
+                    f"• **Peers**: {peer_desc}\n"
+                    f"• **Usage**: `/beam <path/to/file.zip>` or drag any file onto Dynamic Island\n"
+                    f"• **Windows Support**: Open link in Edge to install 1-click desktop app"
+                )
+        else:
+            beam_resp = "⚠️ Lexi Drop server is not running."
+        render_markdown_to_buffer(self.text_buffer, beam_resp)
+        self.scroll_to_end()
+        self.update_mascot_mood("happy")
+
+    def _parse_action_shortcut(self, cmd):
         action = None
         if cmd.startswith('$'):
             action = {'type': 'command', 'attrs': {}, 'body': cmd[1:].strip()}
@@ -11019,6 +10967,78 @@ class LexiWindow(Adw.ApplicationWindow):
                 'attrs': {'command': 'youtube_play_fullscreen', 'query': yt_query},
                 'body': ''
             }
+        return action
+
+    def handle_direct_command(self, raw_text):
+        cmd = raw_text.strip()
+        if not cmd:
+            return
+
+        if len(self.conversation) == 0:
+            self.text_buffer.set_text("")
+        else:
+            self.text_buffer.insert_with_tags_by_name(
+                self.text_buffer.get_end_iter(),
+                "\n────────────────────────────────────────\n\n",
+                "divider"
+            )
+
+        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "👤 You: ", "user_header")
+        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), f"{cmd}\n\n", "bold")
+        self.text_buffer.insert_with_tags_by_name(self.text_buffer.get_end_iter(), "✨ Lexi:\n", "lexi_header")
+
+        # Check for /help
+        if cmd.lower() in ('/help', 'help'):
+            return self._handle_help_command(cmd)
+
+        # Check for /settings or /config
+        if cmd.lower() in ('/settings', 'settings', '/config', 'config'):
+            return self._handle_settings_command(cmd)
+
+        # Check for /provider
+        if cmd.lower().startswith(('/provider', 'provider')):
+            return self._handle_provider_command(cmd)
+
+        # Check for /key
+        if cmd.lower().startswith(('/key', 'key')):
+            return self._handle_key_command(cmd)
+
+        # Check for /model
+        if cmd.lower().startswith(('/model', 'model')):
+            return self._handle_model_command(cmd)
+
+        # Check for /clear
+        if cmd.lower() in ('/clear', 'clear'):
+            self.on_clear_chat(None)
+            return
+
+        # Check for /snip
+        if cmd.lower() in ('/snip', 'snip'):
+            self.on_snip(None)
+            return
+
+        # Check for /screen
+        if cmd.lower() in ('/screen', 'screen'):
+            self.on_fullscreen_snap(None)
+            return
+
+        # Check for /qr (Android Phone Scan)
+        if cmd.lower() in ('/qr', 'qr'):
+            qr_win = LexiQrPopoverWindow()
+            qr_win.present()
+            self.update_mascot_mood("happy")
+            return
+
+        # Check for /mirror or /phone (Android Screen Mirroring & Control)
+        if cmd.lower().startswith(('/mirror', '/phone', 'mirror', 'phone')):
+            return self._handle_mirror_command(cmd)
+
+        # Check for /beam or /share
+        if cmd.lower().startswith(('/beam', '/share')):
+            return self._handle_beam_command(cmd)
+
+        # Parse action from direct shortcut
+        action = self._parse_action_shortcut(cmd)
 
         if action:
             if action.get('type') in ('whatsapp', 'wa'):
@@ -11039,8 +11059,8 @@ class LexiWindow(Adw.ApplicationWindow):
                         return GLib.SOURCE_REMOVE
                     GLib.timeout_add(2500, reset_status)
                 GLib.idle_add(on_done)
+            import threading
             threading.Thread(target=worker, daemon=True).start()
-
     def on_submit(self, _=None):
         text = self.entry.get_text().strip()
         if not text or self.is_streaming:
