@@ -4538,6 +4538,293 @@ class LexiMascotWidget(Gtk.DrawingArea):
         self.target_look_x = max(-1.0, min(1.0, lx))
         self.target_look_y = max(-1.0, min(1.0, ly))
 
+    def _update_particles(self):
+        alive_particles = []
+        for p in self.particles:
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            p['alpha'] -= 0.035
+            p['size'] = max(0.5, p['size'] * 0.96)
+            if p['alpha'] > 0.05:
+                alive_particles.append(p)
+        self.particles = alive_particles
+
+    def _update_activity_walk(self, s):
+        if self.is_walking:
+            self.walk_phase = (self.walk_phase + 0.16) % (2 * math.pi)
+            if not self.is_pet_mode:
+                self.walk_x += self.facing * 0.48
+                if self.walk_x > 20.0:
+                    self.walk_x = 20.0
+                    self.is_walking = False
+                    self.walk_pause_timer = 50
+                    self.facing = -1.0
+                elif self.walk_x < -20.0:
+                    self.walk_x = -20.0
+                    self.is_walking = False
+                    self.walk_pause_timer = 50
+                    self.facing = 1.0
+            else:
+                self.walk_x = 0.0
+                self.walk_timer = getattr(self, 'walk_timer', 0) + 1
+                if self.walk_timer > 140:
+                    self.walk_timer = 0
+                    self.is_walking = False
+                    self.walk_pause_timer = 50
+            self.queue_draw()
+        else:
+            self.walk_pause_timer -= 1
+            if self.walk_pause_timer <= 0:
+                if self.is_pet_mode and random.random() < 0.65:
+                    self.cycle_next_activity()
+                else:
+                    self.is_walking = True
+                self.queue_draw()
+
+    def _update_activity_spiderweb(self, s):
+        self.activity_timer += 1
+        self.web_active = True
+        self.arm_spread = min(1.0, self.activity_timer / 10.0)
+        if self.activity_timer % 4 == 0:
+            self.spawn_particle(self.walk_x, -16 * s, 'sparkle', 1, color=(0.4, 0.9, 1.0))
+        if not self.is_pet_mode:
+            self.jump_y += (-18 * s - self.jump_y) * 0.16
+            if self.activity_timer >= 32:
+                self.trigger_perch()
+        self.queue_draw()
+
+    def _update_activity_perch(self, s):
+        self.activity_timer += 1
+        self.web_active = False
+        self.perch_swing = math.sin(self.activity_timer * 0.14) * 0.28
+        self.squish_y = 0.95 + 0.03 * math.sin(self.activity_timer * 0.10)
+        self.squish_x = 1.05 - 0.02 * math.sin(self.activity_timer * 0.10)
+        self.target_look_x = math.sin(self.activity_timer * 0.05) * 0.65
+        self.target_look_y = 0.45
+        if self.activity_timer % 32 == 0:
+            self.spawn_particle(self.walk_x, 16 * s, 'sparkle', 1, color=(1.0, 0.85, 0.4))
+        if not self.is_pet_mode:
+            self.jump_y = -18 * s
+            if self.activity_timer >= 120:
+                self.trigger_hang_web()
+        self.queue_draw()
+
+    def _update_activity_hang_web(self, s):
+        self.activity_timer += 1
+        self.web_active = True
+        pendulum = math.sin(self.activity_timer * 0.10) * 0.22
+        self.flip_angle = math.pi + pendulum
+        self.arm_spread = 0.4 + 0.15 * math.sin(self.activity_timer * 0.12)
+        if self.activity_timer % 5 == 0:
+            self.spawn_particle(self.walk_x, -10 * s, 'sparkle', 1, color=(0.7, 0.5, 1.0))
+        if not self.is_pet_mode:
+            self.jump_y = -8 * s + 4 * s * math.sin(self.activity_timer * 0.10)
+            if self.activity_timer >= 90:
+                self.trigger_backflip()
+        self.queue_draw()
+
+    def _update_activity_fly(self, s):
+        self.activity_timer += 1
+        self.web_active = False
+        self.flip_angle = self.facing * 0.40
+        self.arm_spread = 1.0
+        self.squish_x = 1.15
+        self.squish_y = 0.88
+        if self.activity_timer % 2 == 0:
+            self.spawn_particle(self.walk_x - self.facing * 18 * s, 8 * s, 'star', 1, color=(0.4, 0.85, 1.0))
+        if not self.is_pet_mode:
+            self.jump_y = -14 * s + 8 * s * math.sin(self.activity_timer * 0.12)
+            if self.activity_timer >= 100:
+                self.trigger_backflip()
+        self.queue_draw()
+
+    def _update_activity_backflip(self, s):
+        self.activity_timer += 1
+        total_frames = 28
+        prog = min(1.0, self.activity_timer / float(total_frames))
+        self.flip_angle = prog * 2.0 * math.pi
+        self.jump_y = -math.sin(prog * math.pi) * 22.0 * s
+        self.arm_spread = math.sin(prog * math.pi)
+        if self.activity_timer % 3 == 0:
+            self.spawn_particle(self.walk_x, self.jump_y + 10 * s, 'sparkle', 1)
+        if self.activity_timer >= total_frames:
+            self.flip_angle = 0.0
+            self.jump_y = 0.0
+            self.arm_spread = 0.0
+            self.squish_y = 0.72
+            self.squish_x = 1.28
+            self.spawn_particle(self.walk_x, 34 * s, 'star', 8)
+            self.activity = "walk"
+            self.activity_timer = 0
+            self.is_walking = True
+            if self.activity_callback: self.activity_callback("✨ Perfect 360° backflip landing! ✦")
+        self.queue_draw()
+
+    def _update_activity_jump(self, s):
+        self.activity_timer += 1
+        if self.activity_timer < 12:
+            self.squish_y = 0.75
+            self.squish_x = 1.25
+            self.tail_phase = (self.tail_phase + 0.35) % (2 * math.pi)
+        elif self.activity_timer == 12:
+            self.jump_vy = -8.5 * s
+            self.squish_y = 1.25
+            self.squish_x = 0.85
+            self.spawn_particle(self.walk_x, 32 * s, 'star', 6)
+            if self.activity_callback: self.activity_callback("🐾 *LEAP!* ( ˶ˆ꒳ˆ˵ )")
+        else:
+            self.jump_y += self.jump_vy
+            self.jump_vy += 0.82 * s
+            self.arm_spread = min(1.0, abs(self.jump_vy) / (6.0 * s))
+            if self.jump_y >= 0.0:
+                self.jump_y = 0.0
+                self.jump_vy = 0.0
+                self.arm_spread = 0.0
+                self.squish_y = 0.74
+                self.squish_x = 1.26
+                self.spawn_particle(self.walk_x, 34 * s, 'sparkle', 6)
+                self.activity = "walk"
+                self.activity_timer = 0
+                self.is_walking = True
+                if self.activity_callback: self.activity_callback("✨ Landed like a ninja!")
+        self.queue_draw()
+
+    def _update_activity_jacks(self, s):
+        self.activity_timer += 1
+        sub = self.activity_timer % 24
+        prog = math.sin((sub / 24.0) * math.pi)
+        self.jump_y = -prog * 12.0 * s
+        self.arm_spread = prog
+        self.feet_spread = prog
+        if sub == 12:
+            self.spawn_particle(self.walk_x - 12 * s, -10 * s, 'sparkle', 1)
+            self.spawn_particle(self.walk_x + 12 * s, -10 * s, 'sparkle', 1)
+        rep = (self.activity_timer // 24) + 1
+        if self.activity_callback and sub == 1:
+            self.activity_callback(f"💪 Workout Rep {rep}/4! (1, 2, 1, 2)")
+        if self.activity_timer >= 96:
+            self.jump_y = 0.0
+            self.arm_spread = 0.0
+            self.feet_spread = 0.0
+            self.squish_x = 1.15
+            self.squish_y = 0.88
+            self.spawn_particle(self.walk_x, 0, 'star', 6)
+            self.activity = "walk"
+            self.activity_timer = 0
+            self.is_walking = True
+            if self.activity_callback: self.activity_callback("✨ Workout complete! Feeling energetic!")
+        self.queue_draw()
+
+    def _update_activity_stretch(self, s):
+        self.activity_timer += 1
+        if self.activity_timer < 16:
+            self.stretch_amount = min(1.0, self.activity_timer / 16.0)
+        elif self.activity_timer < 48:
+            self.stretch_amount = 1.0
+            self.tail_phase = (self.tail_phase + 0.22) % (2 * math.pi)
+        else:
+            self.stretch_amount = max(0.0, 1.0 - (self.activity_timer - 48) / 14.0)
+            if self.stretch_amount <= 0.0:
+                self.stretch_amount = 0.0
+                self.spawn_particle(self.walk_x, 8 * s, 'heart', 3)
+                self.activity = "walk"
+                self.activity_timer = 0
+                self.is_walking = True
+                if self.activity_callback: self.activity_callback("✨ Refreshed and ready!")
+        self.queue_draw()
+
+    def _update_activity_punch(self, s):
+        self.activity_timer += 1
+        phase = self.activity_timer % 20
+        if phase < 10:
+            self.punch_l = math.sin((phase / 10.0) * math.pi) * 14.0 * s
+            self.punch_r = 0.0
+            if phase == 5:
+                self.spawn_particle(self.walk_x - 14 * s, 14 * s, 'star', 2)
+        else:
+            self.punch_l = 0.0
+            self.punch_r = math.sin(((phase - 10) / 10.0) * math.pi) * 14.0 * s
+            if phase == 15:
+                self.spawn_particle(self.walk_x + 14 * s, 14 * s, 'star', 2)
+        if self.activity_timer >= 60:
+            self.punch_l = 0.0
+            self.punch_r = 0.0
+            self.squish_x = 1.14
+            self.squish_y = 0.90
+            self.spawn_particle(self.walk_x, 5 * s, 'star', 6)
+            self.activity = "walk"
+            self.activity_timer = 0
+            self.is_walking = True
+            if self.activity_callback: self.activity_callback("🥊 Karate paws master! ( •̀ ᴗ •́ )و")
+        self.queue_draw()
+
+    def _update_activity_stardust(self, s):
+        self.activity_timer += 1
+        self.star_orb_active = True
+        self.star_orb_t += 0.08
+        self.star_orb_x = math.sin(self.star_orb_t) * 40.0 * s
+        self.star_orb_y = -18.0 * s + math.cos(self.star_orb_t * 1.6) * 14.0 * s
+        self.target_look_x = max(-1.0, min(1.0, (self.star_orb_x - self.walk_x) / (32.0 * s)))
+        self.target_look_y = max(-1.0, min(1.0, (self.star_orb_y) / (30.0 * s)))
+        self.walk_x += (self.star_orb_x - self.walk_x) * 0.05
+        if self.activity_timer == 65:
+            self.jump_y = -10.0 * s
+            self.spawn_particle(self.star_orb_x, self.star_orb_y, 'star', 10)
+            self.spawn_particle(self.star_orb_x, self.star_orb_y, 'sparkle', 6)
+            self.star_orb_active = False
+            self.mood = "happy"
+            if self.activity_callback: self.activity_callback("✨ Caught the stardust! ✦")
+        elif self.activity_timer >= 85:
+            self.jump_y = 0.0
+            self.star_orb_active = False
+            self.mood = "normal"
+            self.activity = "walk"
+            self.activity_timer = 0
+            self.is_walking = True
+        self.queue_draw()
+
+    def _update_activity_loaf(self, s):
+        self.activity_timer += 1
+        self.squish_y = 1.0 + 0.035 * math.sin(self.activity_timer * 0.08)
+        self.squish_x = 1.0 - 0.02 * math.sin(self.activity_timer * 0.08)
+        if self.activity_timer % 32 == 0:
+            self.spawn_particle(self.walk_x + 12 * s, -12 * s, 'z', 1, color=(0.85, 0.75, 1.0))
+        if self.activity_timer >= 96:
+            self.activity = "walk"
+            self.activity_timer = 0
+            self.is_walking = True
+            self.squish_x = 1.12
+            self.squish_y = 0.90
+            if self.activity_callback: self.activity_callback("✨ Woke up refreshed!")
+        self.queue_draw()
+
+    def _update_normal_activity(self, s):
+        if self.activity == "walk":
+            self._update_activity_walk(s)
+        elif self.activity == "spiderweb":
+            self._update_activity_spiderweb(s)
+        elif self.activity == "perch":
+            self._update_activity_perch(s)
+        elif self.activity == "hang_web":
+            self._update_activity_hang_web(s)
+        elif self.activity == "fly":
+            self._update_activity_fly(s)
+        elif self.activity == "backflip":
+            self._update_activity_backflip(s)
+        elif self.activity == "jump":
+            self._update_activity_jump(s)
+        elif self.activity == "jacks":
+            self._update_activity_jacks(s)
+        elif self.activity == "stretch":
+            self._update_activity_stretch(s)
+        elif self.activity == "punch":
+            self._update_activity_punch(s)
+        elif self.activity == "stardust":
+            self._update_activity_stardust(s)
+        elif self.activity == "loaf":
+            self._update_activity_loaf(s)
+
+
     def on_anim_frame(self):
         if not self.get_mapped():
             return GLib.SOURCE_CONTINUE
@@ -4564,269 +4851,12 @@ class LexiMascotWidget(Gtk.DrawingArea):
 
         self.tail_phase = (self.tail_phase + 0.08) % (2 * math.pi)
 
-        # Update particles
-        alive_particles = []
-        for p in self.particles:
-            p['x'] += p['vx']
-            p['y'] += p['vy']
-            p['alpha'] -= 0.035
-            p['size'] = max(0.5, p['size'] * 0.96)
-            if p['alpha'] > 0.05:
-                alive_particles.append(p)
-        self.particles = alive_particles
+        self._update_particles()
 
         s = min(self.mascot_w / 125.0, self.mascot_h / 125.0) if self.is_pet_mode else min(self.mascot_w / 110.0, self.mascot_h / 130.0)
 
-        # Playful Activities & Autonomous Routine
         if self.mood == "normal":
-            if self.activity == "walk":
-                if self.is_walking:
-                    self.walk_phase = (self.walk_phase + 0.16) % (2 * math.pi)
-                    if not self.is_pet_mode:
-                        self.walk_x += self.facing * 0.48
-                        if self.walk_x > 20.0:
-                            self.walk_x = 20.0
-                            self.is_walking = False
-                            self.walk_pause_timer = 50
-                            self.facing = -1.0
-                        elif self.walk_x < -20.0:
-                            self.walk_x = -20.0
-                            self.is_walking = False
-                            self.walk_pause_timer = 50
-                            self.facing = 1.0
-                    else:
-                        self.walk_x = 0.0
-                        self.walk_timer = getattr(self, 'walk_timer', 0) + 1
-                        if self.walk_timer > 140:
-                            self.walk_timer = 0
-                            self.is_walking = False
-                            self.walk_pause_timer = 50
-                    self.queue_draw()
-                else:
-                    self.walk_pause_timer -= 1
-                    if self.walk_pause_timer <= 0:
-                        if self.is_pet_mode and random.random() < 0.65:
-                            self.cycle_next_activity()
-                        else:
-                            self.is_walking = True
-                        self.queue_draw()
-
-            elif self.activity == "spiderweb":
-                self.activity_timer += 1
-                self.web_active = True
-                self.arm_spread = min(1.0, self.activity_timer / 10.0)
-                if self.activity_timer % 4 == 0:
-                    self.spawn_particle(self.walk_x, -16 * s, 'sparkle', 1, color=(0.4, 0.9, 1.0))
-                if not self.is_pet_mode:
-                    self.jump_y += (-18 * s - self.jump_y) * 0.16
-                    if self.activity_timer >= 32:
-                        self.trigger_perch()
-                self.queue_draw()
-
-            elif self.activity == "perch":
-                self.activity_timer += 1
-                self.web_active = False
-                self.perch_swing = math.sin(self.activity_timer * 0.14) * 0.28
-                self.squish_y = 0.95 + 0.03 * math.sin(self.activity_timer * 0.10)
-                self.squish_x = 1.05 - 0.02 * math.sin(self.activity_timer * 0.10)
-                self.target_look_x = math.sin(self.activity_timer * 0.05) * 0.65
-                self.target_look_y = 0.45
-                if self.activity_timer % 32 == 0:
-                    self.spawn_particle(self.walk_x, 16 * s, 'sparkle', 1, color=(1.0, 0.85, 0.4))
-                if not self.is_pet_mode:
-                    self.jump_y = -18 * s
-                    if self.activity_timer >= 120:
-                        self.trigger_hang_web()
-                self.queue_draw()
-
-            elif self.activity == "hang_web":
-                self.activity_timer += 1
-                self.web_active = True
-                pendulum = math.sin(self.activity_timer * 0.10) * 0.22
-                self.flip_angle = math.pi + pendulum
-                self.arm_spread = 0.4 + 0.15 * math.sin(self.activity_timer * 0.12)
-                if self.activity_timer % 5 == 0:
-                    self.spawn_particle(self.walk_x, -10 * s, 'sparkle', 1, color=(0.7, 0.5, 1.0))
-                if not self.is_pet_mode:
-                    self.jump_y = -8 * s + 4 * s * math.sin(self.activity_timer * 0.10)
-                    if self.activity_timer >= 90:
-                        self.trigger_backflip()
-                self.queue_draw()
-
-            elif self.activity == "fly":
-                self.activity_timer += 1
-                self.web_active = False
-                self.flip_angle = self.facing * 0.40
-                self.arm_spread = 1.0
-                self.squish_x = 1.15
-                self.squish_y = 0.88
-                if self.activity_timer % 2 == 0:
-                    self.spawn_particle(self.walk_x - self.facing * 18 * s, 8 * s, 'star', 1, color=(0.4, 0.85, 1.0))
-                if not self.is_pet_mode:
-                    self.jump_y = -14 * s + 8 * s * math.sin(self.activity_timer * 0.12)
-                    if self.activity_timer >= 100:
-                        self.trigger_backflip()
-                self.queue_draw()
-
-            elif self.activity == "backflip":
-                self.activity_timer += 1
-                total_frames = 28
-                prog = min(1.0, self.activity_timer / float(total_frames))
-                self.flip_angle = prog * 2.0 * math.pi
-                self.jump_y = -math.sin(prog * math.pi) * 22.0 * s
-                self.arm_spread = math.sin(prog * math.pi)
-                if self.activity_timer % 3 == 0:
-                    self.spawn_particle(self.walk_x, self.jump_y + 10 * s, 'sparkle', 1)
-                if self.activity_timer >= total_frames:
-                    self.flip_angle = 0.0
-                    self.jump_y = 0.0
-                    self.arm_spread = 0.0
-                    self.squish_y = 0.72
-                    self.squish_x = 1.28
-                    self.spawn_particle(self.walk_x, 34 * s, 'star', 8)
-                    self.activity = "walk"
-                    self.activity_timer = 0
-                    self.is_walking = True
-                    if self.activity_callback: self.activity_callback("✨ Perfect 360° backflip landing! ✦")
-                self.queue_draw()
-
-            elif self.activity == "jump":
-                self.activity_timer += 1
-                if self.activity_timer < 12:
-                    self.squish_y = 0.75
-                    self.squish_x = 1.25
-                    self.tail_phase = (self.tail_phase + 0.35) % (2 * math.pi)
-                elif self.activity_timer == 12:
-                    self.jump_vy = -8.5 * s
-                    self.squish_y = 1.25
-                    self.squish_x = 0.85
-                    self.spawn_particle(self.walk_x, 32 * s, 'star', 6)
-                    if self.activity_callback: self.activity_callback("🐾 *LEAP!* ( ˶ˆ꒳ˆ˵ )")
-                else:
-                    self.jump_y += self.jump_vy
-                    self.jump_vy += 0.82 * s
-                    self.arm_spread = min(1.0, abs(self.jump_vy) / (6.0 * s))
-                    if self.jump_y >= 0.0:
-                        self.jump_y = 0.0
-                        self.jump_vy = 0.0
-                        self.arm_spread = 0.0
-                        self.squish_y = 0.74
-                        self.squish_x = 1.26
-                        self.spawn_particle(self.walk_x, 34 * s, 'sparkle', 6)
-                        self.activity = "walk"
-                        self.activity_timer = 0
-                        self.is_walking = True
-                        if self.activity_callback: self.activity_callback("✨ Landed like a ninja!")
-                self.queue_draw()
-
-            elif self.activity == "jacks":
-                self.activity_timer += 1
-                sub = self.activity_timer % 24
-                prog = math.sin((sub / 24.0) * math.pi)
-                self.jump_y = -prog * 12.0 * s
-                self.arm_spread = prog
-                self.feet_spread = prog
-                if sub == 12:
-                    self.spawn_particle(self.walk_x - 12 * s, -10 * s, 'sparkle', 1)
-                    self.spawn_particle(self.walk_x + 12 * s, -10 * s, 'sparkle', 1)
-                rep = (self.activity_timer // 24) + 1
-                if self.activity_callback and sub == 1:
-                    self.activity_callback(f"💪 Workout Rep {rep}/4! (1, 2, 1, 2)")
-                if self.activity_timer >= 96:
-                    self.jump_y = 0.0
-                    self.arm_spread = 0.0
-                    self.feet_spread = 0.0
-                    self.squish_x = 1.15
-                    self.squish_y = 0.88
-                    self.spawn_particle(self.walk_x, 0, 'star', 6)
-                    self.activity = "walk"
-                    self.activity_timer = 0
-                    self.is_walking = True
-                    if self.activity_callback: self.activity_callback("✨ Workout complete! Feeling energetic!")
-                self.queue_draw()
-
-            elif self.activity == "stretch":
-                self.activity_timer += 1
-                if self.activity_timer < 16:
-                    self.stretch_amount = min(1.0, self.activity_timer / 16.0)
-                elif self.activity_timer < 48:
-                    self.stretch_amount = 1.0
-                    self.tail_phase = (self.tail_phase + 0.22) % (2 * math.pi)
-                else:
-                    self.stretch_amount = max(0.0, 1.0 - (self.activity_timer - 48) / 14.0)
-                    if self.stretch_amount <= 0.0:
-                        self.stretch_amount = 0.0
-                        self.spawn_particle(self.walk_x, 8 * s, 'heart', 3)
-                        self.activity = "walk"
-                        self.activity_timer = 0
-                        self.is_walking = True
-                        if self.activity_callback: self.activity_callback("✨ Refreshed and ready!")
-                self.queue_draw()
-
-            elif self.activity == "punch":
-                self.activity_timer += 1
-                phase = self.activity_timer % 20
-                if phase < 10:
-                    self.punch_l = math.sin((phase / 10.0) * math.pi) * 14.0 * s
-                    self.punch_r = 0.0
-                    if phase == 5:
-                        self.spawn_particle(self.walk_x - 14 * s, 14 * s, 'star', 2)
-                else:
-                    self.punch_l = 0.0
-                    self.punch_r = math.sin(((phase - 10) / 10.0) * math.pi) * 14.0 * s
-                    if phase == 15:
-                        self.spawn_particle(self.walk_x + 14 * s, 14 * s, 'star', 2)
-                if self.activity_timer >= 60:
-                    self.punch_l = 0.0
-                    self.punch_r = 0.0
-                    self.squish_x = 1.14
-                    self.squish_y = 0.90
-                    self.spawn_particle(self.walk_x, 5 * s, 'star', 6)
-                    self.activity = "walk"
-                    self.activity_timer = 0
-                    self.is_walking = True
-                    if self.activity_callback: self.activity_callback("🥊 Karate paws master! ( •̀ ᴗ •́ )و")
-                self.queue_draw()
-
-            elif self.activity == "stardust":
-                self.activity_timer += 1
-                self.star_orb_active = True
-                self.star_orb_t += 0.08
-                self.star_orb_x = math.sin(self.star_orb_t) * 40.0 * s
-                self.star_orb_y = -18.0 * s + math.cos(self.star_orb_t * 1.6) * 14.0 * s
-                self.target_look_x = max(-1.0, min(1.0, (self.star_orb_x - self.walk_x) / (32.0 * s)))
-                self.target_look_y = max(-1.0, min(1.0, (self.star_orb_y) / (30.0 * s)))
-                self.walk_x += (self.star_orb_x - self.walk_x) * 0.05
-                if self.activity_timer == 65:
-                    self.jump_y = -10.0 * s
-                    self.spawn_particle(self.star_orb_x, self.star_orb_y, 'star', 10)
-                    self.spawn_particle(self.star_orb_x, self.star_orb_y, 'sparkle', 6)
-                    self.star_orb_active = False
-                    self.mood = "happy"
-                    if self.activity_callback: self.activity_callback("✨ Caught the stardust! ✦")
-                elif self.activity_timer >= 85:
-                    self.jump_y = 0.0
-                    self.star_orb_active = False
-                    self.mood = "normal"
-                    self.activity = "walk"
-                    self.activity_timer = 0
-                    self.is_walking = True
-                self.queue_draw()
-
-            elif self.activity == "loaf":
-                self.activity_timer += 1
-                self.squish_y = 1.0 + 0.035 * math.sin(self.activity_timer * 0.08)
-                self.squish_x = 1.0 - 0.02 * math.sin(self.activity_timer * 0.08)
-                if self.activity_timer % 32 == 0:
-                    self.spawn_particle(self.walk_x + 12 * s, -12 * s, 'z', 1, color=(0.85, 0.75, 1.0))
-                if self.activity_timer >= 96:
-                    self.activity = "walk"
-                    self.activity_timer = 0
-                    self.is_walking = True
-                    self.squish_x = 1.12
-                    self.squish_y = 0.90
-                    if self.activity_callback: self.activity_callback("✨ Woke up refreshed!")
-                self.queue_draw()
+            self._update_normal_activity(s)
         else:
             # During hungry, eating, happy, working: smoothly return to center and stop walking
             if abs(self.walk_x) > 0.5:
