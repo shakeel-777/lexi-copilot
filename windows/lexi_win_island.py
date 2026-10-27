@@ -834,7 +834,59 @@ class LexiPetWidget(QWidget):
                 else:
                     self.on_activate()
 
+
+class TestConnectionWorker(QThread):
+    result = Signal(bool, str, str)  # success, message, color
+
+    def __init__(self, prov, base, model, headers):
+        super().__init__()
+        self.prov = prov
+        self.base = base
+        self.model = model
+        self.headers = headers
+
+    def run(self):
+        import time
+        import requests
+        t0 = time.time()
+
+        if self.prov == "ollama":
+            url = f"{self.base}/models"
+            try:
+                resp = requests.get(url, headers=self.headers, timeout=6)
+                if resp.status_code == 200:
+                    ms = int((time.time() - t0) * 1000)
+                    self.result.emit(True, f"✓ Ollama connected! ({ms} ms)", "#10b981")
+                    return
+            except Exception as e:
+                self.result.emit(False, f"⚠️ Ollama error: {e}", "#ef4444")
+                return
+
+        url = f"{self.base}/chat/completions"
+        payload = {
+            "model": self.model or "default",
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+            "stream": False
+        }
+
+        try:
+            resp = requests.post(url, json=payload, headers=self.headers, timeout=10)
+            ms = int((time.time() - t0) * 1000)
+            if resp.status_code == 200:
+                self.result.emit(True, f"✓ Connected successfully! ({ms} ms latency)", "#10b981")
+            else:
+                err_detail = ""
+                try:
+                    err_detail = resp.json().get("error", {}).get("message", "")
+                except Exception:
+                    err_detail = resp.text[:120]
+                self.result.emit(False, f"⚠️ HTTP {resp.status_code}: {err_detail or resp.reason}", "#ef4444")
+        except Exception as e:
+            self.result.emit(False, f"⚠️ Connection error: {e}", "#ef4444")
+
 class LexiSettingsDialog(QDialog):
+
     """Multi-Provider AI Configuration Dialog with live connection tester."""
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -973,7 +1025,7 @@ class LexiSettingsDialog(QDialog):
     def test_connection(self):
         self.test_lbl.setText("Testing endpoint...")
         self.test_lbl.setStyleSheet("color: #94a3b8;")
-        QApplication.processEvents()
+        self.test_btn.setEnabled(False)
 
         idx = self.prov_combo.currentIndex()
         prov_map = {0: "deepseek", 1: "groq", 2: "ollama", 3: "openrouter", 4: "openai"}
@@ -989,49 +1041,15 @@ class LexiSettingsDialog(QDialog):
             "model": model
         }
         headers = build_api_headers(prov_info)
-        t0 = time.time()
 
-        if prov == "ollama":
-            url = f"{base}/models"
-            try:
-                import requests
-                resp = requests.get(url, headers=headers, timeout=6)
-                if resp.status_code == 200:
-                    ms = int((time.time() - t0) * 1000)
-                    self.test_lbl.setStyleSheet("color: #10b981;")
-                    self.test_lbl.setText(f"✓ Ollama connected! ({ms} ms)")
-                    return
-            except Exception as e:
-                self.test_lbl.setStyleSheet("color: #ef4444;")
-                self.test_lbl.setText(f"⚠️ Ollama error: {e}")
-                return
+        self._test_worker = TestConnectionWorker(prov, base, model, headers)
+        self._test_worker.result.connect(self._on_test_connection_result)
+        self._test_worker.start()
 
-        url = f"{base}/chat/completions"
-        payload = {
-            "model": model or "default",
-            "messages": [{"role": "user", "content": "ping"}],
-            "max_tokens": 1,
-            "stream": False
-        }
-
-        try:
-            import requests
-            resp = requests.post(url, json=payload, headers=headers, timeout=10)
-            ms = int((time.time() - t0) * 1000)
-            if resp.status_code == 200:
-                self.test_lbl.setStyleSheet("color: #10b981;")
-                self.test_lbl.setText(f"✓ Connected successfully! ({ms} ms latency)")
-            else:
-                err_detail = ""
-                try:
-                    err_detail = resp.json().get("error", {}).get("message", "")
-                except Exception:
-                    err_detail = resp.text[:120]
-                self.test_lbl.setStyleSheet("color: #ef4444;")
-                self.test_lbl.setText(f"⚠️ HTTP {resp.status_code}: {err_detail or resp.reason}")
-        except Exception as e:
-            self.test_lbl.setStyleSheet("color: #ef4444;")
-            self.test_lbl.setText(f"⚠️ Connection error: {e}")
+    def _on_test_connection_result(self, success, message, color):
+        self.test_lbl.setStyleSheet(f"color: {color};")
+        self.test_lbl.setText(message)
+        self.test_btn.setEnabled(True)
 
     def save_and_close(self):
         idx = self.prov_combo.currentIndex()
