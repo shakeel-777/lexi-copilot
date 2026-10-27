@@ -164,11 +164,11 @@ class DirectShortcutRegression(unittest.TestCase):
     def test_dollar_shortcut_is_not_short_circuited_as_disabled(self):
         """A stale early-return in handle_direct_command used to make `$ cmd` dead code."""
         import inspect
-        src = inspect.getsource(lexi.LexiWindow.handle_direct_command) if hasattr(lexi, "LexiWindow") else ""
+        src = (inspect.getsource(lexi.LexiWindow.handle_direct_command) + '\n' + inspect.getsource(lexi.LexiWindow._parse_action_shortcut)) if hasattr(lexi, "LexiWindow") else ""
         if not src:
             for obj in vars(lexi).values():
                 if isinstance(obj, type) and hasattr(obj, "handle_direct_command"):
-                    src = inspect.getsource(obj.handle_direct_command)
+                    src = inspect.getsource(obj.handle_direct_command) + '\n' + inspect.getsource(obj._parse_action_shortcut)
                     break
         self.assertTrue(src, "handle_direct_command not found")
         self.assertNotIn("Terminal commands are disabled", src)
