@@ -1018,6 +1018,7 @@ class LexiDropServer:
         part_path = dest_path.with_name(f".{dest_path.name}.lexipart")
 
         try:
+            loop = asyncio.get_running_loop()
             with open(part_path, "wb") as f:
                 async for chunk in request.content.iter_chunked(chunk_size):
                     total_bytes += len(chunk)
@@ -1026,7 +1027,7 @@ class LexiDropServer:
                             max_size=max_upload_bytes,
                             actual_size=total_bytes
                         )
-                    f.write(chunk)
+                    await loop.run_in_executor(None, f.write, chunk)
 
             os.replace(part_path, dest_path)
         except Exception:
@@ -1492,12 +1493,13 @@ class LexiDropServer:
                     dest_path = get_unique_destination_path(DOWNLOADS_DIR, filename)
                     total_bytes = 0
                     t0 = time.time()
+                    loop = asyncio.get_running_loop()
                     with open(dest_path, "wb") as f:
                         while True:
                             chunk = await part.read_chunk(4 * 1024 * 1024)
                             if not chunk:
                                 break
-                            f.write(chunk)
+                            await loop.run_in_executor(None, f.write, chunk)
                             total_bytes += len(chunk)
                     elapsed = max(time.time() - t0, 0.001)
                     speed_mbps = (total_bytes / (1024 * 1024)) / elapsed
@@ -1538,6 +1540,7 @@ class LexiDropServer:
                 reader = await request.multipart()
                 part = await reader.next()
                 if part and part.filename:
+                    loop = asyncio.get_running_loop()
                     with open(snap_path, "wb") as f:
                         while True:
                             chunk = await part.read_chunk(1024 * 1024)
@@ -1546,14 +1549,15 @@ class LexiDropServer:
                             total_read += len(chunk)
                             if total_read > max_snap_size:
                                 raise web.HTTPRequestEntityTooLarge(max_size=max_snap_size, actual_size=total_read)
-                            f.write(chunk)
+                            await loop.run_in_executor(None, f.write, chunk)
             else:
+                loop = asyncio.get_running_loop()
                 with open(snap_path, "wb") as f:
                     async for chunk in request.content.iter_chunked(1024 * 1024):
                         total_read += len(chunk)
                         if total_read > max_snap_size:
                             raise web.HTTPRequestEntityTooLarge(max_size=max_snap_size, actual_size=total_read)
-                        f.write(chunk)
+                        await loop.run_in_executor(None, f.write, chunk)
 
             if snap_path.exists() and os.path.getsize(snap_path) > 0:
                 if self.on_camera_snap_received:
