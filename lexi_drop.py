@@ -1672,14 +1672,19 @@ class LexiDropServer:
             return
 
         async def _send():
-            dead = set()
-            for ws in list(self.connected_websockets):
+            async def _send_to_ws(ws):
                 try:
                     await ws.send_json(message)
+                    return None
                 except Exception:
-                    dead.add(ws)
-            for ws in dead:
-                self.connected_websockets.discard(ws)
+                    return ws
+
+            ws_list = list(self.connected_websockets)
+            results = await asyncio.gather(*(_send_to_ws(ws) for ws in ws_list))
+
+            for ws in results:
+                if ws is not None:
+                    self.connected_websockets.discard(ws)
 
         asyncio.run_coroutine_threadsafe(_send(), self.loop)
 
