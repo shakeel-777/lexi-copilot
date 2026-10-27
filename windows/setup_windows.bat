@@ -172,7 +172,11 @@ if not exist "%CONFIG_PATH%" (
         echo   "system_prompt": "You are Lexi, an intelligent autonomous desktop AI companion on Windows created by Shakeel. Keep answers concise, direct, and conversational."
         echo }
     ) > "%CONFIG_PATH%"
-    echo [OK] Configuration saved to %CONFIG_PATH%
+    copy /y "%CONFIG_PATH%" "%~dp0config.json" >nul 2>&1
+    if not exist "%LOCALAPPDATA%\Lexi" mkdir "%LOCALAPPDATA%\Lexi" >nul 2>&1
+    copy /y "%CONFIG_PATH%" "%LOCALAPPDATA%\Lexi\.lexi_config.json" >nul 2>&1
+    copy /y "%CONFIG_PATH%" "%LOCALAPPDATA%\Lexi\config.json" >nul 2>&1
+    echo [OK] Configuration saved to %CONFIG_PATH% and %~dp0config.json
 )
 
 :: 5. Launch Lexi Dynamic Island

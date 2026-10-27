@@ -252,7 +252,9 @@ if (Test-Path $configPath) {
             if ($ApiKey) { $cfgObj.groq_api_key = $ApiKey.Trim() }
         }
         $cfgObj | ConvertTo-Json -Depth 4 | Set-Content -Path $configPath -Encoding UTF8
-        Write-Host "      [OK] Updated $configPath successfully." -ForegroundColor Green
+        $cfgObj | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $installDir "config.json") -Encoding UTF8
+        $cfgObj | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $installDir ".lexi_config.json") -Encoding UTF8
+        Write-Host "      [OK] Updated $configPath and $installDir\config.json successfully." -ForegroundColor Green
     } else {
         Write-Host "      [OK] Preserving existing configuration ($configPath)." -ForegroundColor Green
     }
@@ -314,7 +316,9 @@ if (Test-Path $configPath) {
     } | ConvertTo-Json -Depth 4
 
     Set-Content -Path $configPath -Value $cfg -Encoding UTF8
-    Write-Host "      [OK] Configuration saved to $configPath" -ForegroundColor Green
+    Set-Content -Path (Join-Path $installDir "config.json") -Value $cfg -Encoding UTF8
+    Set-Content -Path (Join-Path $installDir ".lexi_config.json") -Value $cfg -Encoding UTF8
+    Write-Host "      [OK] Configuration saved to $configPath and $installDir\config.json" -ForegroundColor Green
 }
 
 # 6. Create Desktop & Startup Shortcuts

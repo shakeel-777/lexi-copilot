@@ -95,7 +95,8 @@ if (Test-Path $configPath) {
 
     if ($shouldPurge) {
         Remove-Item -Path $configPath -Force -ErrorAction SilentlyContinue
-        Write-Host "      ✓ Removed configuration file ($configPath)." -ForegroundColor Green
+        Remove-Item -Path "$env:USERPROFILE\config.json" -Force -ErrorAction SilentlyContinue
+        Write-Host "      ✓ Removed configuration files ($configPath)." -ForegroundColor Green
     } else {
         Write-Host "      ℹ Preserved configuration file ($configPath)." -ForegroundColor Gray
     }

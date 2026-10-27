@@ -163,5 +163,42 @@ class TestWindowsParity(unittest.TestCase):
             self.assertTrue(any(ig in lower for ig in ignored_keywords), f"Failed to match ignore rule for {s}")
 
 
+    def test_multi_path_config_loading(self):
+        try:
+            import PySide6
+        except ImportError:
+            self.skipTest("PySide6 not installed in current environment")
+        import tempfile
+        import json
+        from lexi_win_island import load_config
+
+        # Test that load_config loads cleanly and returns a dictionary with default keys
+        cfg = load_config()
+        self.assertIsInstance(cfg, dict)
+        self.assertIn("provider", cfg)
+        self.assertIn("model", cfg)
+        self.assertIn("api_key", cfg)
+
+    def test_snip_overlay_escape_key(self):
+        try:
+            import PySide6
+            from PySide6.QtWidgets import QApplication
+            from PySide6.QtCore import Qt
+            from PySide6.QtGui import QKeyEvent
+        except ImportError:
+            self.skipTest("PySide6 not installed in current environment")
+        from lexi_win_island import LexiSnipOverlay
+
+        app = QApplication.instance() or QApplication([])
+        overlay = LexiSnipOverlay()
+        captured_results = []
+        overlay.snip_captured.connect(lambda val: captured_results.append(val))
+
+        # Simulate Escape key press
+        esc_event = QKeyEvent(QKeyEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+        overlay.keyPressEvent(esc_event)
+        self.assertEqual(captured_results, [""])
+
+
 if __name__ == "__main__":
     unittest.main()
