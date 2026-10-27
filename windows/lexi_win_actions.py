@@ -14,6 +14,7 @@ import ctypes
 import threading
 import subprocess
 import urllib.parse
+import concurrent.futures
 from pathlib import Path
 from typing import Dict, Any, Tuple, Optional, Callable
 
@@ -563,12 +564,23 @@ class PhoneMirrorManagerWindows:
                 # Check ARP table for phone IP
                 try:
                     arp_res = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=2)
+                    ips_to_try = []
                     for line in arp_res.stdout.splitlines():
                         parts = line.split()
                         if parts and len(parts) >= 2:
                             ip = parts[0]
                             if ip.count('.') == 3 and not ip.startswith('127.') and not ip.endswith('.255'):
-                                subprocess.run([adb, 'connect', f'{ip}:5555'], capture_output=True, timeout=1)
+                                ips_to_try.append(ip)
+
+                    if ips_to_try:
+                        def try_connect(ip_addr):
+                            try:
+                                subprocess.run([adb, 'connect', f'{ip_addr}:5555'], capture_output=True, timeout=1)
+                            except Exception:
+                                pass
+
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(ips_to_try), 50)) as executor:
+                            executor.map(try_connect, ips_to_try)
                 except Exception:
                     pass
 
