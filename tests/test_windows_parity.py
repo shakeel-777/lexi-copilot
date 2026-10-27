@@ -214,6 +214,37 @@ class TestWindowsParity(unittest.TestCase):
             except py_compile.PyCompileError as e:
                 self.fail(f"Compilation error in {f.name}: {e}")
 
+    def test_windows_mascot_stunts_and_pet_structure(self):
+        import ast
+        island_py = win_dir / "lexi_win_island.py"
+        self.assertTrue(island_py.exists())
+        with open(island_py, "r", encoding="utf-8") as f:
+            tree = ast.parse(f.read(), filename="lexi_win_island.py")
+
+        classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+        self.assertIn("LexiMascotWidgetQt", classes)
+        self.assertIn("LexiPetWidget", classes)
+        self.assertIn("LexiCopilotWindow", classes)
+
+        mascot_methods = {n.name for n in classes["LexiMascotWidgetQt"].body if isinstance(n, ast.FunctionDef)}
+        required_mascot = {
+            "trigger_backflip", "trigger_flight", "trigger_jump",
+            "trigger_perch", "trigger_stardust", "trigger_walk",
+            "cycle_next_activity", "spawn_particle", "_physics_tick", "paintEvent"
+        }
+        for m in required_mascot:
+            self.assertIn(m, mascot_methods, f"LexiMascotWidgetQt missing required stunt/physics method: {m}")
+
+        pet_methods = {n.name for n in classes["LexiPetWidget"].body if isinstance(n, ast.FunctionDef)}
+        self.assertIn("_roam_tick", pet_methods)
+        self.assertIn("show_context_menu", pet_methods)
+        self.assertIn("mousePressEvent", pet_methods)
+
+        copilot_methods = {n.name for n in classes["LexiCopilotWindow"].body if isinstance(n, ast.FunctionDef)}
+        self.assertIn("showEvent", copilot_methods)
+        self.assertIn("set_side_panel_mode", copilot_methods)
+        self.assertIn("reposition_center", copilot_methods)
+
 
 if __name__ == "__main__":
     unittest.main()

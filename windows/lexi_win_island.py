@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
 
 from PySide6.QtCore import (
-    Qt, QTimer, QPoint, QSize, Signal, QObject, QThread, QRect, QUrl,
+    Qt, QTimer, QPoint, QPointF, QSize, Signal, QObject, QThread, QRect, QRectF, QUrl,
     QPropertyAnimation, QEasingCurve
 )
 from PySide6.QtGui import (
@@ -464,44 +464,237 @@ class LexiEqualizerWidgetQt(QWidget):
 class LexiMascotWidgetQt(QWidget):
     """
     Handcrafted Celestial Anime Chibi Screen Spirit (Lexi) for Windows.
-    Animated mini-avatar featuring:
-    - Perky chibi cat/fox ears with soft inner pink fluff
-    - Pearlescent gradient head contour
-    - Soft blushing pink cheeks
-    - Sparkling purple anime iris with cosmic shine highlights
-    - Smooth natural eye blinking every ~3.5 seconds
-    - Mouse gaze tracking (eyes look toward the cursor)
-    - Cute :3 kitty mouth
+    Dual-mode rendering:
+    - Mini Mode (width <= 48): Compact animated face for the Dynamic Island notch.
+    - Full Pet Mode: Full-body anime chibi companion with chubby body & white bib,
+      working paws/hands, stubby feet with pink toe beans taking alternating walk steps,
+      swaying fluffy tail, floor drop shadow, sparkles, and acrobatic stunts (walk, jump,
+      360° backflip, superhero flight, perch, stardust).
     """
     clicked = Signal()
 
-    def __init__(self, width: int = 24, height: int = 24, parent=None):
+    def __init__(self, width: int = 24, height: int = 24, is_mini: Optional[bool] = None, parent=None):
         super().__init__(parent)
         self.setFixedSize(width, height)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.is_mini = (width <= 48) if is_mini is None else is_mini
         self.look_x = 0.0
         self.look_y = 0.0
+        self.target_look_x = 0.0
+        self.target_look_y = 0.0
         self.is_blinking = False
         self.mood = "normal"
         self.activity = "walk"
         self.activity_timer = 0
         self.is_walking = True
+        self.walk_pause_timer = 0
         self.facing = 1.0
         self.jump_y = 0.0
+        self.jump_vy = 0.0
+        self.walk_phase = 0.0
+        self.tail_phase = 0.0
+        self.flip_angle = 0.0
+        self.arm_spread = 0.0
+        self.feet_spread = 0.0
+        self.perch_swing = 0.0
+        self.squish_x = 1.0
+        self.squish_y = 1.0
+        self.ear_wiggle = 0.0
+        self.target_ear_wiggle = 0.0
+        self.particles = []
+        self.play_cycle_index = 0
 
         self.blink_timer = QTimer(self)
         self.blink_timer.timeout.connect(self._trigger_blink)
         self.blink_timer.start(3500)
-        
+
         self.physics_timer = QTimer(self)
         self.physics_timer.timeout.connect(self._physics_tick)
-        self.physics_timer.start(33)
-        
+        self.physics_timer.start(30)
+
+    def spawn_particle(self, x: float, y: float, ptype: str = 'star', count: int = 1, color=None):
+        for _ in range(count):
+            angle = random.uniform(0, 2 * math.pi)
+            speed = random.uniform(1.2, 3.8)
+            col = color or random.choice([
+                QColor(255, 215, 0),    # gold
+                QColor(192, 132, 252),  # purple
+                QColor(96, 217, 250),   # cyan
+                QColor(255, 115, 192),  # pink
+            ])
+            self.particles.append({
+                'x': x + random.uniform(-4, 4),
+                'y': y + random.uniform(-4, 4),
+                'vx': math.cos(angle) * speed,
+                'vy': math.sin(angle) * speed - 1.2,
+                'size': random.uniform(4.0, 8.5),
+                'color': col,
+                'alpha': 1.0,
+                'type': ptype
+            })
+
+    def trigger_walk(self):
+        self.activity = "walk"
+        self.activity_timer = 0
+        self.flip_angle = 0.0
+        self.jump_y = 0.0
+        self.jump_vy = 0.0
+        self.arm_spread = 0.0
+        self.feet_spread = 0.0
+        self.is_walking = True
+        self.update()
+
+    def trigger_jump(self):
+        self.activity = "jump"
+        self.activity_timer = 0
+        self.jump_vy = -8.0
+        self.jump_y = 0.0
+        self.spawn_particle(0, 10, 'sparkle', 4, color=QColor(255, 215, 0))
+        self.update()
+
+    def trigger_backflip(self):
+        self.activity = "backflip"
+        self.activity_timer = 0
+        self.spawn_particle(0, 10, 'star', 6, color=QColor(255, 200, 80))
+        self.update()
+
+    def trigger_flight(self):
+        self.activity = "fly"
+        self.activity_timer = 0
+        self.flip_angle = self.facing * 0.40
+        self.arm_spread = 1.0
+        self.squish_x = 1.15
+        self.squish_y = 0.88
+        self.spawn_particle(0, 0, 'star', 6, color=QColor(100, 220, 255))
+        self.update()
+
+    def trigger_perch(self):
+        self.activity = "perch"
+        self.activity_timer = 0
+        self.flip_angle = 0.0
+        self.jump_y = 0.0
+        self.arm_spread = 0.0
+        self.squish_y = 0.94
+        self.spawn_particle(0, 15, 'sparkle', 4, color=QColor(255, 220, 100))
+        self.update()
+
+    def trigger_stardust(self):
+        self.activity = "stardust"
+        self.activity_timer = 0
+        self.spawn_particle(0, -10, 'sparkle', 8, color=QColor(200, 140, 255))
+        self.update()
+
+    def cycle_next_activity(self):
+        modes = ["backflip", "jump", "fly", "perch", "stardust", "walk"]
+        next_mode = modes[self.play_cycle_index % len(modes)]
+        self.play_cycle_index += 1
+        if next_mode == "backflip": self.trigger_backflip()
+        elif next_mode == "jump": self.trigger_jump()
+        elif next_mode == "fly": self.trigger_flight()
+        elif next_mode == "perch": self.trigger_perch()
+        elif next_mode == "stardust": self.trigger_stardust()
+        elif next_mode == "walk": self.trigger_walk()
+
     def _physics_tick(self):
         if not self.isVisible():
             return
-        self.activity_timer += 1
 
+        self.look_x += (self.target_look_x - self.look_x) * 0.22
+        self.look_y += (self.target_look_y - self.look_y) * 0.22
+        self.squish_x += (1.0 - self.squish_x) * 0.16
+        self.squish_y += (1.0 - self.squish_y) * 0.16
+        self.ear_wiggle += (self.target_ear_wiggle - self.ear_wiggle) * 0.18
+        self.tail_phase = (self.tail_phase + 0.08) % (2 * math.pi)
+
+        # Update floating particles
+        alive_particles = []
+        for p in self.particles:
+            p['x'] += p['vx']
+            p['y'] += p['vy']
+            p['alpha'] -= 0.035
+            p['size'] = max(0.5, p['size'] * 0.96)
+            if p['alpha'] > 0.05:
+                alive_particles.append(p)
+        self.particles = alive_particles
+
+        if self.is_mini:
+            if self.is_blinking or self.particles or abs(self.squish_x - 1.0) > 0.02:
+                self.update()
+            return
+
+        self.activity_timer += 1
+        s = min(self.width() / 125.0, self.height() / 125.0)
+
+        if self.activity == "walk":
+            if self.is_walking:
+                self.walk_phase = (self.walk_phase + 0.18) % (2 * math.pi)
+
+        elif self.activity == "backflip":
+            total_frames = 28
+            prog = min(1.0, self.activity_timer / float(total_frames))
+            self.flip_angle = prog * 2.0 * math.pi
+            self.jump_y = -math.sin(prog * math.pi) * 22.0 * s
+            self.arm_spread = math.sin(prog * math.pi)
+            if self.activity_timer % 3 == 0:
+                self.spawn_particle(0, self.jump_y + 10 * s, 'sparkle', 1)
+            if self.activity_timer >= total_frames:
+                self.flip_angle = 0.0
+                self.jump_y = 0.0
+                self.arm_spread = 0.0
+                self.squish_y = 0.72
+                self.squish_x = 1.28
+                self.spawn_particle(0, 30 * s, 'star', 8)
+                self.activity = "walk"
+                self.activity_timer = 0
+                self.is_walking = True
+
+        elif self.activity == "jump":
+            if self.activity_timer < 8:
+                self.squish_y = 0.76
+                self.squish_x = 1.24
+            elif self.activity_timer == 8:
+                self.jump_vy = -9.0 * s
+                self.squish_y = 1.25
+                self.squish_x = 0.85
+                self.arm_spread = 0.8
+            elif self.activity_timer > 8:
+                self.jump_vy += 0.55 * s
+                self.jump_y += self.jump_vy
+                if self.jump_y >= 0.0:
+                    self.jump_y = 0.0
+                    self.jump_vy = 0.0
+                    self.squish_y = 0.75
+                    self.squish_x = 1.25
+                    self.arm_spread = 0.0
+                    self.spawn_particle(0, 30 * s, 'sparkle', 6)
+                    self.activity = "walk"
+                    self.activity_timer = 0
+                    self.is_walking = True
+
+        elif self.activity == "fly":
+            self.flip_angle = self.facing * 0.38
+            self.arm_spread = 1.0
+            self.squish_x = 1.15
+            self.squish_y = 0.88
+            if self.activity_timer % 2 == 0:
+                self.spawn_particle(-self.facing * 18 * s, 8 * s, 'star', 1, color=QColor(100, 220, 255))
+            if self.activity_timer >= 120:
+                self.trigger_backflip()
+
+        elif self.activity == "perch":
+            self.perch_swing = math.sin(self.activity_timer * 0.14) * 0.28
+            self.squish_y = 0.95 + 0.03 * math.sin(self.activity_timer * 0.10)
+            self.squish_x = 1.05 - 0.02 * math.sin(self.activity_timer * 0.10)
+            if self.activity_timer > 140:
+                self.trigger_backflip()
+
+        elif self.activity == "stardust":
+            if self.activity_timer % 3 == 0:
+                self.spawn_particle(random.uniform(-20, 20), random.uniform(-20, 20), 'sparkle', 2)
+            if self.activity_timer > 90:
+                self.trigger_walk()
+
+        self.update()
 
     def _trigger_blink(self):
         if not self.is_blinking and self.isVisible():
@@ -514,9 +707,8 @@ class LexiMascotWidgetQt(QWidget):
         self.update()
 
     def set_gaze(self, lx: float, ly: float):
-        self.look_x = max(-1.0, min(1.0, lx))
-        self.look_y = max(-1.0, min(1.0, ly))
-        self.update()
+        self.target_look_x = max(-1.0, min(1.0, lx))
+        self.target_look_y = max(-1.0, min(1.0, ly))
 
     def set_mood(self, mood: str):
         self.mood = mood
@@ -533,139 +725,542 @@ class LexiMascotWidgetQt(QWidget):
 
         w = self.width()
         h = self.height()
-        s = min(w / 48.0, h / 46.0)
+
+        if self.is_mini:
+            # Compact head for the resting notch
+            s = min(w / 48.0, h / 46.0)
+            cx = w / 2.0
+            cy = h / 2.0 + 3.0 * s
+
+            painter.save()
+            painter.translate(cx, cy)
+
+            # 1. Ears
+            for sign in (-1, 1):
+                painter.save()
+                ear_x = sign * 11.5 * s
+                ear_y = -12.5 * s
+                painter.translate(ear_x, ear_y)
+
+                path_outer = QPainterPath()
+                path_outer.moveTo(-sign * 5.5 * s, 5 * s)
+                path_outer.cubicTo(-sign * 2.5 * s, -5 * s, sign * 2 * s, -16 * s, sign * 5.5 * s, -14 * s)
+                path_outer.cubicTo(sign * 9.5 * s, -10 * s, sign * 7.5 * s, 1 * s, sign * 4.5 * s, 6 * s)
+                path_outer.closeSubpath()
+
+                grad_outer = QLinearGradient(0, -16 * s, 0, 6 * s)
+                grad_outer.setColorAt(0.0, QColor(250, 250, 255))
+                grad_outer.setColorAt(1.0, QColor(225, 230, 250))
+                painter.setBrush(QBrush(grad_outer))
+                painter.setPen(QPen(QColor(165, 175, 215, 120), 0.9 * s))
+                painter.drawPath(path_outer)
+
+                path_inner = QPainterPath()
+                path_inner.moveTo(-sign * 3.5 * s, 3.5 * s)
+                path_inner.cubicTo(-sign * 1.5 * s, -3 * s, sign * 1.5 * s, -10 * s, sign * 4.5 * s, -9 * s)
+                path_inner.cubicTo(sign * 7.0 * s, -7 * s, sign * 5.5 * s, 0, sign * 3.0 * s, 4.5 * s)
+                path_inner.closeSubpath()
+
+                grad_inner = QLinearGradient(0, -10 * s, 0, 4 * s)
+                grad_inner.setColorAt(0.0, QColor(255, 115, 165, 230))
+                grad_inner.setColorAt(1.0, QColor(250, 180, 205, 130))
+                painter.setBrush(QBrush(grad_inner))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawPath(path_inner)
+                painter.restore()
+
+            # 2. Head contour
+            path_head = QPainterPath()
+            path_head.moveTo(0, -19 * s)
+            path_head.cubicTo(16 * s, -19 * s, 21 * s, -9 * s, 21 * s, 0)
+            path_head.cubicTo(21 * s, 10 * s, 13 * s, 15 * s, 0, 15 * s)
+            path_head.cubicTo(-13 * s, 15 * s, -21 * s, 10 * s, -21 * s, 0)
+            path_head.cubicTo(-21 * s, -9 * s, -16 * s, -19 * s, 0, -19 * s)
+            path_head.closeSubpath()
+
+            rad_head = QRadialGradient(-4 * s, -8 * s, 24 * s)
+            rad_head.setColorAt(0.0, QColor(255, 255, 255))
+            rad_head.setColorAt(0.7, QColor(245, 248, 255))
+            rad_head.setColorAt(1.0, QColor(220, 228, 250))
+            painter.setBrush(QBrush(rad_head))
+            painter.setPen(QPen(QColor(165, 180, 215, 140), 1.0 * s))
+            painter.drawPath(path_head)
+
+            # 3. Blushing cheeks
+            blush_alpha = 220 if self.mood == "happy" else 140
+            for sign in (-1, 1):
+                bx = sign * 12.0 * s
+                by = 4.0 * s
+                rad_b = QRadialGradient(bx, by, 6.0 * s if self.mood == "happy" else 5.5 * s)
+                rad_b.setColorAt(0.0, QColor(255, 90, 150, blush_alpha))
+                rad_b.setColorAt(1.0, QColor(255, 90, 150, 0))
+                painter.setBrush(QBrush(rad_b))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QPointF(bx, by), 6.0 * s, 4.5 * s)
+
+            # 4. Eyes
+            eye_dx = 8.5 * s
+            eye_dy = -1.0 * s
+            for sign in (-1, 1):
+                ex = sign * eye_dx
+                ey = eye_dy
+
+                if self.is_blinking or self.mood == "happy":
+                    path_blink = QPainterPath()
+                    if self.mood == "happy":
+                        path_blink.moveTo(ex - sign * 4.2 * s, ey + 0.8 * s)
+                        path_blink.cubicTo(ex - sign * 2.0 * s, ey - 3.8 * s, ex + sign * 2.0 * s, ey - 3.8 * s, ex + sign * 4.2 * s, ey + 0.8 * s)
+                    else:
+                        path_blink.moveTo(ex - sign * 3.8 * s, ey)
+                        path_blink.cubicTo(ex - sign * 1.5 * s, ey - 3.0 * s, ex + sign * 1.5 * s, ey - 3.0 * s, ex + sign * 3.8 * s, ey)
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.setPen(QPen(QColor(45, 30, 70), 1.3 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                    painter.drawPath(path_blink)
+                else:
+                    path_lash = QPainterPath()
+                    path_lash.moveTo(ex - sign * 5.0 * s, ey - 4.5 * s)
+                    path_lash.cubicTo(ex - sign * 2.5 * s, ey - 6.5 * s, ex + sign * 2.5 * s, ey - 6.5 * s, ex + sign * 5.0 * s, ey - 4.5 * s)
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+                    painter.setPen(QPen(QColor(45, 30, 70), 1.2 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                    painter.drawPath(path_lash)
+
+                    painter.save()
+                    path_eye = QPainterPath()
+                    path_eye.addEllipse(QPointF(ex, ey), 3.8 * s, 4.4 * s)
+                    painter.setClipPath(path_eye)
+
+                    painter.setBrush(QBrush(QColor(255, 255, 255)))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawPath(path_eye)
+
+                    iris_x = ex + self.look_x * 0.8 * s
+                    iris_y = ey + self.look_y * 0.8 * s
+                    grad_iris = QLinearGradient(iris_x, iris_y - 4 * s, iris_x, iris_y + 4 * s)
+                    grad_iris.setColorAt(0.0, QColor(64, 12, 107))
+                    grad_iris.setColorAt(0.5, QColor(158, 45, 217))
+                    grad_iris.setColorAt(1.0, QColor(235, 98, 217))
+                    painter.setBrush(QBrush(grad_iris))
+                    painter.drawEllipse(QPointF(iris_x, iris_y), 3.4 * s, 3.8 * s)
+
+                    painter.setBrush(QBrush(QColor(255, 255, 255, 245)))
+                    painter.drawEllipse(QPointF(iris_x + sign * 1.0 * s, iris_y - 1.2 * s), 1.2 * s, 1.2 * s)
+                    painter.drawEllipse(QPointF(iris_x - sign * 1.1 * s, iris_y + 1.1 * s), 0.7 * s, 0.7 * s)
+                    painter.restore()
+
+            # 5. Nose & cute kitty mouth (:3)
+            painter.setBrush(QBrush(QColor(255, 115, 155, 240)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(0, 2.8 * s), 0.7 * s, 0.7 * s)
+
+            path_mouth = QPainterPath()
+            path_mouth.moveTo(-2.8 * s, 5.0 * s)
+            path_mouth.cubicTo(-1.8 * s, 6.8 * s, -0.6 * s, 6.8 * s, 0, 5.4 * s)
+            path_mouth.cubicTo(0.6 * s, 6.8 * s, 1.8 * s, 6.8 * s, 2.8 * s, 5.0 * s)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(60, 45, 90, 220), 0.85 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawPath(path_mouth)
+            painter.restore()
+            return
+
+        # =========================================================================
+        # Full-Body Anime Chibi Kitten/Fox Desktop Companion (1:1 Linux Lexi)
+        # =========================================================================
+        s = min(w / 125.0, h / 125.0)
         cx = w / 2.0
-        cy = h / 2.0 + 3.0 * s
+        cy = h / 2.0 + 4.0 * s
 
+        # Walking bounce & bobbing physics
+        bounce_y = 0.0
+        body_tilt = 0.0
+        tail_walk_sway = 0.0
+        ear_walk_bounce = 0.0
+        if self.is_walking and self.mood == "normal" and self.activity == "walk":
+            bounce_y = -abs(math.sin(self.walk_phase * 2.0)) * 2.0 * s
+            body_tilt = self.facing * math.sin(self.walk_phase) * 0.04
+            tail_walk_sway = math.sin(self.walk_phase - 0.4) * 0.35
+            ear_walk_bounce = math.sin(self.walk_phase * 2.0) * 0.08
+
+        # 1. Floor Drop Shadow (stays anchored, responsive to jump height)
         painter.save()
-        painter.translate(cx, cy)
+        shadow_floor_y = cy + 46.0 * s
+        shadow_scale = max(0.18, 1.0 + self.jump_y / (55.0 * s))
+        shadow_rx = 34.0 * s * shadow_scale
+        shadow_ry = 9.5 * s * shadow_scale
+        shadow_alpha = int(max(15, min(115, 115 * shadow_scale)))
+        rad_sh = QRadialGradient(QPointF(cx, shadow_floor_y), shadow_rx)
+        rad_sh.setColorAt(0.0, QColor(20, 12, 55, shadow_alpha))
+        rad_sh.setColorAt(1.0, QColor(20, 12, 55, 0))
+        painter.setBrush(QBrush(rad_sh))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPointF(cx, shadow_floor_y), shadow_rx, shadow_ry)
+        painter.restore()
 
-        # 1. Ears
+        # 2. Sparkles & Star Particles
+        for p in self.particles:
+            painter.save()
+            col = QColor(p['color'])
+            col.setAlphaF(max(0.0, min(1.0, p['alpha'])))
+            painter.setBrush(QBrush(col))
+            painter.setPen(Qt.PenStyle.NoPen)
+            px = cx + p['x']
+            py = cy + p['y']
+            sz = p['size']
+            path_star = QPainterPath()
+            path_star.moveTo(px, py - sz)
+            path_star.lineTo(px + sz * 0.3, py)
+            path_star.lineTo(px, py + sz)
+            path_star.lineTo(px - sz * 0.3, py)
+            path_star.closeSubpath()
+            path_star.moveTo(px - sz, py)
+            path_star.lineTo(px, py + sz * 0.3)
+            path_star.lineTo(px + sz, py)
+            path_star.lineTo(px, py - sz * 0.3)
+            path_star.closeSubpath()
+            painter.drawPath(path_star)
+            painter.restore()
+
+        # Cat Origin with translation, rotation and squish
+        cat_cy = cy + 2.0 * s + bounce_y + self.jump_y
+        painter.save()
+        painter.translate(cx, cat_cy)
+        rot_deg = math.degrees(body_tilt + self.flip_angle)
+        painter.rotate(rot_deg)
+        painter.scale(self.squish_x, self.squish_y)
+
+        # 3. Fluffy Fox/Kitten Tail (Curving up on right with walking sway)
+        tail_sway = tail_walk_sway if (self.is_walking and self.mood == "normal") else math.sin(self.tail_phase) * 0.12
+        if self.mood == "happy":
+            tail_sway = math.sin(self.tail_phase * 2.5) * 0.35
+        painter.save()
+        painter.translate(14.0 * s, 18.0 * s)
+        painter.rotate(math.degrees(0.20 + tail_sway))
+
+        path_tail = QPainterPath()
+        path_tail.moveTo(0, 0)
+        path_tail.cubicTo(14 * s, 4 * s, 24 * s, -10 * s, 18 * s, -22 * s)
+        path_tail.cubicTo(14 * s, -28 * s, 5 * s, -24 * s, 7 * s, -14 * s)
+        path_tail.cubicTo(8 * s, -6 * s, 3 * s, -2 * s, 0, 0)
+        path_tail.closeSubpath()
+
+        grad_tail = QLinearGradient(0, 4 * s, 18 * s, -28 * s)
+        grad_tail.setColorAt(0.0, QColor(225, 230, 250))
+        grad_tail.setColorAt(0.65, QColor(245, 248, 255))
+        grad_tail.setColorAt(1.0, QColor(255, 255, 255))
+        painter.setBrush(QBrush(grad_tail))
+        painter.setPen(QPen(QColor(165, 178, 215, 115), 1.0 * s))
+        painter.drawPath(path_tail)
+
+        path_tip = QPainterPath()
+        path_tip.moveTo(13 * s, -20 * s)
+        path_tip.cubicTo(15 * s, -16 * s, 9 * s, -18 * s, 7 * s, -14 * s)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(184, 194, 230, 150), 0.8 * s))
+        painter.drawPath(path_tip)
+        painter.restore()
+
+        # 4. Chubby Torso / Body with soft white bib
+        painter.save()
+        path_body = QPainterPath()
+        path_body.moveTo(-14 * s, 8 * s)
+        path_body.cubicTo(-18 * s, 20 * s, -14 * s, 32 * s, 0, 33 * s)
+        path_body.cubicTo(14 * s, 32 * s, 18 * s, 20 * s, 14 * s, 8 * s)
+        path_body.cubicTo(10 * s, 0, -10 * s, 0, -14 * s, 8 * s)
+        path_body.closeSubpath()
+
+        rad_body = QRadialGradient(-3 * s, 15 * s, 22 * s)
+        rad_body.setColorAt(0.0, QColor(255, 255, 255))
+        rad_body.setColorAt(0.65, QColor(242, 247, 255))
+        rad_body.setColorAt(1.0, QColor(222, 230, 250))
+        painter.setBrush(QBrush(rad_body))
+        painter.setPen(QPen(QColor(165, 178, 215, 115), 1.1 * s))
+        painter.drawPath(path_body)
+
+        path_bib = QPainterPath()
+        path_bib.moveTo(-7 * s, 7 * s)
+        path_bib.cubicTo(-9 * s, 16 * s, -5 * s, 24 * s, 0, 26 * s)
+        path_bib.cubicTo(5 * s, 24 * s, 9 * s, 16 * s, 7 * s, 7 * s)
+        path_bib.cubicTo(3 * s, 4 * s, -3 * s, 4 * s, -7 * s, 7 * s)
+        path_bib.closeSubpath()
+        painter.setBrush(QBrush(QColor(255, 255, 255, 190)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(path_bib)
+        painter.restore()
+
+        # 5. Stubby Legs & Feet with 3 Pink Toe Beans (taking alternating steps)
+        step_l_x = math.sin(self.walk_phase) * 5.0 * s if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0
+        step_l_y = -max(0.0, math.cos(self.walk_phase)) * 4.0 * s if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0
+        step_r_x = -math.sin(self.walk_phase) * 5.0 * s if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0
+        step_r_y = -max(0.0, -math.cos(self.walk_phase)) * 4.0 * s if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0
+
+        feet_data = [
+            (-1, -10.5 * s + step_l_x, 30.0 * s + step_l_y, math.sin(self.walk_phase) * 0.16 if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0),
+            (1, 10.5 * s + step_r_x, 30.0 * s + step_r_y, -math.sin(self.walk_phase) * 0.16 if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0)
+        ]
+        for sign, lx, ly, foot_rot in feet_data:
+            painter.save()
+            painter.translate(lx, ly)
+            painter.rotate(math.degrees(foot_rot))
+            painter.scale(1.0, 0.85)
+
+            path_foot = QPainterPath()
+            path_foot.addEllipse(QPointF(0, 0), 5.2 * s, 5.2 * s)
+            grad_foot = QLinearGradient(0, -5 * s, 0, 5 * s)
+            grad_foot.setColorAt(0.0, QColor(255, 255, 255))
+            grad_foot.setColorAt(1.0, QColor(225, 232, 250))
+            painter.setBrush(QBrush(grad_foot))
+            painter.setPen(QPen(QColor(165, 178, 215, 125), 1.0 * s))
+            painter.drawPath(path_foot)
+
+            painter.setBrush(QBrush(QColor(255, 128, 173, 230)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(0, 0.5 * s), 2.2 * s, 2.2 * s)
+
+            for toe_angle, toe_r in [(-0.55, 3.4 * s), (0.0, 3.8 * s), (0.55, 3.4 * s)]:
+                tx = math.sin(toe_angle) * toe_r
+                ty = -math.cos(toe_angle) * toe_r + 0.3 * s
+                painter.drawEllipse(QPointF(tx, ty), 0.95 * s, 0.95 * s)
+            painter.restore()
+
+        # 6. Fluffy Kitten/Fox Ears
         for sign in (-1, 1):
             painter.save()
-            ear_x = sign * 11.5 * s
-            ear_y = -12.5 * s
-            painter.translate(ear_x, ear_y)
+            ear_base_x = sign * 13.5 * s
+            ear_base_y = -18.0 * s
+            painter.translate(ear_base_x, ear_base_y)
+            painter.rotate(math.degrees(sign * 0.38 + sign * self.ear_wiggle + sign * ear_walk_bounce))
 
-            path_outer = QPainterPath()
-            path_outer.moveTo(-sign * 5.5 * s, 5 * s)
-            path_outer.cubicTo(-sign * 2.5 * s, -5 * s, sign * 2 * s, -16 * s, sign * 5.5 * s, -14 * s)
-            path_outer.cubicTo(sign * 9.5 * s, -10 * s, sign * 7.5 * s, 1 * s, sign * 4.5 * s, 6 * s)
-            path_outer.closeSubpath()
+            path_ear = QPainterPath()
+            path_ear.moveTo(-sign * 6.5 * s, 6 * s)
+            path_ear.cubicTo(-sign * 3 * s, -6 * s, sign * 2 * s, -18 * s, sign * 6.5 * s, -16 * s)
+            path_ear.cubicTo(sign * 11 * s, -12 * s, sign * 8.5 * s, 1 * s, sign * 5.0 * s, 7 * s)
+            path_ear.closeSubpath()
 
-            grad_outer = QLinearGradient(0, -16 * s, 0, 6 * s)
-            grad_outer.setColorAt(0.0, QColor(250, 250, 255))
-            grad_outer.setColorAt(1.0, QColor(225, 230, 250))
-            painter.setBrush(QBrush(grad_outer))
-            painter.setPen(QPen(QColor(165, 175, 215, 120), 0.9 * s))
-            painter.drawPath(path_outer)
+            grad_ear = QLinearGradient(0, -18 * s, 0, 6 * s)
+            grad_ear.setColorAt(0.0, QColor(245, 250, 255))
+            grad_ear.setColorAt(1.0, QColor(225, 232, 250))
+            painter.setBrush(QBrush(grad_ear))
+            painter.setPen(QPen(QColor(165, 178, 215, 125), 1.1 * s))
+            painter.drawPath(path_ear)
 
             path_inner = QPainterPath()
-            path_inner.moveTo(-sign * 3.5 * s, 3.5 * s)
-            path_inner.cubicTo(-sign * 1.5 * s, -3 * s, sign * 1.5 * s, -10 * s, sign * 4.5 * s, -9 * s)
-            path_inner.cubicTo(sign * 7.0 * s, -7 * s, sign * 5.5 * s, 0, sign * 3.0 * s, 4.5 * s)
+            path_inner.moveTo(-sign * 4.0 * s, 4 * s)
+            path_inner.cubicTo(-sign * 1.5 * s, -4 * s, sign * 2 * s, -12 * s, sign * 5.5 * s, -11 * s)
+            path_inner.cubicTo(sign * 8.0 * s, -8 * s, sign * 6.5 * s, 0, sign * 3.5 * s, 5 * s)
             path_inner.closeSubpath()
-
-            grad_inner = QLinearGradient(0, -10 * s, 0, 4 * s)
-            grad_inner.setColorAt(0.0, QColor(255, 115, 165, 230))
-            grad_inner.setColorAt(1.0, QColor(250, 180, 205, 130))
+            grad_inner = QLinearGradient(0, -12 * s, 0, 4 * s)
+            grad_inner.setColorAt(0.0, QColor(255, 115, 165, 225))
+            grad_inner.setColorAt(1.0, QColor(250, 178, 204, 115))
             painter.setBrush(QBrush(grad_inner))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawPath(path_inner)
+
+            path_tuft = QPainterPath()
+            path_tuft.moveTo(sign * 1.0 * s, 1 * s)
+            path_tuft.cubicTo(sign * 3.5 * s, -2 * s, sign * 5.0 * s, -4 * s, sign * 5.5 * s, 0)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(255, 255, 255, 230), 0.8 * s))
+            painter.drawPath(path_tuft)
             painter.restore()
 
-        # 2. Head contour
+        # 7. Head Contour
+        painter.save()
         path_head = QPainterPath()
-        path_head.moveTo(0, -19 * s)
-        path_head.cubicTo(16 * s, -19 * s, 21 * s, -9 * s, 21 * s, 0)
-        path_head.cubicTo(21 * s, 10 * s, 13 * s, 15 * s, 0, 15 * s)
-        path_head.cubicTo(-13 * s, 15 * s, -21 * s, 10 * s, -21 * s, 0)
-        path_head.cubicTo(-21 * s, -9 * s, -16 * s, -19 * s, 0, -19 * s)
+        path_head.moveTo(0, -25 * s)
+        path_head.cubicTo(17 * s, -25 * s, 24 * s, -12 * s, 24 * s, 0)
+        path_head.cubicTo(24 * s, 12 * s, 15 * s, 17 * s, 0, 17 * s)
+        path_head.cubicTo(-15 * s, 17 * s, -24 * s, 12 * s, -24 * s, 0)
+        path_head.cubicTo(-24 * s, -12 * s, -17 * s, -25 * s, 0, -25 * s)
         path_head.closeSubpath()
 
-        rad_head = QRadialGradient(-4 * s, -8 * s, 24 * s)
+        rad_head = QRadialGradient(-5 * s, -10 * s, 28 * s)
         rad_head.setColorAt(0.0, QColor(255, 255, 255))
-        rad_head.setColorAt(0.7, QColor(245, 248, 255))
+        rad_head.setColorAt(0.70, QColor(245, 249, 255))
         rad_head.setColorAt(1.0, QColor(220, 228, 250))
         painter.setBrush(QBrush(rad_head))
-        painter.setPen(QPen(QColor(165, 180, 215, 140), 1.0 * s))
+        painter.setPen(QPen(QColor(165, 178, 215, 125), 1.2 * s))
         painter.drawPath(path_head)
 
-        # 3. Soft blushing cheeks
-        blush_alpha = 220 if self.mood == "happy" else 140
         for sign in (-1, 1):
-            bx = sign * 12.0 * s
-            by = 4.0 * s
-            rad_b = QRadialGradient(bx, by, 6.0 * s if self.mood == "happy" else 5.5 * s)
-            rad_b.setColorAt(0.0, QColor(255, 90, 150, blush_alpha))
-            rad_b.setColorAt(1.0, QColor(255, 90, 150, 0))
-            painter.setBrush(QBrush(rad_b))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawEllipse(QPoint(int(bx), int(by)), int(6.0 * s), int(4.5 * s))
+            path_cheek = QPainterPath()
+            path_cheek.moveTo(sign * 23.5 * s, -1 * s)
+            path_cheek.cubicTo(sign * 26.5 * s, 1 * s, sign * 26 * s, 4 * s, sign * 22 * s, 5 * s)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(173, 184, 219, 150), 0.9 * s))
+            painter.drawPath(path_cheek)
 
-        # 4. Eyes
-        eye_dx = 8.5 * s
-        eye_dy = -1.0 * s
+        painter.save()
+        painter.scale(0.85, 0.42)
+        grad_gloss = QLinearGradient(0, -55 * s, 0, -25 * s)
+        grad_gloss.setColorAt(0.0, QColor(255, 255, 255, 165))
+        grad_gloss.setColorAt(1.0, QColor(255, 255, 255, 0))
+        painter.setBrush(QBrush(grad_gloss))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QPointF(0, -38 * s), 16 * s, 16 * s)
+        painter.restore()
+
+        blush_alpha = 230 if self.mood == "happy" else 140
         for sign in (-1, 1):
-            ex = sign * eye_dx
-            ey = eye_dy
+            ch_x = sign * 14.0 * s
+            ch_y = 3.5 * s
+            rad_bl = QRadialGradient(ch_x, ch_y, 6.0 * s)
+            rad_bl.setColorAt(0.0, QColor(255, 102, 140, blush_alpha))
+            rad_bl.setColorAt(0.6, QColor(255, 140, 173, int(blush_alpha * 0.45)))
+            rad_bl.setColorAt(1.0, QColor(255, 166, 191, 0))
+            painter.setBrush(QBrush(rad_bl))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(ch_x, ch_y), 6.0 * s, 4.5 * s)
+            painter.setBrush(QBrush(QColor(255, 255, 255, 200)))
+            painter.drawEllipse(QPointF(ch_x - sign * 1.5 * s, ch_y - 0.5 * s), 0.7 * s, 0.7 * s)
+            painter.drawEllipse(QPointF(ch_x + sign * 1.5 * s, ch_y + 0.5 * s), 0.5 * s, 0.5 * s)
+
+        path_nose = QPainterPath()
+        path_nose.moveTo(-1.2 * s, -0.2 * s)
+        path_nose.lineTo(1.2 * s, -0.2 * s)
+        path_nose.lineTo(0, 1.2 * s)
+        path_nose.closeSubpath()
+        painter.setBrush(QBrush(QColor(242, 115, 158)))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(path_nose)
+
+        if self.mood == "happy":
+            path_mouth = QPainterPath()
+            path_mouth.moveTo(-4.0 * s, 3.2 * s)
+            path_mouth.cubicTo(-4.0 * s, 9.0 * s, 4.0 * s, 9.0 * s, 4.0 * s, 3.2 * s)
+            path_mouth.closeSubpath()
+            painter.setBrush(QBrush(QColor(61, 20, 56)))
+            painter.setPen(QPen(QColor(46, 13, 46), 1.1 * s))
+            painter.drawPath(path_mouth)
+            painter.save()
+            painter.setClipPath(path_mouth)
+            painter.setBrush(QBrush(QColor(255, 122, 166)))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QPointF(0, 8.5 * s), 3.0 * s, 3.0 * s)
+            painter.restore()
+        else:
+            path_mouth = QPainterPath()
+            path_mouth.moveTo(-3.5 * s, 3.8 * s)
+            path_mouth.cubicTo(-2.4 * s, 5.8 * s, -0.5 * s, 5.8 * s, 0, 4.4 * s)
+            path_mouth.cubicTo(0.5 * s, 5.8 * s, 2.4 * s, 5.8 * s, 3.5 * s, 3.8 * s)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(56, 41, 82, 225), 1.3 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawPath(path_mouth)
+
+        # Anime Eyes with Triple Specular Catchlights
+        eye_spacing = 9.2 * s
+        eye_y = -5.5 * s
+        for sign in (-1, 1):
+            ex = sign * eye_spacing
+            ey = eye_y
+
+            path_brow = QPainterPath()
+            brow_lift = -1.6 * s if self.mood == "happy" else 0.0
+            path_brow.moveTo(ex - 3.8 * s, ey - 7.5 * s + brow_lift)
+            path_brow.cubicTo(ex - 1.2 * s, ey - 9.0 * s + brow_lift, ex + 1.2 * s, ey - 9.0 * s + brow_lift, ex + 3.8 * s, ey - 7.5 * s + brow_lift)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.setPen(QPen(QColor(71, 56, 107, 200), 1.3 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+            painter.drawPath(path_brow)
 
             if self.is_blinking or self.mood == "happy":
                 path_blink = QPainterPath()
                 if self.mood == "happy":
-                    # Cute happy anime smiling arch eyes (^ ^)
-                    path_blink.moveTo(ex - sign * 4.2 * s, ey + 0.8 * s)
-                    path_blink.cubicTo(ex - sign * 2.0 * s, ey - 3.8 * s, ex + sign * 2.0 * s, ey - 3.8 * s, ex + sign * 4.2 * s, ey + 0.8 * s)
+                    path_blink.moveTo(ex - 4.8 * s, ey + 2.0 * s)
+                    path_blink.cubicTo(ex - 2 * s, ey - 3.0 * s, ex + 2 * s, ey - 3.0 * s, ex + 4.8 * s, ey + 2.0 * s)
                 else:
-                    path_blink.moveTo(ex - sign * 3.8 * s, ey)
-                    path_blink.cubicTo(ex - sign * 1.5 * s, ey - 3.0 * s, ex + sign * 1.5 * s, ey - 3.0 * s, ex + sign * 3.8 * s, ey)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.setPen(QPen(QColor(45, 30, 70), 1.3 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                    path_blink.moveTo(ex - 4.8 * s, ey + 0.5 * s)
+                    path_blink.cubicTo(ex - 2 * s, ey + 3.8 * s, ex + 2 * s, ey + 3.8 * s, ex + 4.8 * s, ey + 0.5 * s)
+                painter.setPen(QPen(QColor(46, 31, 82, 240), 2.2 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
                 painter.drawPath(path_blink)
             else:
-                path_lash = QPainterPath()
-                path_lash.moveTo(ex - sign * 5.0 * s, ey - 4.5 * s)
-                path_lash.cubicTo(ex - sign * 2.5 * s, ey - 6.5 * s, ex + sign * 2.5 * s, ey - 6.5 * s, ex + sign * 5.0 * s, ey - 4.5 * s)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.setPen(QPen(QColor(45, 30, 70), 1.2 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-                painter.drawPath(path_lash)
-
                 painter.save()
-                path_eye = QPainterPath()
-                path_eye.addEllipse(QPoint(int(ex), int(ey)), int(3.8 * s), int(4.4 * s))
-                painter.setClipPath(path_eye)
+                path_sclera = QPainterPath()
+                path_sclera.addEllipse(QPointF(ex, ey), 4.2 * s, 5.8 * s)
+                painter.setBrush(QBrush(QColor(255, 255, 255)))
+                painter.setPen(QPen(QColor(178, 191, 217, 100), 0.5 * s))
+                painter.drawPath(path_sclera)
+                painter.setClipPath(path_sclera)
+
+                px = ex + self.look_x * 2.2 * s
+                py = ey + self.look_y * 2.0 * s
+                grad_iris = QLinearGradient(px, py - 4.5 * s, px, py + 4.5 * s)
+                grad_iris.setColorAt(0.0, QColor(20, 10, 56))
+                grad_iris.setColorAt(0.55, QColor(140, 46, 173))
+                grad_iris.setColorAt(1.0, QColor(242, 82, 173))
+                painter.setBrush(QBrush(grad_iris))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QPointF(px, py), 3.2 * s, 4.5 * s)
+
+                painter.setBrush(QBrush(QColor(13, 5, 25)))
+                painter.drawEllipse(QPointF(px, py - 0.2 * s), 1.7 * s, 2.5 * s)
 
                 painter.setBrush(QBrush(QColor(255, 255, 255)))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawPath(path_eye)
-
-                iris_x = ex + self.look_x * 0.8 * s
-                iris_y = ey + self.look_y * 0.8 * s
-                grad_iris = QLinearGradient(iris_x, iris_y - 4 * s, iris_x, iris_y + 4 * s)
-                grad_iris.setColorAt(0.0, QColor(64, 12, 107))
-                grad_iris.setColorAt(0.5, QColor(158, 45, 217))
-                grad_iris.setColorAt(1.0, QColor(235, 98, 217))
-                painter.setBrush(QBrush(grad_iris))
-                painter.drawEllipse(QPoint(int(iris_x), int(iris_y)), int(3.4 * s), int(3.8 * s))
-
-                painter.setBrush(QBrush(QColor(255, 255, 255, 245)))
-                painter.drawEllipse(QPoint(int(iris_x + sign * 1.0 * s), int(iris_y - 1.2 * s)), int(1.2 * s), int(1.2 * s))
-                painter.drawEllipse(QPoint(int(iris_x - sign * 1.1 * s), int(iris_y + 1.1 * s)), int(0.7 * s), int(0.7 * s))
-
+                painter.drawEllipse(QPointF(px - 1.2 * s, py - 1.5 * s), 1.3 * s, 1.3 * s)
+                painter.setBrush(QBrush(QColor(255, 255, 255, 235)))
+                painter.drawEllipse(QPointF(px + 1.2 * s, py + 1.4 * s), 0.75 * s, 0.75 * s)
+                painter.setBrush(QBrush(QColor(255, 217, 255, 230)))
+                painter.drawEllipse(QPointF(px - 0.4 * s, py + 1.8 * s), 0.5 * s, 0.5 * s)
                 painter.restore()
 
-        # 5. Nose & cute kitty mouth (:3)
-        painter.setBrush(QBrush(QColor(255, 115, 155, 240)))
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QPoint(0, int(2.8 * s)), int(0.7 * s), int(0.7 * s))
+                path_lash = QPainterPath()
+                path_lash.moveTo(ex - 4.6 * s, ey - 2.5 * s)
+                path_lash.cubicTo(ex - 2.0 * s, ey - 6.2 * s, ex + 2.0 * s, ey - 6.2 * s, ex + 4.6 * s, ey - 2.5 * s)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(QPen(QColor(41, 26, 71, 250), 2.0 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawPath(path_lash)
+                path_wing = QPainterPath()
+                path_wing.moveTo(ex + sign * 4.2 * s, ey - 3.0 * s)
+                path_wing.lineTo(ex + sign * 6.0 * s, ey - 4.8 * s)
+                painter.setPen(QPen(QColor(41, 26, 71, 250), 1.4 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+                painter.drawPath(path_wing)
 
-        path_mouth = QPainterPath()
-        path_mouth.moveTo(-2.8 * s, 5.0 * s)
-        path_mouth.cubicTo(-1.8 * s, 6.8 * s, -0.6 * s, 6.8 * s, 0, 5.4 * s)
-        path_mouth.cubicTo(0.6 * s, 6.8 * s, 1.8 * s, 6.8 * s, 2.8 * s, 5.0 * s)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(QColor(60, 45, 90, 220), 0.85 * s, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        painter.drawPath(path_mouth)
+        painter.restore()
+
+        # 8. Hands & Paws (swinging while walking or raised on happy / stunts)
+        if self.mood == "happy":
+            for sign in (-1, 1):
+                painter.save()
+                painter.translate(sign * 18 * s, 6 * s)
+                painter.scale(1.0, 0.9)
+                path_paw = QPainterPath()
+                path_paw.addEllipse(QPointF(0, 0), 4.4 * s, 4.4 * s)
+                painter.setBrush(QBrush(QColor(255, 255, 255)))
+                painter.setPen(QPen(QColor(165, 178, 215, 125), 0.9 * s))
+                painter.drawPath(path_paw)
+                painter.setBrush(QBrush(QColor(255, 140, 184, 215)))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QPointF(0, 0), 2.2 * s, 2.2 * s)
+                painter.restore()
+        else:
+            arm_swing_l = -math.sin(self.walk_phase) * 3.5 * s if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0
+            arm_swing_r = math.sin(self.walk_phase) * 3.5 * s if (self.is_walking and self.mood == "normal" and self.activity == "walk") else 0.0
+
+            if self.arm_spread > 0:
+                paws_data = [
+                    (-1, -10.5 * s - self.arm_spread * 8.0 * s, (20.0 - self.arm_spread * 15.0) * s),
+                    (1, 10.5 * s + self.arm_spread * 8.0 * s, (20.0 - self.arm_spread * 15.0) * s)
+                ]
+            else:
+                paws_data = [
+                    (-1, -10.5 * s + arm_swing_l, 20.0 * s),
+                    (1, 10.5 * s + arm_swing_r, 20.0 * s)
+                ]
+
+            for sign, px, py in paws_data:
+                painter.save()
+                painter.translate(px, py)
+                painter.scale(1.0, 0.92)
+                path_paw = QPainterPath()
+                path_paw.addEllipse(QPointF(0, 0), 4.5 * s, 4.5 * s)
+                grad_paw = QLinearGradient(0, -4 * s, 0, 4 * s)
+                grad_paw.setColorAt(0.0, QColor(255, 255, 255))
+                grad_paw.setColorAt(1.0, QColor(230, 235, 250))
+                painter.setBrush(QBrush(grad_paw))
+                painter.setPen(QPen(QColor(165, 178, 215, 125), 0.9 * s))
+                painter.drawPath(path_paw)
+
+                painter.setBrush(QBrush(QColor(255, 140, 184, 215)))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(QPointF(0, 0.4 * s), 2.0 * s, 2.0 * s)
+                painter.restore()
 
         painter.restore()
 
@@ -735,14 +1330,17 @@ class LexiSnipOverlay(QWidget):
 
 class LexiPetWidget(QWidget):
     """
-    Detached interactive anime chibi desktop pet mascot for Windows.
-    - Full animated mascot widget (LexiMascotWidgetQt) with blushing cheeks and expressive eyes
-    - Continuous cursor gaze tracking across the entire screen
-    - Left-click to pet (blushing / happy anime arch eyes ^ ^)
-    - Double-click to expand Copilot card
-    - Drag-and-drop anywhere across the desktop
-    - Drag & drop files onto the pet to feed them to Copilot
-    - Right-click context menu for actions and docking
+    Detached interactive anime chibi desktop pet mascot for Windows (1:1 Linux Parity).
+    - Completely frameless, transparent floating desktop companion (no dark bubble or box)
+    - Full-body anime mascot widget with perky ears, white bib, stubby legs & 3 toe beans,
+      swinging paws, and swaying fluffy tail
+    - Continuous cursor gaze tracking across desktop
+    - Left-click to pet (blushing & happy smiling arch eyes ^ ^ with sparkles)
+    - Drag-and-drop anywhere across desktop
+    - Full acrobatics & stunt system: 360° backflip, superhero flight, high leap, perch
+    - Drag & drop files onto the pet to feed them directly to Copilot
+    - Double-click to open Copilot card
+    - Right-click context menu for actions, stunts, and docking
     """
     def __init__(self, on_activate, on_dock, on_drop_files=None, parent=None):
         super().__init__(parent)
@@ -758,38 +1356,28 @@ class LexiPetWidget(QWidget):
         self.drag_pos = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Translucent capsule container with purple aura outline
-        self.bubble = QWidget()
-        self.bubble.setObjectName("petBubble")
-        self.bubble.setStyleSheet("""
-            #petBubble {
-                background: rgba(13, 15, 22, 0.78);
-                border: 1.5px solid rgba(168, 85, 247, 0.50);
-                border-radius: 44px;
-            }
-            #petBubble:hover {
-                background: rgba(13, 15, 22, 0.92);
-                border: 1.5px solid rgba(192, 132, 252, 0.90);
-            }
-        """)
-        bubble_layout = QVBoxLayout(self.bubble)
-        bubble_layout.setContentsMargins(8, 8, 8, 8)
-        bubble_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Pure Mascot Widget - Clean organic desktop companion directly on wallpaper
+        self.mascot = LexiMascotWidgetQt(width=160, height=160, is_mini=False)
+        layout.addWidget(self.mascot)
 
-        self.mascot = LexiMascotWidgetQt(width=84, height=84)
-        bubble_layout.addWidget(self.mascot)
-        layout.addWidget(self.bubble)
-
-        self.resize(112, 112)
+        self.setFixedSize(160, 160)
         self.setAcceptDrops(True)
+
+        self.screen_w = 1920
+        self.floor_y = 900.0
+        self.pet_x = 1000.0
+        self.pet_y = self.floor_y
 
         # Continuous cursor tracking timer (eyes track mouse anywhere on desktop)
         self.gaze_timer = QTimer(self)
         self.gaze_timer.timeout.connect(self._track_cursor_gaze)
-        self.gaze_timer.start(50)
+        self.gaze_timer.start(45)
+
+        self.roam_timer = QTimer(self)
+        self.roam_timer.timeout.connect(self._roam_tick)
 
     def _track_cursor_gaze(self):
         if not self.isVisible():
@@ -803,108 +1391,18 @@ class LexiPetWidget(QWidget):
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            # Petting feedback: trigger happy smiling blush animation
             self.mascot.set_mood("happy")
-            QTimer.singleShot(1400, lambda: self.mascot.set_mood("normal"))
+            self.mascot.spawn_particle(0, -10, 'sparkle', 6, color=QColor(255, 115, 192))
+            QTimer.singleShot(1600, lambda: self.mascot.set_mood("normal"))
         elif event.button() == Qt.MouseButton.RightButton:
             self.show_context_menu(event.globalPosition().toPoint())
 
     def mouseMoveEvent(self, event):
         if self.drag_pos and (event.buttons() & Qt.MouseButton.LeftButton):
-            self.move(event.globalPosition().toPoint() - self.drag_pos)
-
-
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.roam_timer = QTimer(self)
-        self.roam_timer.timeout.connect(self._roam_tick)
-        self.roam_timer.start(33)
-
-    def hideEvent(self, event):
-        super().hideEvent(event)
-        if hasattr(self, 'roam_timer'):
-            self.roam_timer.stop()
-
-    def _roam_tick(self):
-        if not self.isVisible() or self.drag_pos is not None:
-            return
-            
-        screen = QApplication.primaryScreen()
-        if not screen:
-            return
-        
-        geo = screen.geometry()
-        screen_w = geo.width()
-        floor_y = geo.height() - self.height() - 40
-        
-        pet_x = self.x()
-        pet_y = self.y()
-        
-        # Pull physics state from mascot
-        if not hasattr(self.mascot, 'activity'):
-            self.mascot.activity = "walk"
-            self.mascot.activity_timer = 0
-            self.mascot.is_walking = True
-            self.mascot.facing = 1.0
-            self.mascot.jump_y = 0.0
-            
-        act = self.mascot.activity
-        
-        if act == "walk":
-            if self.mascot.is_walking:
-                pet_x += self.mascot.facing * 1.6
-                if pet_x > screen_w - 170:
-                    pet_x = float(screen_w - 170)
-                    self.mascot.facing = -1.0
-                    self.mascot.is_walking = False
-                    self.mascot.walk_pause_timer = 40
-                elif pet_x < 15:
-                    pet_x = 15.0
-                    self.mascot.facing = 1.0
-                    self.mascot.is_walking = False
-                    self.mascot.walk_pause_timer = 40
-            else:
-                if hasattr(self.mascot, 'walk_pause_timer') and self.mascot.walk_pause_timer > 0:
-                    self.mascot.walk_pause_timer -= 1
-                    if self.mascot.walk_pause_timer <= 0:
-                        self.mascot.is_walking = True
-                        
-            pet_y += (floor_y - pet_y) * 0.2
-            
-            if self.mascot.is_walking and getattr(self.mascot, 'activity_timer', 0) > 100:
-                import random
-                if random.random() < 0.02:
-                    self.mascot.activity = "jump"
-                    self.mascot.activity_timer = 0
-                    self.mascot.jump_y = 0.0
-
-        elif act == "jump":
-            pet_x += self.mascot.facing * 2.6
-            self.mascot.jump_y -= 4.0 # initial velocity upward
-            
-            # Simple gravity
-            if not hasattr(self.mascot, 'vy'):
-                self.mascot.vy = -12.0
-            
-            self.mascot.vy += 0.8 # gravity
-            pet_y += self.mascot.vy
-            
-            if pet_y > floor_y:
-                pet_y = floor_y
-                self.mascot.activity = "walk"
-                self.mascot.activity_timer = 0
-                self.mascot.is_walking = True
-                delattr(self.mascot, 'vy')
-                
-            if pet_x > screen_w - 170:
-                pet_x = float(screen_w - 170)
-                self.mascot.facing = -1.0
-            elif pet_x < 15:
-                pet_x = 15.0
-                self.mascot.facing = 1.0
-                
-        self.move(int(pet_x), int(pet_y))
-
+            new_pos = event.globalPosition().toPoint() - self.drag_pos
+            self.pet_x = float(new_pos.x())
+            self.pet_y = float(new_pos.y())
+            self.move(new_pos)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -914,6 +1412,102 @@ class LexiPetWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.hide()
             self.on_activate()
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        screen = QApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            self.screen_w = avail.width()
+            self.floor_y = float(avail.bottom() - 150)
+            if self.pet_y > self.floor_y or self.pet_y < avail.top():
+                self.pet_y = self.floor_y
+        self.roam_timer.start(30)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        if hasattr(self, 'roam_timer') and self.roam_timer:
+            self.roam_timer.stop()
+
+    def _roam_tick(self):
+        if not self.isVisible() or self.drag_pos is not None:
+            return
+
+        screen = QApplication.primaryScreen()
+        if not screen:
+            return
+
+        avail = screen.availableGeometry()
+        screen_w = avail.width()
+        floor_y = float(avail.bottom() - 150)
+
+        act = self.mascot.activity
+        if act == "walk":
+            if self.mascot.is_walking:
+                self.pet_x += self.mascot.facing * 1.8
+                if self.pet_x > screen_w - 165:
+                    self.pet_x = float(screen_w - 165)
+                    self.mascot.facing = -1.0
+                    self.mascot.is_walking = False
+                    self.mascot.walk_pause_timer = 40
+                elif self.pet_x < 15:
+                    self.pet_x = 15.0
+                    self.mascot.facing = 1.0
+                    self.mascot.is_walking = False
+                    self.mascot.walk_pause_timer = 40
+            else:
+                self.mascot.walk_pause_timer -= 1
+                if self.mascot.walk_pause_timer <= 0:
+                    if random.random() < 0.35:
+                        self.mascot.cycle_next_activity()
+                    else:
+                        self.mascot.is_walking = True
+            self.pet_y += (floor_y - self.pet_y) * 0.2
+
+        elif act == "jump":
+            self.pet_x += self.mascot.facing * 2.6
+            self.pet_y = floor_y + self.mascot.jump_y * 1.8
+            if self.pet_y < avail.top() + 50:
+                self.pet_y = float(avail.top() + 50)
+            if self.pet_x > screen_w - 165:
+                self.pet_x = float(screen_w - 165)
+                self.mascot.facing = -1.0
+            elif self.pet_x < 15:
+                self.pet_x = 15.0
+                self.mascot.facing = 1.0
+
+        elif act == "backflip":
+            self.pet_x += self.mascot.facing * 2.2
+            self.pet_y += (floor_y - self.pet_y) * 0.16
+            if self.pet_x > screen_w - 165:
+                self.pet_x = float(screen_w - 165)
+                self.mascot.facing = -1.0
+            elif self.pet_x < 15:
+                self.pet_x = 15.0
+                self.mascot.facing = 1.0
+
+        elif act == "fly":
+            self.pet_x += self.mascot.facing * 4.2
+            self.pet_y = avail.top() + 120.0 + 65.0 * math.sin(self.mascot.activity_timer * 0.07)
+            if self.pet_x > screen_w - 165:
+                self.pet_x = float(screen_w - 165)
+                self.mascot.facing = -1.0
+            elif self.pet_x < 15:
+                self.pet_x = 15.0
+                self.mascot.facing = 1.0
+
+        elif act == "perch":
+            self.pet_y += (floor_y - self.pet_y) * 0.2
+
+        elif act == "stardust":
+            self.pet_x += self.mascot.facing * 1.2
+            self.pet_y += (floor_y - self.pet_y) * 0.2
+            if self.pet_x > screen_w - 165 or self.pet_x < 15:
+                self.mascot.facing *= -1.0
+        else:
+            self.pet_y += (floor_y - self.pet_y) * 0.2
+
+        self.move(int(self.pet_x), int(self.pet_y))
 
     def show_context_menu(self, global_pos):
         menu = QMenu(self)
@@ -936,14 +1530,37 @@ class LexiPetWidget(QWidget):
         """)
         a_copilot = menu.addAction("💬 Open Copilot (Double-click)")
         a_phone = menu.addAction("📱 Mirror Phone")
+
+        stunts_menu = menu.addMenu("🎪 Stunts & Acrobatics")
+        stunts_menu.setStyleSheet(menu.styleSheet())
+        a_backflip = stunts_menu.addAction("🔄 360° Backflip")
+        a_flight = stunts_menu.addAction("🚀 Superhero Flight")
+        a_jump = stunts_menu.addAction("🐾 High Leap Jump")
+        a_perch = stunts_menu.addAction("🧘 Perch & Relax")
+        a_stardust = stunts_menu.addAction("✨ Chase Stardust")
+        a_walk = stunts_menu.addAction("🚶 Stroll / Walk")
+
         menu.addSeparator()
         a_dock = menu.addAction("🏝️ Dock to Dynamic Island")
+
         act = menu.exec(global_pos)
         if act == a_copilot:
             self.hide()
             self.on_activate()
         elif act == a_phone:
             SystemActionEngineWindows.get().start_phone_mirror()
+        elif act == a_backflip:
+            self.mascot.trigger_backflip()
+        elif act == a_flight:
+            self.mascot.trigger_flight()
+        elif act == a_jump:
+            self.mascot.trigger_jump()
+        elif act == a_perch:
+            self.mascot.trigger_perch()
+        elif act == a_stardust:
+            self.mascot.trigger_stardust()
+        elif act == a_walk:
+            self.mascot.trigger_walk()
         elif act == a_dock:
             self.hide()
             self.on_dock()
@@ -951,25 +1568,14 @@ class LexiPetWidget(QWidget):
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
-            self.bubble.setStyleSheet("""
-                #petBubble {
-                    background: rgba(16, 185, 129, 0.25);
-                    border: 2px solid #10b981;
-                    border-radius: 44px;
-                }
-            """)
+            self.mascot.set_mood("happy")
+            self.mascot.spawn_particle(0, -10, 'sparkle', 4, color=QColor(96, 217, 250))
 
     def dragLeaveEvent(self, event):
-        self.bubble.setStyleSheet("""
-            #petBubble {
-                background: rgba(13, 15, 22, 0.78);
-                border: 1.5px solid rgba(168, 85, 247, 0.50);
-                border-radius: 44px;
-            }
-        """)
+        self.mascot.set_mood("normal")
 
     def dropEvent(self, event):
-        self.dragLeaveEvent(event)
+        self.mascot.set_mood("normal")
         urls = event.mimeData().urls()
         if urls:
             paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
@@ -2199,6 +2805,20 @@ class LexiCopilotWindow(QMainWindow):
         self.resize(540, 560)
         self.reposition_center()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.activateWindow()
+        self.raise_()
+        if hasattr(self, 'card') and hasattr(self.card, 'input_field'):
+            self.card.input_field.setFocus()
+            QTimer.singleShot(50, self.card.input_field.setFocus)
+            QTimer.singleShot(150, self.card.input_field.setFocus)
+
+    def mousePressEvent(self, event):
+        if hasattr(self, 'card') and hasattr(self.card, 'input_field'):
+            self.card.input_field.setFocus()
+        super().mousePressEvent(event)
+
     def collapse_to_island(self):
         """Collapses window and seamlessly restores the Dynamic Island at screen top."""
         self.hide()
@@ -2244,21 +2864,21 @@ class LexiCopilotWindow(QMainWindow):
             LexiGuideDialog(self.actions, self).exec()
 
     def reposition_center(self):
-        screen = QApplication.primaryScreen().geometry()
-        x = (screen.width() - self.width()) // 2
-        y = 48
+        screen = QApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
+        x = avail.left() + (avail.width() - self.width()) // 2
+        y = avail.top() + 48
         self.move(x, y)
 
     def set_side_panel_mode(self, is_side: bool):
         self.side_panel_mode = is_side
-        screen = QApplication.primaryScreen().geometry()
+        screen = QApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
         if self.side_panel_mode:
             self.side_btn.setText("🗗 Center")
             self.title_lbl.setText("◨ Lexi Side Panel")
             panel_w = 440
-            panel_h = screen.height()
-            self.move(screen.width() - panel_w, 0)
-            self.resize(panel_w, panel_h)
+            self.setGeometry(avail.right() - panel_w + 1, avail.top(), panel_w, avail.height())
             self.root.setStyleSheet("""
                 #copilotRoot {
                     background-color: #0b0d14;
@@ -2274,8 +2894,10 @@ class LexiCopilotWindow(QMainWindow):
         else:
             self.side_btn.setText("◨ Side")
             self.title_lbl.setText("✨ Lexi Copilot")
-            self.resize(540, 560)
-            self.reposition_center()
+            panel_w, panel_h = 540, 560
+            center_x = avail.left() + (avail.width() - panel_w) // 2
+            center_y = avail.top() + 48
+            self.setGeometry(center_x, center_y, panel_w, panel_h)
             self.root.setStyleSheet("""
                 #copilotRoot {
                     background-color: rgba(13, 15, 22, 0.96);
@@ -2284,6 +2906,10 @@ class LexiCopilotWindow(QMainWindow):
                 }
             """)
             self.root.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
+
+        if hasattr(self, 'card') and hasattr(self.card, 'input_field'):
+            self.card.input_field.setFocus()
+            QTimer.singleShot(60, self.card.input_field.setFocus)
 
     def toggle_side_panel(self):
         self.set_side_panel_mode(not self.side_panel_mode)
@@ -2669,6 +3295,9 @@ class LexiDynamicIslandWin(QMainWindow):
         self.copilot_win.show()
         self.copilot_win.raise_()
         self.copilot_win.activateWindow()
+        if hasattr(self.copilot_win, 'card') and hasattr(self.copilot_win.card, 'input_field'):
+            self.copilot_win.card.input_field.setFocus()
+            QTimer.singleShot(60, self.copilot_win.card.input_field.setFocus)
 
     def toggle_copilot(self):
         if self.copilot_win.isVisible():
@@ -2686,10 +3315,16 @@ class LexiDynamicIslandWin(QMainWindow):
         self.copilot_win.show()
         self.copilot_win.raise_()
         self.copilot_win.activateWindow()
+        if hasattr(self.copilot_win, 'card') and hasattr(self.copilot_win.card, 'input_field'):
+            self.copilot_win.card.input_field.setFocus()
+            QTimer.singleShot(60, self.copilot_win.card.input_field.setFocus)
 
     def detach_pet(self):
-        screen = QApplication.primaryScreen().geometry()
-        self.pet_widget.move(screen.width() - 140, screen.height() - 165)
+        screen = QApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
+        self.pet_widget.pet_x = float(avail.right() - 200)
+        self.pet_widget.pet_y = float(avail.bottom() - 170)
+        self.pet_widget.move(int(self.pet_widget.pet_x), int(self.pet_widget.pet_y))
         self.pet_widget.show()
         self.pet_widget.raise_()
         self.pet_widget.activateWindow()
