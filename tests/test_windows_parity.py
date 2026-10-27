@@ -200,5 +200,20 @@ class TestWindowsParity(unittest.TestCase):
         self.assertEqual(captured_results, [""])
 
 
+    def test_windows_modules_py_compile(self):
+        import py_compile
+        win_files = [
+            win_dir / "lexi_win_island.py",
+            win_dir / "lexi_win_actions.py",
+            win_dir / "lexi_win_drop.py"
+        ]
+        for f in win_files:
+            self.assertTrue(f.exists(), f"File {f} not found")
+            try:
+                py_compile.compile(str(f), doraise=True)
+            except py_compile.PyCompileError as e:
+                self.fail(f"Compilation error in {f.name}: {e}")
+
+
 if __name__ == "__main__":
     unittest.main()

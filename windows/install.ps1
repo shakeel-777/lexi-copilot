@@ -372,8 +372,14 @@ Write-Host "========================================================" -Foregroun
 Write-Host ""
 
 if (-not $NoLaunch) {
-    Start-Process $venvPythonW -ArgumentList "`"$installDir\lexi_win_island.py`""
-    Write-Host "Lexi is now live in your top-screen notch! Enjoy." -ForegroundColor Cyan
+    $compileCheck = (& $venvPython -m py_compile (Join-Path $installDir "lexi_win_island.py") 2>&1) | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "      [!] Pre-flight check warning:`n$compileCheck" -ForegroundColor Red
+        & $venvPython (Join-Path $installDir "lexi_win_island.py")
+    } else {
+        Start-Process -FilePath $venvPythonW -ArgumentList "`"$installDir\lexi_win_island.py`"" -WorkingDirectory $installDir
+        Write-Host "Lexi is now live in your top-screen notch! Enjoy." -ForegroundColor Cyan
+    }
 } else {
     Write-Host "Installation complete. (Skipped auto-launch due to -NoLaunch flag)" -ForegroundColor Cyan
 }

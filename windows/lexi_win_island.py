@@ -1738,9 +1738,7 @@ class LexiCopilotCard(QWidget):
         # Chat display area (hardware accelerated opaque viewport to eliminate compositing lag)
         self.chat_display = QTextEdit()
         self.chat_display.setReadOnly(True)
-        if self.chat_display.viewport():
-            self.chat_display.viewport().setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
-                self.chat_display.setStyleSheet("""
+        self.chat_display.setStyleSheet("""
             QTextEdit {
                 background: rgba(15, 17, 23, 0.9);
                 color: #e2e8f0;
@@ -1788,7 +1786,7 @@ class LexiCopilotCard(QWidget):
         # Reasoning expandable label
         self.reasoning_box = QTextEdit()
         self.reasoning_box.setReadOnly(True)
-                self.reasoning_box.setStyleSheet("""
+        self.reasoning_box.setStyleSheet("""
             QTextEdit {
                 background: rgba(99, 102, 241, 0.08);
                 color: #a5b4fc;
@@ -2744,8 +2742,7 @@ class LexiDynamicIslandWin(QMainWindow):
         if b64_img:
             self.expand_copilot()
             self.copilot_win.card.add_image_attachment(b64_img)
-            self.copilot_win.card.chat_display.append("<i>[📸 Screen Region Attached. Ask anything!]</i>
-")
+            self.copilot_win.card.chat_display.append("<i>[📸 Screen Region Attached. Ask anything!]</i>\n")
 
     def open_settings(self):
         LexiSettingsDialog(self).exec()
