@@ -14,6 +14,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from tests import test_lexi_chrome_bridge as _bridge  # noqa: E402,F401  (installs headless GTK stubs)
+
 from lexi import (
     DEFAULT_CONFIG,
     PROVIDER_PRESETS,
