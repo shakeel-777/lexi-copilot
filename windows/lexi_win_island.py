@@ -84,17 +84,46 @@ DEFAULT_CONFIG = {
 
 def load_config() -> Dict[str, Any]:
     cfg = dict(DEFAULT_CONFIG)
-    target = CONFIG_FILE
-    if not target.exists():
-        alt = _SCRIPT_DIR.parent / "config.json"
-        if alt.exists():
-            target = alt
-    if target.exists():
-        try:
-            with open(target, "r", encoding="utf-8") as f:
-                cfg.update(json.load(f))
-        except Exception:
-            pass
+    
+    paths_to_check = []
+    
+    # 1. ~/.lexi_config.json
+    paths_to_check.append(Path(os.path.expanduser("~/.lexi_config.json")))
+    
+    # 2. %USERPROFILE%/.lexi_config.json
+    user_prof = os.environ.get("USERPROFILE")
+    if user_prof:
+        paths_to_check.append(Path(user_prof) / ".lexi_config.json")
+        
+    # 3. %LOCALAPPDATA%/Lexi/.lexi_config.json
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        paths_to_check.append(Path(local_app_data) / "Lexi" / ".lexi_config.json")
+        
+    # 4. Script dir config.json
+    paths_to_check.append(_SCRIPT_DIR.parent / "config.json")
+    paths_to_check.append(_SCRIPT_DIR / "config.json")
+
+    # Dedup and preserve order
+    seen = set()
+    unique_paths = []
+    for p in paths_to_check:
+        resolved = p.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            unique_paths.append(p)
+
+    for target in reversed(unique_paths):
+        if target.exists():
+            try:
+                with open(target, "r", encoding="utf-8") as f:
+                    file_cfg = json.load(f)
+                    for k, v in file_cfg.items():
+                        if v: # Only update if value is truthy to prioritize valid keys
+                            cfg[k] = v
+            except Exception:
+                pass
+                
     return cfg
 
 def save_config(cfg: Dict[str, Any]):
@@ -454,10 +483,25 @@ class LexiMascotWidgetQt(QWidget):
         self.look_y = 0.0
         self.is_blinking = False
         self.mood = "normal"
+        self.activity = "walk"
+        self.activity_timer = 0
+        self.is_walking = True
+        self.facing = 1.0
+        self.jump_y = 0.0
 
         self.blink_timer = QTimer(self)
         self.blink_timer.timeout.connect(self._trigger_blink)
         self.blink_timer.start(3500)
+        
+        self.physics_timer = QTimer(self)
+        self.physics_timer.timeout.connect(self._physics_tick)
+        self.physics_timer.start(33)
+        
+    def _physics_tick(self):
+        if not self.isVisible():
+            return
+        self.activity_timer += 1
+
 
     def _trigger_blink(self):
         if not self.is_blinking and self.isVisible():
@@ -638,6 +682,12 @@ class LexiSnipOverlay(QWidget):
         self.start_pos = None
         self.current_pos = None
 
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Escape:
+            self.hide()
+            self.snip_captured.emit("") # Emit empty string on cancel
+
     def start_capture(self):
         screen = QApplication.primaryScreen()
         geo = screen.geometry()
@@ -762,6 +812,103 @@ class LexiPetWidget(QWidget):
     def mouseMoveEvent(self, event):
         if self.drag_pos and (event.buttons() & Qt.MouseButton.LeftButton):
             self.move(event.globalPosition().toPoint() - self.drag_pos)
+
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.roam_timer = QTimer(self)
+        self.roam_timer.timeout.connect(self._roam_tick)
+        self.roam_timer.start(33)
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        if hasattr(self, 'roam_timer'):
+            self.roam_timer.stop()
+
+    def _roam_tick(self):
+        if not self.isVisible() or self.drag_pos is not None:
+            return
+            
+        screen = QApplication.primaryScreen()
+        if not screen:
+            return
+        
+        geo = screen.geometry()
+        screen_w = geo.width()
+        floor_y = geo.height() - self.height() - 40
+        
+        pet_x = self.x()
+        pet_y = self.y()
+        
+        # Pull physics state from mascot
+        if not hasattr(self.mascot, 'activity'):
+            self.mascot.activity = "walk"
+            self.mascot.activity_timer = 0
+            self.mascot.is_walking = True
+            self.mascot.facing = 1.0
+            self.mascot.jump_y = 0.0
+            
+        act = self.mascot.activity
+        
+        if act == "walk":
+            if self.mascot.is_walking:
+                pet_x += self.mascot.facing * 1.6
+                if pet_x > screen_w - 170:
+                    pet_x = float(screen_w - 170)
+                    self.mascot.facing = -1.0
+                    self.mascot.is_walking = False
+                    self.mascot.walk_pause_timer = 40
+                elif pet_x < 15:
+                    pet_x = 15.0
+                    self.mascot.facing = 1.0
+                    self.mascot.is_walking = False
+                    self.mascot.walk_pause_timer = 40
+            else:
+                if hasattr(self.mascot, 'walk_pause_timer') and self.mascot.walk_pause_timer > 0:
+                    self.mascot.walk_pause_timer -= 1
+                    if self.mascot.walk_pause_timer <= 0:
+                        self.mascot.is_walking = True
+                        
+            pet_y += (floor_y - pet_y) * 0.2
+            
+            if self.mascot.is_walking and getattr(self.mascot, 'activity_timer', 0) > 100:
+                import random
+                if random.random() < 0.02:
+                    self.mascot.activity = "jump"
+                    self.mascot.activity_timer = 0
+                    self.mascot.jump_y = 0.0
+
+        elif act == "jump":
+            pet_x += self.mascot.facing * 2.6
+            self.mascot.jump_y -= 4.0 # initial velocity upward
+            
+            # Simple gravity
+            if not hasattr(self.mascot, 'vy'):
+                self.mascot.vy = -12.0
+            
+            self.mascot.vy += 0.8 # gravity
+            pet_y += self.mascot.vy
+            
+            if pet_y > floor_y:
+                pet_y = floor_y
+                self.mascot.activity = "walk"
+                self.mascot.activity_timer = 0
+                self.mascot.is_walking = True
+                delattr(self.mascot, 'vy')
+                
+            if pet_x > screen_w - 170:
+                pet_x = float(screen_w - 170)
+                self.mascot.facing = -1.0
+            elif pet_x < 15:
+                pet_x = 15.0
+                self.mascot.facing = 1.0
+                
+        self.move(int(pet_x), int(pet_y))
+
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_pos = None
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -1593,14 +1740,29 @@ class LexiCopilotCard(QWidget):
         self.chat_display.setReadOnly(True)
         if self.chat_display.viewport():
             self.chat_display.viewport().setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
-        self.chat_display.setStyleSheet("""
-            background: rgba(15, 17, 23, 0.9);
-            color: #e2e8f0;
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 8px;
-            padding: 10px;
-            font-family: 'Segoe UI', sans-serif;
-            font-size: 13px;
+                self.chat_display.setStyleSheet("""
+            QTextEdit {
+                background: rgba(15, 17, 23, 0.9);
+                color: #e2e8f0;
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                padding: 10px;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 13px;
+            }
+            /* Explicit High Contrast Obsidian-Titanium rules */
+            pre, code {
+                background-color: #1e1e1e !important;
+                color: #d4d4d4 !important;
+                font-family: Consolas, monospace !important;
+                padding: 4px;
+                border-radius: 4px;
+                border: 1px solid #333;
+            }
+            b, strong {
+                color: #ffffff !important;
+                font-weight: bold;
+            }
         """)
         self.chat_display.setHtml("""
             <div style="font-family: 'Segoe UI', sans-serif;">
@@ -1626,15 +1788,30 @@ class LexiCopilotCard(QWidget):
         # Reasoning expandable label
         self.reasoning_box = QTextEdit()
         self.reasoning_box.setReadOnly(True)
-        self.reasoning_box.setStyleSheet("""
-            background: rgba(99, 102, 241, 0.08);
-            color: #a5b4fc;
-            border: 1px dashed rgba(99, 102, 241, 0.3);
-            border-radius: 6px;
-            font-size: 11px;
-            padding: 6px;
-            max-height: 80px;
+                self.reasoning_box.setStyleSheet("""
+            QTextEdit {
+                background: rgba(99, 102, 241, 0.08);
+                color: #a5b4fc;
+                border: 1px dashed rgba(99, 102, 241, 0.3);
+                border-radius: 6px;
+                font-size: 11px;
+                padding: 6px;
+            }
+            /* Explicit High Contrast Obsidian-Titanium rules */
+            pre, code {
+                background-color: #1e1e1e !important;
+                color: #d4d4d4 !important;
+                font-family: Consolas, monospace !important;
+                padding: 4px;
+                border-radius: 4px;
+                border: 1px solid #333;
+            }
+            b, strong {
+                color: #e2e8f0 !important;
+                font-weight: bold;
+            }
         """)
+        self.reasoning_box.setMaximumHeight(80)
         self.reasoning_box.setVisible(False)
         layout.addWidget(self.reasoning_box)
 
@@ -1872,6 +2049,10 @@ class LexiCopilotCard(QWidget):
         cursor.movePosition(cursor.MoveOperation.End)
         cursor.insertText(token)
         self.chat_display.setTextCursor(cursor)
+        
+        # Auto-scroll chat to bottom on streaming tokens
+        scrollbar = self.chat_display.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def on_reasoning(self, reasoning: str):
         if not self.reasoning_box.isVisible():
@@ -1880,6 +2061,10 @@ class LexiCopilotCard(QWidget):
         cursor.movePosition(cursor.MoveOperation.End)
         cursor.insertText(reasoning)
         self.reasoning_box.setTextCursor(cursor)
+        
+        # Auto-scroll reasoning box
+        scrollbar = self.reasoning_box.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
 
     def on_finished(self, full_text: str):
         self.chat_display.append("\n")
@@ -2541,12 +2726,26 @@ class LexiDynamicIslandWin(QMainWindow):
         LexiBeamDialog(self.drop_server, self).exec()
 
     def start_region_snip(self):
-        self.snip_overlay.start_capture()
+        self.hide()
+        if self.copilot_win.isVisible():
+            self.copilot_win.hide()
+            self._was_copilot_visible = True
+        else:
+            self._was_copilot_visible = False
+        
+        QTimer.singleShot(200, self.snip_overlay.start_capture) # Delay to allow windows to hide
 
     def on_snip_captured(self, b64_img: str):
-        self.expand_copilot()
-        self.copilot_win.card.add_image_attachment(b64_img)
-        self.copilot_win.card.chat_display.append("<i>[📸 Screen Region Attached. Ask anything!]</i>\n")
+        if self._was_copilot_visible:
+            self.expand_copilot()
+        else:
+            self.show()
+            
+        if b64_img:
+            self.expand_copilot()
+            self.copilot_win.card.add_image_attachment(b64_img)
+            self.copilot_win.card.chat_display.append("<i>[📸 Screen Region Attached. Ask anything!]</i>
+")
 
     def open_settings(self):
         LexiSettingsDialog(self).exec()

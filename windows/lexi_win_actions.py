@@ -560,7 +560,21 @@ class PhoneMirrorManagerWindows:
             unauth = [l.split()[0] for l in lines if 'unauthorized' in l]
 
             if not attached:
-                # Check ARP table for phone IP
+                # 1. Try preferred IP
+                if preferred_ip:
+                    try:
+                        subprocess.run([adb, 'connect', f'{preferred_ip}:5555'], capture_output=True, timeout=1.5)
+                    except Exception:
+                        pass
+                
+                # 2. Try localhost fallback for emulator/scrcpy over tcp
+                try:
+                    subprocess.run([adb, 'connect', 'localhost:5555'], capture_output=True, timeout=1.5)
+                    subprocess.run([adb, 'connect', '127.0.0.1:5555'], capture_output=True, timeout=1.5)
+                except Exception:
+                    pass
+
+                # 3. Check ARP table for phone IP fallback
                 try:
                     arp_res = subprocess.run(["arp", "-a"], capture_output=True, text=True, timeout=2)
                     for line in arp_res.stdout.splitlines():
@@ -568,7 +582,7 @@ class PhoneMirrorManagerWindows:
                         if parts and len(parts) >= 2:
                             ip = parts[0]
                             if ip.count('.') == 3 and not ip.startswith('127.') and not ip.endswith('.255'):
-                                subprocess.run([adb, 'connect', f'{ip}:5555'], capture_output=True, timeout=1)
+                                subprocess.run([adb, 'connect', f'{ip}:5555'], capture_output=True, timeout=1.5)
                 except Exception:
                     pass
 

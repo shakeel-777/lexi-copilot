@@ -241,7 +241,7 @@ class EngineExecutor(unittest.TestCase):
             "remaining_count": 0, "per_target": {p["target"]: {"matched": 1, "closed": 1, "remaining": 0}}}
         a = lexi.LexiAssistant(lexi.build_executors(self.engine))
         a.handle_user_text("close instagram")
-        a.handle_user_text("close all")
+        a.handle_user_text("close both")
         self.assertEqual(calls, [{"command": "close_named_tabs", "target": "instagram"}])
         a.handle_user_text("confirm")
         self.assertEqual(calls[-1], {"command": "close_named_tabs", "target": "both"})
