@@ -980,6 +980,182 @@ def _whatsapp_route(norm: str) -> Optional[Route]:
 
 # -- the router --------------------------------------------------------------
 
+
+
+
+def _route_conversational(norm: str, low: str) -> Optional[Route]:
+    if _THANKS_RE.match(low):
+        return Route(REPLY, text="You're welcome!")
+    if _CREATOR_RE.match(low):
+        return Route(REPLY, text="You are Shakeel, my creator, sole architect, and master. You built me from the ground up to be your autonomous AI companion.")
+    if _IDENTITY_RE.match(low):
+        return Route(REPLY, text="I'm Lexi, your personal desktop AI companion, created and architected by Shakeel.")
+    if _HELP_RE.match(low):
+        return Route(REPLY, text="I can control volume and brightness, play music on Spotify and YouTube, search the web and ChatGPT, check your battery and media status, take screenshots, open desktop apps, draft WhatsApp messages, lock your screen, and run terminal tasks.")
+
+    if _TIME_DATE_RE.match(low):
+        now_str = datetime.datetime.now().strftime("It's %I:%M %p on %A, %B %d, %Y.").replace(" 0", " ")
+        return Route(REPLY, text=now_str)
+
+    math_res = _eval_math(norm)
+    if math_res:
+        return Route(REPLY, text=math_res)
+    conv_res = _eval_conversions(norm)
+    if conv_res:
+        return Route(REPLY, text=conv_res)
+
+    if _PHONE_BATTERY_RE.match(low):
+        return Route(ACTION, "phone_battery", {})
+    if _PHONE_RING_RE.match(low):
+        return Route(ACTION, "phone_ring", {})
+    if _PHONE_SNAP_RE.match(low):
+        return Route(ACTION, "phone_camera_snap", {})
+    if _PHONE_CLIPBOARD_RE.match(low):
+        return Route(ACTION, "phone_clipboard_sync", {})
+
+    if _BATTERY_RE.match(low):
+        return Route(ACTION, "system_battery", {})
+
+    return None
+
+
+def _route_productivity_and_tools(norm: str, low: str) -> Optional[Route]:
+    if _FOCUS_STOP_RE.match(low):
+        return Route(ACTION, "focus_timer", {"action": "stop"})
+    if _FOCUS_STATUS_RE.match(low):
+        return Route(ACTION, "focus_timer", {"action": "status"})
+    m_focus = _FOCUS_RE.match(low)
+    if m_focus:
+        mins = int(m_focus.group("m1") or m_focus.group("m2") or 25)
+        return Route(ACTION, "focus_timer", {"action": "start", "minutes": mins})
+
+    if _CLIPBOARD_READ_RE.match(low):
+        return Route(ACTION, "clipboard_read", {})
+    if _CLIPBOARD_HIST_RE.match(low):
+        return Route(ACTION, "clipboard_history", {"action": "list"})
+    m_clip_res = _CLIPBOARD_RESTORE_RE.match(low)
+    if m_clip_res:
+        return Route(ACTION, "clipboard_history", {"action": "copy", "index": int(m_clip_res.group("idx"))})
+
+    if _DOWNLOADS_STATUS_RE.match(low):
+        return Route(ACTION, "download_status", {})
+
+    m_note_add = _NOTES_ADD_RE.match(norm)
+    if m_note_add:
+        txt = (m_note_add.group("txt") or "").strip()
+        if txt:
+            return Route(ACTION, "quick_notes", {"action": "add", "text": txt})
+    if _NOTES_LIST_RE.match(low):
+        return Route(ACTION, "quick_notes", {"action": "list"})
+    if _NOTES_CLEAR_RE.match(low):
+        return Route(ACTION, "quick_notes", {"action": "clear"})
+
+    if _TERMINAL_DIAG_RE.match(low):
+        return Route(ACTION, "terminal_diagnose", {})
+
+    m_pkill = _PORT_KILL_RE.match(low)
+    if m_pkill:
+        return Route(ACTION, "port_control", {"action": "kill", "port": int(m_pkill.group("port"))})
+    m_pinsp = _PORT_INSPECT_RE.match(low)
+    if m_pinsp:
+        port_num = int(m_pinsp.group("port") or m_pinsp.group("port2"))
+        return Route(ACTION, "port_control", {"action": "inspect", "port": port_num})
+
+    m_kproc = _KILL_PROC_RE.match(low)
+    if m_kproc:
+        return Route(ACTION, "top_processes", {"action": "kill", "target": m_kproc.group("target")})
+    m_tprocs = _TOP_PROCS_RE.match(low)
+    if m_tprocs:
+        sort_kind = (m_tprocs.group("sort") or m_tprocs.group("sort2") or m_tprocs.group("sort3") or "").lower()
+        sort_by = "mem" if sort_kind in ("ram", "memory") else "cpu"
+        return Route(ACTION, "top_processes", {"action": "list", "sort_by": sort_by})
+
+    return None
+
+
+def _route_system_and_hardware(low: str) -> Optional[Route]:
+    if _DND_ON_RE.match(low):
+        return Route(ACTION, "dnd_control", {"action": "on"})
+    if _DND_OFF_RE.match(low):
+        return Route(ACTION, "dnd_control", {"action": "off"})
+    if _DND_STATUS_RE.match(low):
+        return Route(ACTION, "dnd_control", {"action": "status"})
+
+    if _SYS_RESOURCES_RE.match(low):
+        return Route(ACTION, "system_resources", {})
+    if _NETWORK_STATUS_RE.match(low):
+        return Route(ACTION, "network_status", {})
+    if _WIFI_LIST_RE.match(low):
+        return Route(ACTION, "wifi_list", {})
+    m_bt = _BLUETOOTH_RE.match(low)
+    if m_bt:
+        act = m_bt.group("act1") or m_bt.group("act2") or "status"
+        return Route(ACTION, "bluetooth_control", {"action": act})
+
+    if _NOW_PLAYING_RE.match(low):
+        return Route(ACTION, "media_now_playing", {})
+
+    if _SCREENSHOT_RE.match(low):
+        return Route(ACTION, "take_screenshot", {})
+
+    if _SLEEP_RE.match(low):
+        return Route(ACTION, "system_sleep", {})
+    if _RESTART_RE.match(low):
+        return Route(ACTION, "system_restart", {})
+    if _POWEROFF_RE.match(low):
+        return Route(ACTION, "system_poweroff", {})
+
+    return None
+
+
+def _route_web_actions(norm: str, low: str) -> Optional[Route]:
+    if _MEET_RE.match(low):
+        return Route(ACTION, "open_site", {"site": "meet.google.com/new"})
+    if _DOCS_RE.match(low):
+        return Route(ACTION, "open_site", {"site": "docs.new"})
+    if _SHEETS_RE.match(low):
+        return Route(ACTION, "open_site", {"site": "sheets.new"})
+    if _SLIDES_RE.match(low):
+        return Route(ACTION, "open_site", {"site": "slides.new"})
+
+    m_map = _MAPS_RE.match(norm)
+    if m_map:
+        dest = (m_map.group("dest") or "").strip()
+        if dest:
+            return Route(ACTION, "open_site", {"site": f"google.com/maps/search/{urllib.parse.quote_plus(dest)}"})
+
+    m_weather = _WEATHER_RE.match(norm)
+    if m_weather:
+        loc = (m_weather.group("loc") or "").strip()
+        q = f"weather in {loc}" if loc else "weather today"
+        return Route(ACTION, "open_site", {"site": f"google.com/search?q={urllib.parse.quote_plus(q)}"})
+
+    m_def = _DEFINE_RE.match(norm)
+    if m_def:
+        word = m_def.group("word").strip()
+        if word:
+            return Route(ACTION, "open_site", {"site": f"google.com/search?q={urllib.parse.quote_plus('define ' + word)}"})
+
+    return None
+
+
+def _route_pending_confirmation(low: str, pending: Optional[PendingConfirmation]) -> Optional[Route]:
+    if pending is not None and not pending.expired():
+        closing = pending.name in ("close_tabs_all", "close_all_apps")
+        is_power = pending.name.startswith("system_")
+        if (_CONFIRM_CLOSE_RE if (closing or is_power) else _CONFIRM_RE).fullmatch(low):
+            return Route(CONFIRM, pending.name, dict(pending.args))
+        if _CANCEL_RE.fullmatch(low):
+            return Route(CANCEL)
+        if low in ("yes", "yeah", "yep", "ok", "okay", "sure", "do it", "go ahead", "y"):
+            if closing:
+                return Route(CLARIFY, text="To close them, say “confirm”. To leave them open, say “cancel”.")
+            if is_power:
+                return Route(CLARIFY, text="To proceed, say “confirm”. To cancel, say “cancel”.")
+            return Route(CLARIFY, text="To send it, say “send it”. To drop it, say “cancel”.")
+    return None
+
+
 def route(text: str, last_action: Optional[ActionRecord] = None,
           pending: Optional[PendingConfirmation] = None) -> Route:
     raw = (text or "").strip()
@@ -1013,161 +1189,21 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
     if r_search:
         return r_search
 
-    # 0a-i. Conversational etiquette: thanks, creator, identity, help
-    if _THANKS_RE.match(low):
-        return Route(REPLY, text="You're welcome!")
-    if _CREATOR_RE.match(low):
-        return Route(REPLY, text="You are Shakeel, my creator, sole architect, and master. You built me from the ground up to be your autonomous AI companion.")
-    if _IDENTITY_RE.match(low):
-        return Route(REPLY, text="I'm Lexi, your personal desktop AI companion, created and architected by Shakeel.")
-    if _HELP_RE.match(low):
-        return Route(REPLY, text="I can control volume and brightness, play music on Spotify and YouTube, search the web and ChatGPT, check your battery and media status, take screenshots, open desktop apps, draft WhatsApp messages, lock your screen, and run terminal tasks.")
+    # 0a-i. Conversational etiquette, math, conversions, battery, etc.
+    r_conv = _route_conversational(norm, low)
+    if r_conv: return r_conv
 
-    # 0a-ii. Date & Time
-    if _TIME_DATE_RE.match(low):
-        now_str = datetime.datetime.now().strftime("It's %I:%M %p on %A, %B %d, %Y.").replace(" 0", " ")
-        return Route(REPLY, text=now_str)
+    # Productivity, focus timer, clipboard, downloads, notes, processes, ports
+    r_prod = _route_productivity_and_tools(norm, low)
+    if r_prod: return r_prod
 
-    # 0a-iii. Safe Local Math, Conversions & World Time
-    math_res = _eval_math(norm)
-    if math_res:
-        return Route(REPLY, text=math_res)
-    conv_res = _eval_conversions(norm)
-    if conv_res:
-        return Route(REPLY, text=conv_res)
+    # DND, network, wifi, bluetooth, media playing, sleep, power, etc.
+    r_sys = _route_system_and_hardware(low)
+    if r_sys: return r_sys
 
-    # 0a-iv. Phone & Battery queries
-    if _PHONE_BATTERY_RE.match(low):
-        return Route(ACTION, "phone_battery", {})
-    if _PHONE_RING_RE.match(low):
-        return Route(ACTION, "phone_ring", {})
-    if _PHONE_SNAP_RE.match(low):
-        return Route(ACTION, "phone_camera_snap", {})
-    if _PHONE_CLIPBOARD_RE.match(low):
-        return Route(ACTION, "phone_clipboard_sync", {})
-
-    if _BATTERY_RE.match(low):
-        return Route(ACTION, "system_battery", {})
-
-    # Focus & Pomodoro Timer
-    if _FOCUS_STOP_RE.match(low):
-        return Route(ACTION, "focus_timer", {"action": "stop"})
-    if _FOCUS_STATUS_RE.match(low):
-        return Route(ACTION, "focus_timer", {"action": "status"})
-    m_focus = _FOCUS_RE.match(low)
-    if m_focus:
-        mins = int(m_focus.group("m1") or m_focus.group("m2") or 25)
-        return Route(ACTION, "focus_timer", {"action": "start", "minutes": mins})
-
-    # Clipboard Reading, History & Download Sentinel
-    if _CLIPBOARD_READ_RE.match(low):
-        return Route(ACTION, "clipboard_read", {})
-    if _CLIPBOARD_HIST_RE.match(low):
-        return Route(ACTION, "clipboard_history", {"action": "list"})
-    m_clip_res = _CLIPBOARD_RESTORE_RE.match(low)
-    if m_clip_res:
-        return Route(ACTION, "clipboard_history", {"action": "copy", "index": int(m_clip_res.group("idx"))})
-
-    if _DOWNLOADS_STATUS_RE.match(low):
-        return Route(ACTION, "download_status", {})
-
-    # Quick Notes & Scratchpad
-    m_note_add = _NOTES_ADD_RE.match(norm)
-    if m_note_add:
-        txt = (m_note_add.group("txt") or "").strip()
-        if txt:
-            return Route(ACTION, "quick_notes", {"action": "add", "text": txt})
-    if _NOTES_LIST_RE.match(low):
-        return Route(ACTION, "quick_notes", {"action": "list"})
-    if _NOTES_CLEAR_RE.match(low):
-        return Route(ACTION, "quick_notes", {"action": "clear"})
-
-    # Terminal Error Diagnoser
-    if _TERMINAL_DIAG_RE.match(low):
-        return Route(ACTION, "terminal_diagnose", {})
-
-    # Port Inspector & Killer
-    m_pkill = _PORT_KILL_RE.match(low)
-    if m_pkill:
-        return Route(ACTION, "port_control", {"action": "kill", "port": int(m_pkill.group("port"))})
-    m_pinsp = _PORT_INSPECT_RE.match(low)
-    if m_pinsp:
-        port_num = int(m_pinsp.group("port") or m_pinsp.group("port2"))
-        return Route(ACTION, "port_control", {"action": "inspect", "port": port_num})
-
-    # Top Resource Consumers & Process Killer
-    m_kproc = _KILL_PROC_RE.match(low)
-    if m_kproc:
-        return Route(ACTION, "top_processes", {"action": "kill", "target": m_kproc.group("target")})
-    m_tprocs = _TOP_PROCS_RE.match(low)
-    if m_tprocs:
-        sort_kind = (m_tprocs.group("sort") or m_tprocs.group("sort2") or m_tprocs.group("sort3") or "").lower()
-        sort_by = "mem" if sort_kind in ("ram", "memory") else "cpu"
-        return Route(ACTION, "top_processes", {"action": "list", "sort_by": sort_by})
-
-    # Do Not Disturb (DND) Control
-    if _DND_ON_RE.match(low):
-        return Route(ACTION, "dnd_control", {"action": "on"})
-    if _DND_OFF_RE.match(low):
-        return Route(ACTION, "dnd_control", {"action": "off"})
-    if _DND_STATUS_RE.match(low):
-        return Route(ACTION, "dnd_control", {"action": "status"})
-
-    # Extended System & Network queries
-    if _SYS_RESOURCES_RE.match(low):
-        return Route(ACTION, "system_resources", {})
-    if _NETWORK_STATUS_RE.match(low):
-        return Route(ACTION, "network_status", {})
-    if _WIFI_LIST_RE.match(low):
-        return Route(ACTION, "wifi_list", {})
-    m_bt = _BLUETOOTH_RE.match(low)
-    if m_bt:
-        act = m_bt.group("act1") or m_bt.group("act2") or "status"
-        return Route(ACTION, "bluetooth_control", {"action": act})
-
-    # 0a-v. Media now playing query
-    if _NOW_PLAYING_RE.match(low):
-        return Route(ACTION, "media_now_playing", {})
-
-    # 0a-vi. Screenshot capture
-    if _SCREENSHOT_RE.match(low):
-        return Route(ACTION, "take_screenshot", {})
-
-    # 0a-vii. System power controls (confirmation required)
-    if _SLEEP_RE.match(low):
-        return Route(ACTION, "system_sleep", {})
-    if _RESTART_RE.match(low):
-        return Route(ACTION, "system_restart", {})
-    if _POWEROFF_RE.match(low):
-        return Route(ACTION, "system_poweroff", {})
-
-    # 0a-viii. Productivity & Web quick-actions
-    if _MEET_RE.match(low):
-        return Route(ACTION, "open_site", {"site": "meet.google.com/new"})
-    if _DOCS_RE.match(low):
-        return Route(ACTION, "open_site", {"site": "docs.new"})
-    if _SHEETS_RE.match(low):
-        return Route(ACTION, "open_site", {"site": "sheets.new"})
-    if _SLIDES_RE.match(low):
-        return Route(ACTION, "open_site", {"site": "slides.new"})
-
-    m_map = _MAPS_RE.match(norm)
-    if m_map:
-        dest = (m_map.group("dest") or "").strip()
-        if dest:
-            return Route(ACTION, "open_site", {"site": f"google.com/maps/search/{urllib.parse.quote_plus(dest)}"})
-
-    m_weather = _WEATHER_RE.match(norm)
-    if m_weather:
-        loc = (m_weather.group("loc") or "").strip()
-        q = f"weather in {loc}" if loc else "weather today"
-        return Route(ACTION, "open_site", {"site": f"google.com/search?q={urllib.parse.quote_plus(q)}"})
-
-    m_def = _DEFINE_RE.match(norm)
-    if m_def:
-        word = m_def.group("word").strip()
-        if word:
-            return Route(ACTION, "open_site", {"site": f"google.com/search?q={urllib.parse.quote_plus('define ' + word)}"})
+    # Web quick-actions (meet, docs, maps, weather, define)
+    r_web = _route_web_actions(norm, low)
+    if r_web: return r_web
 
     # 0b. Chained / sequence commands ("open spotify and play believer", "mute and lock screen")
     if (" and " in low or " then " in low) and not re.search(r"\b(?:saying|that says|tell)\b", low):
@@ -1209,21 +1245,8 @@ def route(text: str, last_action: Optional[ActionRecord] = None,
         return Route(CLARIFY, text="What would you like to search or open in Chrome?")
 
     # 1. A pending confirmation owns the next turn.
-    if pending is not None and not pending.expired():
-        closing = pending.name in ("close_tabs_all", "close_all_apps")
-        is_power = pending.name.startswith("system_")
-        if (_CONFIRM_CLOSE_RE if (closing or is_power) else _CONFIRM_RE).fullmatch(low):
-            return Route(CONFIRM, pending.name, dict(pending.args))
-        if _CANCEL_RE.fullmatch(low):
-            return Route(CANCEL)
-        if low in ("yes", "yeah", "yep", "ok", "okay", "sure", "do it", "go ahead", "y"):
-            # vague "yes" must never authorise a send or a mass-close
-            if closing:
-                return Route(CLARIFY, text="To close them, say “confirm”. To leave them open, say “cancel”.")
-            if is_power:
-                return Route(CLARIFY, text="To proceed, say “confirm”. To cancel, say “cancel”.")
-            return Route(CLARIFY, text="To send it, say “send it”. To drop it, say “cancel”.")
-        # anything else: treat as a new request; the pending draft stays until it expires
+    r_pend = _route_pending_confirmation(low, pending)
+    if r_pend: return r_pend
 
     # 2. Follow-ups that depend on last_action.
     if _RETRY_RE.fullmatch(low):
