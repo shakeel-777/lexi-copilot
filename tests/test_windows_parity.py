@@ -242,8 +242,37 @@ class TestWindowsParity(unittest.TestCase):
 
         copilot_methods = {n.name for n in classes["LexiCopilotWindow"].body if isinstance(n, ast.FunctionDef)}
         self.assertIn("showEvent", copilot_methods)
+        self.assertIn("force_foreground_focus", copilot_methods)
         self.assertIn("set_side_panel_mode", copilot_methods)
         self.assertIn("reposition_center", copilot_methods)
+
+    def test_copilot_autofocus_settings_and_sidepanel_ast(self):
+        import ast
+        island_py = win_dir / "lexi_win_island.py"
+        with open(island_py, "r", encoding="utf-8") as f:
+            content = f.read()
+            tree = ast.parse(content, filename="lexi_win_island.py")
+
+        classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+        self.assertIn("LexiSettingsDialog", classes)
+        self.assertIn("LexiCopilotCard", classes)
+
+        # Ensure Qt.WindowType.Tool was removed from LexiCopilotWindow to allow automatic keyboard input
+        copilot_code = ast.get_source_segment(content, classes["LexiCopilotWindow"]) or ""
+        self.assertNotIn("Qt.WindowType.Tool", copilot_code)
+
+        # Settings dialog methods
+        settings_methods = {n.name for n in classes["LexiSettingsDialog"].body if isinstance(n, ast.FunctionDef)}
+        self.assertIn("_toggle_key_visibility", settings_methods)
+        self.assertIn("_toggle_phone_pw_visibility", settings_methods)
+        self.assertIn("save_and_close", settings_methods)
+        self.assertIn("on_prov_changed", settings_methods)
+
+        # Copilot card methods
+        card_methods = {n.name for n in classes["LexiCopilotCard"].body if isinstance(n, ast.FunctionDef)}
+        self.assertIn("open_settings", card_methods)
+        self.assertIn("clear_chat", card_methods)
+        self.assertIn("trigger_phone_mirror", card_methods)
 
 
 if __name__ == "__main__":

@@ -1592,33 +1592,71 @@ class LexiSettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("⚙️ Lexi AI Provider Settings")
-        self.setFixedSize(460, 420)
+        self.setFixedSize(500, 580)
         self.setStyleSheet("""
-            QDialog { background-color: #0d0f16; color: #e2e8f0; }
-            QLabel { color: #cbd5e1; font-size: 12px; }
-            QLineEdit, QComboBox {
-                background: rgba(255, 255, 255, 0.07);
-                color: #fff;
-                border: 1px solid rgba(255, 255, 255, 0.15);
+            QDialog {
+                background-color: #0b0d14;
+                color: #e2e8f0;
+            }
+            QLabel {
+                color: #cbd5e1;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QLineEdit {
+                background-color: #171a26;
+                color: #ffffff !important;
+                border: 1.5px solid rgba(255, 255, 255, 0.18);
                 border-radius: 6px;
-                padding: 6px 10px;
+                padding: 7px 12px;
                 font-size: 13px;
+                selection-background-color: #6366f1;
+                selection-color: #ffffff;
+            }
+            QLineEdit:focus {
+                background-color: #1c2032;
+                border: 1.5px solid #818cf8;
+                color: #ffffff !important;
+            }
+            QComboBox {
+                background-color: #171a26;
+                color: #ffffff !important;
+                border: 1.5px solid rgba(255, 255, 255, 0.18);
+                border-radius: 6px;
+                padding: 7px 12px;
+                font-size: 13px;
+                selection-background-color: #6366f1;
+                selection-color: #ffffff;
+            }
+            QComboBox:focus {
+                border: 1.5px solid #818cf8;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #171a26;
+                color: #ffffff !important;
+                selection-background-color: #6366f1;
+                selection-color: #ffffff;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                outline: none;
             }
             QPushButton {
-                background: #6366f1;
-                color: white;
+                background-color: #6366f1;
+                color: #ffffff;
                 border: none;
                 border-radius: 6px;
-                padding: 7px 14px;
+                padding: 8px 16px;
                 font-size: 12px;
                 font-weight: bold;
             }
-            QPushButton:hover { background: #4f46e5; }
+            QPushButton:hover {
+                background-color: #4f46e5;
+            }
         """)
 
         self.cfg = load_config()
         layout = QVBoxLayout(self)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(10)
 
         # Provider Selector
         layout.addWidget(QLabel("<b>AI Provider:</b>"))
@@ -1645,9 +1683,32 @@ class LexiSettingsDialog(QDialog):
 
         # API Key
         layout.addWidget(QLabel("<b>API Key:</b>"))
+        key_layout = QHBoxLayout()
+        key_layout.setSpacing(6)
         self.key_input = QLineEdit()
         self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        layout.addWidget(self.key_input)
+        key_layout.addWidget(self.key_input)
+
+        self.key_toggle_btn = QPushButton("👁️ Show")
+        self.key_toggle_btn.setFixedWidth(75)
+        self.key_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1f2438;
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2e3654;
+                color: #ffffff;
+            }
+        """)
+        self.key_toggle_btn.clicked.connect(self._toggle_key_visibility)
+        key_layout.addWidget(self.key_toggle_btn)
+        layout.addLayout(key_layout)
 
         # Model
         layout.addWidget(QLabel("<b>Model Name:</b>"))
@@ -1656,28 +1717,95 @@ class LexiSettingsDialog(QDialog):
 
         # Phone Password for Zero-Touch Unlock
         layout.addWidget(QLabel("<b>Phone PIN/Password (for Zero-Touch Unlock):</b>"))
+        pw_layout = QHBoxLayout()
+        pw_layout.setSpacing(6)
         self.phone_pw_input = QLineEdit()
         self.phone_pw_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.phone_pw_input.setText(self.cfg.get("phone_password", ""))
-        layout.addWidget(self.phone_pw_input)
+        pw_layout.addWidget(self.phone_pw_input)
+
+        self.phone_pw_toggle_btn = QPushButton("👁️ Show")
+        self.phone_pw_toggle_btn.setFixedWidth(75)
+        self.phone_pw_toggle_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1f2438;
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 6px;
+                padding: 6px 10px;
+                font-size: 11px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2e3654;
+                color: #ffffff;
+            }
+        """)
+        self.phone_pw_toggle_btn.clicked.connect(self._toggle_phone_pw_visibility)
+        pw_layout.addWidget(self.phone_pw_toggle_btn)
+        layout.addLayout(pw_layout)
 
         # Test Connection & Status
         self.test_lbl = QLabel("")
+        self.test_lbl.setWordWrap(True)
+        self.test_lbl.setMinimumHeight(24)
         layout.addWidget(self.test_lbl)
 
         btn_row = QHBoxLayout()
         self.test_btn = QPushButton("⚡ Test Connection")
-        self.test_btn.setStyleSheet("background: rgba(255, 255, 255, 0.1); color: #fff;")
+        self.test_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1e2235;
+                color: #cbd5e1;
+                border: 1px solid rgba(255, 255, 255, 0.18);
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #2b314d;
+                color: #ffffff;
+            }
+        """)
         self.test_btn.clicked.connect(self.test_connection)
         btn_row.addWidget(self.test_btn)
 
         self.save_btn = QPushButton("Save & Apply")
+        self.save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6366f1;
+                color: #ffffff;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #4f46e5;
+            }
+        """)
         self.save_btn.clicked.connect(self.save_and_close)
         btn_row.addWidget(self.save_btn)
         layout.addLayout(btn_row)
 
         self.key_input.textChanged.connect(self.on_key_changed)
         self.on_prov_changed()
+
+    def _toggle_key_visibility(self):
+        if self.key_input.echoMode() == QLineEdit.EchoMode.Password:
+            self.key_input.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.key_toggle_btn.setText("🔒 Hide")
+        else:
+            self.key_input.setEchoMode(QLineEdit.EchoMode.Password)
+            self.key_toggle_btn.setText("👁️ Show")
+
+    def _toggle_phone_pw_visibility(self):
+        if self.phone_pw_input.echoMode() == QLineEdit.EchoMode.Password:
+            self.phone_pw_input.setEchoMode(QLineEdit.EchoMode.Normal)
+            self.phone_pw_toggle_btn.setText("🔒 Hide")
+        else:
+            self.phone_pw_input.setEchoMode(QLineEdit.EchoMode.Password)
+            self.phone_pw_toggle_btn.setText("👁️ Show")
 
     def on_key_changed(self, text: str):
         val = text.strip()
@@ -2295,42 +2423,45 @@ class LexiCopilotCard(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        # Quick Action Strips (2 Rows for clean wrapping in both Card and Side Panel modes)
+        # Quick Action Strips (2 Rows formatted cleanly for both Card and Side Panel modes)
         def make_chip(text, cb):
             btn = QPushButton(text)
             btn.setStyleSheet("""
                 QPushButton {
-                    background: rgba(255, 255, 255, 0.08);
+                    background-color: rgba(255, 255, 255, 0.08);
                     color: #cbd5e1;
-                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    border: 1px solid rgba(255, 255, 255, 0.14);
                     border-radius: 11px;
-                    padding: 3px 9px;
+                    padding: 4px 10px;
                     font-size: 11px;
+                    font-weight: 500;
                 }
-                QPushButton:hover { background: rgba(99, 102, 241, 0.25); color: #fff; }
+                QPushButton:hover {
+                    background-color: rgba(99, 102, 241, 0.3);
+                    border-color: rgba(165, 180, 252, 0.5);
+                    color: #ffffff;
+                }
             """)
             btn.clicked.connect(cb)
             return btn
 
-        # Row 1: System Actions
+        # Row 1: System Tools
         row1 = QHBoxLayout()
-        row1.setSpacing(5)
+        row1.setSpacing(6)
         row1.addWidget(make_chip("📱 Phone", self.trigger_phone_mirror))
         row1.addWidget(make_chip("📡 Beam", self.on_request_beam))
         row1.addWidget(make_chip("✂️ Snip", self.on_request_snip))
-        if self.on_request_pet:
-            row1.addWidget(make_chip("🐾 Pet", self.on_request_pet))
-        row1.addWidget(make_chip("❓ Guide", self.open_guide))
+        row1.addWidget(make_chip("🧹 Clear", self.clear_chat))
         row1.addStretch()
         layout.addLayout(row1)
 
-        # Row 2: Prompt Shortcuts & Chat Control
+        # Row 2: AI Actions & Settings
         row2 = QHBoxLayout()
-        row2.setSpacing(5)
-        row2.addWidget(make_chip("Explain", lambda: self.quick_prompt("Explain what is on my screen in detail.")))
-        row2.addWidget(make_chip("Fix", lambda: self.quick_prompt("Find any error or bug on my screen and fix it.")))
-        row2.addWidget(make_chip("Summarize", lambda: self.quick_prompt("Summarize the content on my screen.")))
-        row2.addWidget(make_chip("🧹 Clear", self.clear_chat))
+        row2.setSpacing(6)
+        row2.addWidget(make_chip("💡 Explain", lambda: self.quick_prompt("Explain what is on my screen in detail.")))
+        row2.addWidget(make_chip("🐛 Fix", lambda: self.quick_prompt("Find any error or bug on my screen and fix it.")))
+        row2.addWidget(make_chip("📝 Summarize", lambda: self.quick_prompt("Summarize the content on my screen.")))
+        row2.addWidget(make_chip("⚙️ Settings", self.open_settings))
         row2.addStretch()
         layout.addLayout(row2)
 
@@ -2426,12 +2557,21 @@ class LexiCopilotCard(QWidget):
         self.input_field = QLineEdit()
         self.input_field.setPlaceholderText("Ask Lexi, command Windows, or type /help...")
         self.input_field.setStyleSheet("""
-            background: rgba(255, 255, 255, 0.07);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            border-radius: 6px;
-            padding: 8px 12px;
-            font-size: 13px;
+            QLineEdit {
+                background-color: #171a26;
+                color: #ffffff !important;
+                border: 1.5px solid rgba(255, 255, 255, 0.18);
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 13px;
+                selection-background-color: #6366f1;
+                selection-color: #ffffff;
+            }
+            QLineEdit:focus {
+                background-color: #1c2032;
+                border: 1.5px solid #818cf8;
+                color: #ffffff !important;
+            }
         """)
         self.input_field.returnPressed.connect(self.on_send)
         input_row.addWidget(self.input_field)
@@ -2453,6 +2593,12 @@ class LexiCopilotCard(QWidget):
         input_row.addWidget(self.send_btn)
 
         layout.addLayout(input_row)
+
+    def open_settings(self):
+        """Opens AI Provider & Key configuration dialog directly from the Copilot card."""
+        dlg = LexiSettingsDialog(self)
+        if dlg.exec():
+            self.config = load_config()
 
     def trigger_phone_mirror(self):
         self.chat_display.append("📱 <i>Launching phone mirror...</i>\n")
@@ -2692,8 +2838,7 @@ class LexiCopilotWindow(QMainWindow):
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -2805,14 +2950,46 @@ class LexiCopilotWindow(QMainWindow):
         self.resize(540, 560)
         self.reposition_center()
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.activateWindow()
+    def force_foreground_focus(self):
+        """Forces Windows OS to bring Copilot window to the foreground and focus the input field."""
+        self.show()
         self.raise_()
+        self.activateWindow()
+
+        # On Windows, attach thread input to bypass Windows Foreground Lockout
+        if sys.platform == "win32":
+            try:
+                user32 = ctypes.windll.user32
+                hwnd = int(self.winId())
+                fore_hwnd = user32.GetForegroundWindow()
+                if fore_hwnd != hwnd:
+                    cur_tid = ctypes.windll.kernel32.GetCurrentThreadId()
+                    fore_tid = user32.GetWindowThreadProcessId(fore_hwnd, None)
+                    if cur_tid != fore_tid:
+                        user32.AttachThreadInput(cur_tid, fore_tid, True)
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.SetFocus(hwnd)
+                        user32.AttachThreadInput(cur_tid, fore_tid, False)
+                    else:
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.SetFocus(hwnd)
+                else:
+                    user32.SetFocus(hwnd)
+            except Exception:
+                pass
+
         if hasattr(self, 'card') and hasattr(self.card, 'input_field'):
             self.card.input_field.setFocus()
-            QTimer.singleShot(50, self.card.input_field.setFocus)
-            QTimer.singleShot(150, self.card.input_field.setFocus)
+            self.card.input_field.activateWindow()
+            QTimer.singleShot(20, self.card.input_field.setFocus)
+            QTimer.singleShot(80, self.card.input_field.setFocus)
+            QTimer.singleShot(200, self.card.input_field.setFocus)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.force_foreground_focus()
 
     def mousePressEvent(self, event):
         if hasattr(self, 'card') and hasattr(self.card, 'input_field'):
@@ -2872,17 +3049,22 @@ class LexiCopilotWindow(QMainWindow):
 
     def set_side_panel_mode(self, is_side: bool):
         self.side_panel_mode = is_side
-        screen = QApplication.primaryScreen()
+        screen = QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
         avail = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1080)
         if self.side_panel_mode:
             self.side_btn.setText("🗗 Center")
             self.title_lbl.setText("◨ Lexi Side Panel")
-            panel_w = 440
-            self.setGeometry(avail.right() - panel_w + 1, avail.top(), panel_w, avail.height())
+            panel_w = 420
+            pos_x = avail.left() + avail.width() - panel_w
+            pos_y = avail.top()
+            pos_h = avail.height()
+            self.setMinimumSize(panel_w, pos_h)
+            self.setMaximumSize(panel_w, pos_h)
+            self.setGeometry(pos_x, pos_y, panel_w, pos_h)
             self.root.setStyleSheet("""
                 #copilotRoot {
                     background-color: #0b0d14;
-                    border-left: 1.5px solid rgba(168, 85, 247, 0.45);
+                    border-left: 2px solid rgba(168, 85, 247, 0.55);
                     border-top: none;
                     border-right: none;
                     border-bottom: none;
@@ -2894,9 +3076,11 @@ class LexiCopilotWindow(QMainWindow):
         else:
             self.side_btn.setText("◨ Side")
             self.title_lbl.setText("✨ Lexi Copilot")
+            self.setMinimumSize(480, 500)
+            self.setMaximumSize(900, 1000)
             panel_w, panel_h = 540, 560
             center_x = avail.left() + (avail.width() - panel_w) // 2
-            center_y = avail.top() + 48
+            center_y = avail.top() + max(30, (avail.height() - panel_h) // 2)
             self.setGeometry(center_x, center_y, panel_w, panel_h)
             self.root.setStyleSheet("""
                 #copilotRoot {
@@ -2907,9 +3091,7 @@ class LexiCopilotWindow(QMainWindow):
             """)
             self.root.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, False)
 
-        if hasattr(self, 'card') and hasattr(self.card, 'input_field'):
-            self.card.input_field.setFocus()
-            QTimer.singleShot(60, self.card.input_field.setFocus)
+        self.force_foreground_focus()
 
     def toggle_side_panel(self):
         self.set_side_panel_mode(not self.side_panel_mode)
@@ -3289,15 +3471,10 @@ class LexiDynamicIslandWin(QMainWindow):
         super().mousePressEvent(event)
 
     def expand_copilot(self):
-        """Seamlessly transitions from Dynamic Island to Floating Center Copilot Card."""
+        """Seamlessly transitions from Dynamic Island to Floating Center Copilot Card or Side Panel."""
         self.hide()
-        self.copilot_win.set_side_panel_mode(False)
-        self.copilot_win.show()
-        self.copilot_win.raise_()
-        self.copilot_win.activateWindow()
-        if hasattr(self.copilot_win, 'card') and hasattr(self.copilot_win.card, 'input_field'):
-            self.copilot_win.card.input_field.setFocus()
-            QTimer.singleShot(60, self.copilot_win.card.input_field.setFocus)
+        self.copilot_win.set_side_panel_mode(self.copilot_win.side_panel_mode)
+        self.copilot_win.force_foreground_focus()
 
     def toggle_copilot(self):
         if self.copilot_win.isVisible():
@@ -3312,12 +3489,7 @@ class LexiDynamicIslandWin(QMainWindow):
         """Seamlessly transitions from Dynamic Island to Docked Vertical Side Panel."""
         self.hide()
         self.copilot_win.set_side_panel_mode(True)
-        self.copilot_win.show()
-        self.copilot_win.raise_()
-        self.copilot_win.activateWindow()
-        if hasattr(self.copilot_win, 'card') and hasattr(self.copilot_win.card, 'input_field'):
-            self.copilot_win.card.input_field.setFocus()
-            QTimer.singleShot(60, self.copilot_win.card.input_field.setFocus)
+        self.copilot_win.force_foreground_focus()
 
     def detach_pet(self):
         screen = QApplication.primaryScreen()
