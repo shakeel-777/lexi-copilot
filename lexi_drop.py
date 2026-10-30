@@ -738,6 +738,7 @@ class LexiDropServer:
         self.app = None
         self.runner = None
         self.site = None
+        self._sleep_inhibitor_fd = None
 
         # Load persisted all-day hosted shares from disk
         self._load_persisted_shares()
@@ -774,6 +775,32 @@ class LexiDropServer:
     def get_server_url(self):
         return f"http://{self.local_ip}:{self.port}"
 
+    def _acquire_sleep_inhibitor(self):
+        """Prevents laptop from suspending when lid is closed while 24h files are actively hosted."""
+        if getattr(self, "_sleep_inhibitor_fd", None) is not None:
+            return
+        try:
+            import dbus
+            bus = dbus.SystemBus()
+            login1 = bus.get_object('org.freedesktop.login1', '/org/freedesktop/login1')
+            mgr = dbus.Interface(login1, 'org.freedesktop.login1.Manager')
+            fd = mgr.Inhibit('sleep:handle-lid-switch', 'Lexi Drop', '24h active file hosting', 'block')
+            self._sleep_inhibitor_fd = fd.take()
+            print(f"[LexiDrop] Clamshell hosting lock acquired (FD={self._sleep_inhibitor_fd}) — laptop stays online with lid closed.")
+        except Exception as e:
+            self._sleep_inhibitor_fd = None
+
+    def _release_sleep_inhibitor(self):
+        """Releases the lid-close sleep inhibitor when all shares expire or are cleared."""
+        fd = getattr(self, "_sleep_inhibitor_fd", None)
+        if fd is not None:
+            try:
+                os.close(fd)
+                print("[LexiDrop] Clamshell hosting lock released.")
+            except Exception:
+                pass
+            self._sleep_inhibitor_fd = None
+
     def _save_persisted_shares(self):
         """Saves active unexpired shares to disk so they survive Lexi restarts for the full day."""
         try:
@@ -788,6 +815,10 @@ class LexiDropServer:
                     "latest_token": getattr(self, "latest_share_token", None),
                     "shares": valid_shares
                 }, f, indent=2)
+            if valid_shares:
+                self._acquire_sleep_inhibitor()
+            else:
+                self._release_sleep_inhibitor()
         except Exception as e:
             print(f"[LexiDrop] Error saving persisted shares: {e}")
 
@@ -810,6 +841,8 @@ class LexiDropServer:
                 self.latest_share_token = data.get("latest_token")
             elif self.active_shared_files:
                 self.latest_share_token = max(self.active_shared_files.values(), key=lambda r: r.get("created_at", 0)).get("token")
+            if self.active_shared_files:
+                self._acquire_sleep_inhibitor()
             if pruned > 0:
                 self._save_persisted_shares()
         except Exception as e:
