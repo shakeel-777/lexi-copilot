@@ -19,12 +19,16 @@ import asyncio
 import threading
 import urllib.request
 import urllib.parse
+import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable
 from aiohttp import web
 
 PORT = 7890
 BEACON_PORT = 7891
+
+HOSTED_SHARES_DIR = Path.home() / "AppData" / "Local" / "Lexi" / "shares" if sys.platform == "win32" else Path.home() / ".local" / "share" / "mochi-copilot" / "shares"
+HOSTED_SHARES_FILE = Path.home() / "AppData" / "Local" / "Lexi" / "hosted_shares.json" if sys.platform == "win32" else Path.home() / ".local" / "share" / "mochi-copilot" / "hosted_shares.json"
 
 BEAM_HTML = """<!DOCTYPE html>
 <html lang="en">
@@ -456,6 +460,8 @@ class LexiWinDropServer:
         self.port = port
         self.local_ip = get_local_ip()
         self.active_shared_files = {}  # token -> record
+        self.latest_share_token = None
+        self._load_persisted_shares()
         self.pending_incoming_transfers = {}  # token -> info
         self.beacon = LexiWinPeerBeacon(self)
         self.loop = None
@@ -493,6 +499,68 @@ class LexiWinDropServer:
             except Exception:
                 pass
 
+    def _save_persisted_shares(self):
+        try:
+            HOSTED_SHARES_DIR.mkdir(parents=True, exist_ok=True)
+            now = time.time()
+            data = {}
+            for tok, rec in list(self.active_shared_files.items()):
+                if isinstance(rec, dict) and os.path.exists(rec.get("path", "")) and (rec.get("expires_at", 0) == 0 or rec.get("expires_at", 0) > now):
+                    data[tok] = rec
+            with open(HOSTED_SHARES_FILE, "w", encoding="utf-8") as f:
+                json.dump({
+                    "latest_token": getattr(self, "latest_share_token", None),
+                    "shares": data
+                }, f, indent=2)
+        except Exception as e:
+            print(f"[LexiWinDrop] Could not save hosted shares: {e}")
+
+    def _load_persisted_shares(self):
+        if not HOSTED_SHARES_FILE.exists():
+            return
+        try:
+            with open(HOSTED_SHARES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            now = time.time()
+            shares = data.get("shares", {}) if (isinstance(data, dict) and "shares" in data) else (data if isinstance(data, dict) else {})
+            valid = {}
+            latest_tok = data.get("latest_token") if (isinstance(data, dict) and "latest_token" in data) else None
+            latest_time = 0
+            for tok, rec in list(shares.items()):
+                if isinstance(rec, dict) and os.path.exists(rec.get("path", "")) and (rec.get("expires_at", 0) == 0 or rec.get("expires_at", 0) > now):
+                    valid[tok] = rec
+                    if rec.get("created_at", 0) >= latest_time:
+                        latest_time = rec.get("created_at", 0)
+                        if not latest_tok:
+                            latest_tok = tok
+            self.active_shared_files.update(valid)
+            self.latest_share_token = latest_tok
+            if valid:
+                print(f"[LexiWinDrop] Restored {len(valid)} active 24h hosted shares.")
+        except Exception as e:
+            print(f"[LexiWinDrop] Could not restore hosted shares: {e}")
+
+    def get_active_shares_summary(self):
+        now = time.time()
+        shares = []
+        for tok, rec in list(self.active_shared_files.items()):
+            if os.path.exists(rec["path"]) and (rec.get("expires_at", 0) == 0 or rec.get("expires_at", 0) > now):
+                exp = rec.get("expires_at", 0)
+                hrs = round((exp - now) / 3600.0, 1) if exp else 24.0
+                shares.append({
+                    "token": tok,
+                    "name": rec["name"],
+                    "size": rec["size"],
+                    "size_formatted": format_size(rec["size"]),
+                    "url": f"http://{self.local_ip}:{self.port}/api/download/{tok}",
+                    "named_url": f"http://{self.local_ip}:{self.port}/download/{urllib.parse.quote(rec['name'])}",
+                    "static_url": f"http://{self.local_ip}:{self.port}/download/latest",
+                    "expires_in_seconds": max(0, int(exp - now)) if exp else 86400,
+                    "hours_remaining": hrs,
+                    "is_zip": rec.get("is_zip", False)
+                })
+        return shares
+
     def _run_server(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
@@ -501,14 +569,17 @@ class LexiWinDropServer:
         self.app.router.add_get("/", self.handle_index)
         self.app.router.add_get("/api/status", self.handle_status)
         self.app.router.add_get("/api/files", self.handle_files_list)
+        self.app.router.add_get("/api/shares", self.handle_shares_list)
         self.app.router.add_post("/api/upload", self.handle_upload)
         self.app.router.add_post("/api/peer/incoming", self.handle_peer_incoming)
         self.app.router.add_post("/api/peer/respond", self.handle_peer_respond)
         self.app.router.add_get("/api/download/{token}", self.handle_download)
+        self.app.router.add_get("/download/latest", self.handle_download_latest)
+        self.app.router.add_get("/download/{identifier}", self.handle_download_by_name_or_token)
 
         self.runner = web.AppRunner(self.app)
         self.loop.run_until_complete(self.runner.setup())
-        self.site = web.TCPSite(self.runner, self.host, self.port)
+        self.site = web.TCPSite(self.runner, self.host, self.port, reuse_address=True)
         self.loop.run_until_complete(self.site.start())
         print(f"[LexiWinDrop] Ready on http://{self.local_ip}:{self.port}")
         self.loop.run_forever()
@@ -677,9 +748,84 @@ class LexiWinDropServer:
         """Serves a staged file to downloading peers."""
         token = request.match_info.get("token")
         rec = self.active_shared_files.get(token)
-        if not rec or not os.path.exists(rec["path"]):
-            return web.Response(status=404, text="File expired")
-        return web.FileResponse(rec["path"], chunk_size=4 * 1024 * 1024)
+        now = time.time()
+        if not rec or not os.path.exists(rec["path"]) or (rec.get("expires_at", 0) and rec["expires_at"] < now):
+            return web.Response(status=404, text="File expired or not found")
+        filename = rec.get("name") or os.path.basename(rec["path"])
+        return web.FileResponse(
+            rec["path"],
+            chunk_size=4 * 1024 * 1024,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/octet-stream"
+            }
+        )
+
+    async def handle_download_latest(self, request):
+        """Streams the latest 24h hosted file or zip."""
+        now = time.time()
+        target_rec = None
+        if self.latest_share_token and self.latest_share_token in self.active_shared_files:
+            rec = self.active_shared_files[self.latest_share_token]
+            if os.path.exists(rec["path"]) and (rec.get("expires_at", 0) == 0 or rec["expires_at"] > now):
+                target_rec = rec
+
+        if not target_rec:
+            best_time = 0
+            for rec in self.active_shared_files.values():
+                if os.path.exists(rec["path"]) and (rec.get("expires_at", 0) == 0 or rec["expires_at"] > now):
+                    if rec.get("created_at", 0) >= best_time:
+                        best_time = rec.get("created_at", 0)
+                        target_rec = rec
+
+        if not target_rec:
+            return web.Response(status=404, text="No active hosted files found.")
+
+        filename = target_rec["name"]
+        filepath = target_rec["path"]
+        return web.FileResponse(
+            filepath,
+            chunk_size=4 * 1024 * 1024,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/octet-stream"
+            }
+        )
+
+    async def handle_download_by_name_or_token(self, request):
+        """Permanent URL (/download/{identifier}) supporting either custom token or exact filename."""
+        identifier = urllib.parse.unquote(request.match_info.get("identifier", ""))
+        now = time.time()
+        file_record = self.active_shared_files.get(identifier)
+        if not file_record:
+            for rec in self.active_shared_files.values():
+                if rec.get("name") == identifier:
+                    file_record = rec
+                    break
+
+        if not file_record or not os.path.exists(file_record["path"]) or (file_record.get("expires_at", 0) and file_record["expires_at"] < now):
+            return web.Response(status=404, text=f"File '{identifier}' not found or hosting expired.")
+
+        filename = file_record["name"]
+        filepath = file_record["path"]
+        return web.FileResponse(
+            filepath,
+            chunk_size=4 * 1024 * 1024,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/octet-stream"
+            }
+        )
+
+    async def handle_shares_list(self, request):
+        """Returns JSON list of all active full-day hosted files."""
+        shares = self.get_active_shares_summary()
+        return web.json_response({
+            "success": True,
+            "port": self.port,
+            "shares": shares,
+            "latest_url": f"http://{self.local_ip}:{self.port}/download/latest" if shares else None
+        })
 
     def _download_peer_file_sync(self, url: str, filename: str, total_bytes: int, token: str):
         """Streams the file over high-speed local TCP into ~/Downloads."""
@@ -728,25 +874,62 @@ class LexiWinDropServer:
                 except Exception:
                     pass
 
-    def stage_file_for_sharing(self, file_path: str) -> Dict[str, Any]:
-        """Stages a local file for download by peers and browser clients."""
+    def stage_file_for_sharing(self, file_path: str, pin_all_day: bool = True, custom_token: str = None) -> Dict[str, Any]:
+        """Stages a local file or directory for 24h download by peers and browser clients."""
         p = Path(file_path)
         if not p.exists():
             return {"success": False, "error": "File does not exist"}
-        token = uuid.uuid4().hex[:12]
-        self.active_shared_files[token] = {
+
+        actual_path = str(p.resolve())
+        is_zip = False
+        if p.is_dir():
+            folder_name = p.name or "Archive"
+            HOSTED_SHARES_DIR.mkdir(parents=True, exist_ok=True)
+            zip_target = os.path.join(str(HOSTED_SHARES_DIR), f"{folder_name}.zip")
+            shutil.make_archive(zip_target[:-4], 'zip', str(p))
+            actual_path = zip_target
+            is_zip = True
+        elif p.name.lower().endswith(".zip"):
+            is_zip = True
+
+        size = os.path.getsize(actual_path)
+        name = os.path.basename(actual_path)
+        token = custom_token or uuid.uuid4().hex[:12]
+        now = time.time()
+        expires_at = now + (86400 if pin_all_day else 3600)
+
+        record = {
             "token": token,
-            "path": str(p.resolve()),
-            "name": p.name,
-            "size": p.stat().st_size
+            "path": actual_path,
+            "name": name,
+            "size": size,
+            "created_at": now,
+            "expires_at": expires_at,
+            "pin_all_day": pin_all_day,
+            "is_zip": is_zip
         }
+        self.active_shared_files[token] = record
+        self.latest_share_token = token
+        self._save_persisted_shares()
+
         url = f"http://{self.local_ip}:{self.port}/api/download/{token}"
+        static_url = f"http://{self.local_ip}:{self.port}/download/latest"
+        named_url = f"http://{self.local_ip}:{self.port}/download/{urllib.parse.quote(name)}"
+
         return {
             "success": True,
             "token": token,
-            "filename": p.name,
-            "size": p.stat().st_size,
-            "download_url": url
+            "filename": name,
+            "name": name,
+            "size": size,
+            "download_url": url,
+            "url": url,
+            "static_url": static_url,
+            "named_url": named_url,
+            "expires_at": expires_at,
+            "pin_all_day": pin_all_day,
+            "is_zip": is_zip,
+            "port": self.port
         }
 
     def beam_file_to_peer(self, file_path: str, peer_ip: str) -> Dict[str, Any]:

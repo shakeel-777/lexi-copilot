@@ -2643,6 +2643,26 @@ class SystemActionEngine:
             enable = str(state).lower().strip() not in ('off', 'stop', 'disable', 'false', '0', 'down')
             return self.toggle_hotspot(enable=enable)
 
+        elif act_type in ('share', 'host', 'beam'):
+            file_path = attrs.get('path') or attrs.get('filepath') or body
+            if not file_path:
+                return {"success": False, "message": "No file path provided to share"}
+            if not os.path.exists(file_path):
+                return {"success": False, "message": f"File does not exist: {file_path}"}
+            try:
+                server = lexi_drop.get_lexi_drop_instance() if lexi_drop else None
+                if not server:
+                    return {"success": False, "message": "Lexi Drop server is not running"}
+                res = server.share_file(file_path, pin_all_day=True)
+                return {
+                    "success": True,
+                    "message": f"Hosted {res['name']} ({res['size']} bytes) for 24h on port {server.port}",
+                    "url": res.get("named_url") or res.get("url"),
+                    "static_url": res.get("static_url")
+                }
+            except Exception as e:
+                return {"success": False, "message": str(e)}
+
         elif act_type == 'browser':
             return self.execute_browser_action(action)
 
@@ -10935,8 +10955,8 @@ class LexiWindow(Adw.ApplicationWindow):
             self.update_mascot_mood("happy" if res.get("success") else "neutral")
             return
 
-        # Check for /beam or /share
-        if cmd.lower().startswith(('/beam', '/share')):
+        # Check for /beam, /share, /host, /pin (24-Hour Static Port 7890 Hosting)
+        if cmd.lower().startswith(('/beam', '/share', '/host', '/pin')):
             parts = cmd.split(maxsplit=1)
             target_path = parts[1].strip() if len(parts) > 1 else None
             if not target_path and self.captured_pages:
@@ -10954,34 +10974,54 @@ class LexiWindow(Adw.ApplicationWindow):
                         try:
                             import urllib.request
                             req = urllib.request.Request(
-                                'http://127.0.0.1:7890/api/share',
-                                data=json.dumps({'filepath': os.path.abspath(target_path)}).encode('utf-8'),
+                                f'http://127.0.0.1:{server.port}/api/share',
+                                data=json.dumps({'filepath': os.path.abspath(target_path), 'pin_all_day': True}).encode('utf-8'),
                                 headers={'Content-Type': 'application/json'},
                                 method='POST'
                             )
                             with urllib.request.urlopen(req, timeout=1.5) as resp:
                                 info = json.loads(resp.read().decode('utf-8'))
                         except Exception:
-                            info = server.share_file(target_path)
+                            info = server.share_file(target_path, pin_all_day=True)
                         sz_str = converter.format_size(info['size']) if hasattr(converter, 'format_size') else f"{info['size']}B"
+                        named_url = info.get('named_url') or info['url']
+                        static_url = info.get('static_url') or f"http://{server.local_ip}:{server.port}/download/latest"
                         beam_resp = (
-                            f"⚡ **Lexi Beam — Zero-Copy Share**\n\n"
+                            f"📦 **Lexi 24h Share & Host — Static Port {server.port}**\n\n"
                             f"• **File**: `{info['name']}` ({sz_str})\n"
-                            f"• **Direct Download**: [{info['url']}]({info['url']})\n"
-                            f"• **LAN Portal**: [{server_url}]({server_url})\n"
+                            f"• **Direct Download**: [{named_url}]({named_url})\n"
+                            f"• **Permanent Latest Link**: [{static_url}]({static_url})\n"
+                            f"• **LAN Web Portal**: [{server_url}]({server_url})\n"
+                            f"• **Status**: 🕒 Hosted 24 Hours (Port {server.port} Never Changes)\n"
                             f"• **Peers**: {peer_desc}\n\n"
-                            f"*Streamed over local Wi-Fi with kernel zero-copy os.sendfile at wire speed.*"
+                            f"*Direct zero-data local Wi-Fi transfer. Available all day across reboots & restarts.*"
                         )
                     except Exception as e:
-                        beam_resp = f"⚠️ Failed to beam `{target_path}`: {e}"
+                        beam_resp = f"⚠️ Failed to host/share `{target_path}`: {e}"
                 else:
-                    beam_resp = (
-                        f"⚡ **Lexi Beam — High-Speed Local LAN File Sharing**\n\n"
-                        f"• **Web & PWA Receiver**: [{server_url}]({server_url})\n"
-                        f"• **Peers**: {peer_desc}\n"
-                        f"• **Usage**: `/beam <path/to/file.zip>` or drag any file onto Dynamic Island\n"
-                        f"• **Windows Support**: Open link in Edge to install 1-click desktop app"
-                    )
+                    active_shares = server.get_active_shares_summary() if hasattr(server, 'get_active_shares_summary') else []
+                    if active_shares:
+                        shares_list = "\n".join([
+                            f"• 📦 **{s['name']}** ({s['size_formatted']}) — [{s['named_url']}]({s['named_url']})"
+                            for s in active_shares[:6]
+                        ])
+                        beam_resp = (
+                            f"📦 **Lexi Active 24-Hour Hosted Shares (Port {server.port})**\n\n"
+                            f"{shares_list}\n\n"
+                            f"• **Latest Download**: [http://{server.local_ip}:{server.port}/download/latest](http://{server.local_ip}:{server.port}/download/latest)\n"
+                            f"• **Web Portal**: [{server_url}]({server_url})\n"
+                            f"• **Usage**: `/share <path/to/archive.zip>` or `/host <file>` to host all day\n"
+                            f"• **Static Port**: Always fixed on `{server.port}` for uninterrupted downloads"
+                        )
+                    else:
+                        beam_resp = (
+                            f"⚡ **Lexi Beam & 24h Host — Fixed Port {server.port}**\n\n"
+                            f"• **Web & PWA Receiver**: [{server_url}]({server_url})\n"
+                            f"• **Permanent Latest Link**: [http://{server.local_ip}:{server.port}/download/latest](http://{server.local_ip}:{server.port}/download/latest)\n"
+                            f"• **Peers**: {peer_desc}\n"
+                            f"• **Usage**: `/share <path/to/archive.zip>` or `/host <file>` (kept active for 24 hours)\n"
+                            f"• **Static Port**: Always fixed on port `{server.port}` for uninterrupted downloads"
+                        )
             else:
                 beam_resp = "⚠️ Lexi Drop server is not running."
             render_markdown_to_buffer(self.text_buffer, beam_resp)

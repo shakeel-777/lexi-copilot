@@ -178,6 +178,44 @@ class TestLexiBeam(unittest.TestCase):
         asyncio.run(_test())
         self.assertEqual(declined_events, [("presentation.pdf", "MacBook-Air")])
 
+    def test_24h_hosting_duration_and_static_url(self):
+        import time
+        test_file = "/tmp/test_24h_host.zip"
+        with open(test_file, "w") as f:
+            f.write("fake zip content")
+        try:
+            res = self.server.share_file(test_file, pin_all_day=True)
+            self.assertTrue(res["pin_all_day"])
+            self.assertTrue(res["is_zip"])
+            self.assertGreaterEqual(res["expires_at"] - time.time(), 86300)
+            self.assertIn("/download/latest", res["static_url"])
+            self.assertIn("test_24h_host.zip", res["named_url"])
+            self.assertEqual(res["port"], 7890)
+        finally:
+            if os.path.exists(test_file):
+                os.unlink(test_file)
+
+    def test_persistent_shares_save_and_restore(self):
+        import tempfile
+        import time
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as f:
+            f.write(b"persistent zip bytes")
+            fpath = f.name
+        try:
+            res = self.server.share_file(fpath, pin_all_day=True)
+            tok = res["token"]
+            self.assertEqual(self.server.latest_share_token, tok)
+            
+            # Create a fresh server instance and verify it restores the share
+            new_server = LexiDropServer()
+            self.assertIn(tok, new_server.active_shared_files)
+            self.assertEqual(new_server.latest_share_token, tok)
+            summary = new_server.get_active_shares_summary()
+            self.assertTrue(any(s["token"] == tok for s in summary))
+        finally:
+            if os.path.exists(fpath):
+                os.unlink(fpath)
+
 
 if __name__ == "__main__":
     unittest.main()

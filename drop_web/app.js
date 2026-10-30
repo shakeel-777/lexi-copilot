@@ -52,7 +52,23 @@ window.addEventListener('DOMContentLoaded', () => {
     if (btnInstall) btnInstall.style.display = 'none';
   }
   connectWebSocket();
+  loadActiveShares();
 });
+
+// Fetch and render existing 24-hour hosted files on load
+async function loadActiveShares() {
+  try {
+    const resp = await fetch('/api/shares');
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.shares && Array.isArray(data.shares)) {
+        data.shares.forEach(renderIncomingTransferCard);
+      }
+    }
+  } catch (e) {
+    console.log('[Lexi PWA] Offline or active shares unavailable:', e);
+  }
+}
 
 // Format byte sizes
 function formatSize(bytes) {
@@ -112,6 +128,10 @@ function handleServerMessage(msg) {
   if (msg.type === 'incoming_file') {
     // Linux host is sending a file to this client!
     renderIncomingTransferCard(msg.file);
+  } else if (msg.type === 'active_shares_sync') {
+    if (msg.shares && Array.isArray(msg.shares)) {
+      msg.shares.forEach(renderIncomingTransferCard);
+    }
   } else if (msg.type === 'peer_update') {
     if (msg.host_name && hostName) {
       hostName.innerText = `💻 ${msg.host_name}`;
@@ -406,18 +426,23 @@ function renderIncomingTransferCard(file) {
   card.className = 'transfer-card';
   card.id = cardId;
 
+  const isZip = file.is_zip || (file.name && file.name.toLowerCase().endsWith('.zip'));
+  const fileGlyph = isZip ? '📦' : '⚡';
+  const downloadHref = file.named_url || `/download/${encodeURIComponent(file.name)}` || `/api/download/${file.token}`;
+  const hostBadge = file.pin_all_day !== false ? ' · 🕒 24h Hosted (Static Port 7890)' : '';
+
   card.innerHTML = `
     <div class="transfer-header">
       <div class="file-info">
-        <span class="file-glyph">⚡</span>
+        <span class="file-glyph">${fileGlyph}</span>
         <div class="file-meta">
           <span class="file-name" title="${file.name}">${file.name}</span>
-          <span class="file-size">${formatSize(file.size)} · 🟢 Direct Local Wi-Fi (0 MB Internet)</span>
+          <span class="file-size">${formatSize(file.size)} · 🟢 Direct Local Wi-Fi${hostBadge}</span>
         </div>
       </div>
       <div class="transfer-stats">
-        <a href="/api/download/${file.token}" class="btn-download-action" download="${file.name}">
-          ⚡ Save to Computer
+        <a href="${downloadHref}" class="btn-download-action" download="${file.name}">
+          ${isZip ? '📦 Download Zip' : '⚡ Save to Device'}
         </a>
       </div>
     </div>

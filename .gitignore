@@ -30,3 +30,5 @@ windows/.cache/
 windows/dist/
 windows/build/
 .lexi_config.json
+hosted_shares.json
+shares/
